@@ -296,7 +296,7 @@ function ringTex() {
 }
 
 /* ---------- Kainat ---------- */
-let renderer, scene, camera, controls, box, canvas, lblBox, sunLbl;
+let renderer, scene, camera, controls, box, canvas, lblBox;
 let W = 1, H = 1, active = false, last = 0, speed = 1, tScene = 0;
 let stars, sky, sunMesh, sunGlow1, sunGlow2;
 let glowTex, beaconTex;
@@ -309,14 +309,31 @@ let downAt = null, moved = false, inset = 0, G = 0;
 let pr = 1, prMax = 1, ema = .016, prT = 0, zT = null, quality = 'auto', baseDt = .0167, frames = 0;
 
 const api = { onPick: null, onShip: null, onUserShip: null, onBalloon: null, mounted: false };
-const pickables = () => { const a = [...planets.values()].map(p => p.hit); if (ship) a.push(ship.hit); for (const s of uships.values()) a.push(s.m.hit); return a; };
+const pickables = () => {
+  const a = [...planets.values()].filter(p => p.U.lvP > .3).map(p => p.hit);
+  if (ship && U.main.lvD > .3) a.push(ship.hit);
+  for (const s of uships.values()) if (uniAt(s.pos).lvD > .3) a.push(s.m.hit);
+  for (const u of Object.values(U)) if (u.galHit && u.galHit.visible) a.push(u.galHit);
+  return a;
+};
 const focusObj = () => focusName === SHIP ? ship : planets.get(focusName);
 
-function pu(extra) { return Object.assign({ uTime: uT, uLight: uSun }, extra); }
+function pu(extra, light) { return Object.assign({ uTime: uT, uLight: light || uSun }, extra); }
+
+/* ====== Kosmik xəritə: bütün universlər eyni məkanda, hər birinin öz günəşi və qalaktikası var ====== */
+const UNI_IDS = ['main', 'studio', 'mcp', 'agent'];
+const UNI_POS = { main: [0, 0, 0], studio: [480, 40, -380], mcp: [-520, -30, -400], agent: [20, 60, -820] };
+const MAP_TARGET = new THREE.Vector3(-10, 0, -270);
+const U = {};
+for (const id of UNI_IDS) {
+  const c = new THREE.Vector3(...UNI_POS[id]);
+  U[id] = { id, center: c, light: id === 'main' ? uSun : { value: c.clone() }, root: null, maxR: 40, n: 0, d: 1e9, lvG: 1, lvP: 0, lvD: 0, info: { name: id, sub: '' } };
+}
+const uniAt = v => { let best = U.main, bd = 1e18; for (const u of Object.values(U)) { const d = u.center.distanceToSquared(v); if (d < bd) { bd = d; best = u; } } return best; };
 const dmgU = () => ({ uBurn: { value: 0 }, uHurt: { value: 0 }, uDmgA: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) }, uDmgB: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) } });
 
 /** Planetin görünüşü: adından (hash) və ya istifadəçinin seçimindən (item.look) / xüsusi növündən (item.kind) */
-const lookSig = item => item.kind + '|' + (item.look ? [item.look.surface, item.look.hue, item.look.ring].join(',') : '') + '|' + (item.hue ?? '');
+const lookSig = item => (item.uni || 'main') + '|' + item.kind + '|' + (item.look ? [item.look.surface, item.look.hue, item.look.ring].join(',') : '') + '|' + (item.hue ?? '');
 function createPlanet(item, i) {
   const h = hash(item.name), rg = rnd(h), seed = rg(), look = item.look;
   const type = KIND_TYPE[item.kind] ?? (look ? look.surface : [0, 1, 5, 4, 2, 0, 1, 5][h % 8]);
@@ -325,7 +342,8 @@ function createPlanet(item, i) {
     new THREE.Vector3(.3, .85, 1), new THREE.Vector3(1, .55, .9), new THREE.Vector3(.85, .9, 1)];
   const atm = type === 1 ? new THREE.Vector3(tintC.r, tintC.g, tintC.b).multiplyScalar(1.3) : baseAtm[type] && baseAtm[type].clone ? baseAtm[type].clone() : new THREE.Vector3(.5, .7, 1);
 
-  const pivot = new THREE.Group(); pivot.rotation.set((rg() - .5) * .5, 0, (rg() - .5) * .5); scene.add(pivot);
+  const UU = U[item.uni] || U.main, L = UU.light;
+  const pivot = new THREE.Group(); pivot.rotation.set((rg() - .5) * .5, 0, (rg() - .5) * .5); UU.root.add(pivot);
   const orbitLine = new THREE.LineLoop(
     new THREE.BufferGeometry().setFromPoints(Array.from({ length: 160 }, (_, k) => new THREE.Vector3(Math.cos(k / 160 * 6.2832), 0, Math.sin(k / 160 * 6.2832)))),
     new THREE.LineBasicMaterial({ color: 0x8c96ff, transparent: true, opacity: .16, depthWrite: false }));
@@ -334,7 +352,7 @@ function createPlanet(item, i) {
   const body = new THREE.Group(); holder.add(body);
   const tilt = new THREE.Group(); tilt.rotation.z = (rg() - .5) * .8; body.add(tilt);
 
-  const uni = pu({ uSeed: { value: seed }, uType: { value: type }, uDim: { value: 1 }, uLights: { value: 1 }, uHot: { value: 0 }, uTint: { value: new THREE.Vector3(tintC.r, tintC.g, tintC.b) }, uAtm: { value: atm }, ...dmgU() });
+  const uni = pu({ uSeed: { value: seed }, uType: { value: type }, uDim: { value: 1 }, uLights: { value: 1 }, uHot: { value: 0 }, uTint: { value: new THREE.Vector3(tintC.r, tintC.g, tintC.b) }, uAtm: { value: atm }, ...dmgU() }, L);
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: uni }));
   tilt.add(mesh);
 
@@ -342,10 +360,10 @@ function createPlanet(item, i) {
   if (type === 0 || type === 5) {
     clouds = new THREE.Mesh(new THREE.SphereGeometry(1.018, 64, 48), new THREE.ShaderMaterial({
       vertexShader: PLANET_VS, fragmentShader: CLOUD_FS, transparent: true, depthWrite: false,
-      uniforms: pu({ uSeed: { value: seed } }) }));
+      uniforms: pu({ uSeed: { value: seed } }, L) }));
     tilt.add(clouds);
   }
-  const atmU = { uCol: { value: new THREE.Color('#4ade80') }, uLight: uSun, uRatio: { value: 1.16 }, uPow: { value: 2 }, uAmt: { value: .8 } };
+  const atmU = { uCol: { value: new THREE.Color('#4ade80') }, uLight: L, uRatio: { value: 1.16 }, uPow: { value: 2 }, uAmt: { value: .8 } };
   const shell = new THREE.Mesh(new THREE.SphereGeometry(1.16, 64, 48), new THREE.ShaderMaterial({
     vertexShader: ATM_VS, fragmentShader: ATM_FS, uniforms: atmU, side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   body.add(shell);
@@ -353,7 +371,7 @@ function createPlanet(item, i) {
   let ring = null;
   if (look ? look.ring : item.kind === 'meeting' || (type === 1 ? (h % 4 !== 0) : (h % 7 === 0))) {
     const rin = 1.4 + rg() * .12, rout = rin + .42 + rg() * .32;
-    const ru = pu({ uIn: { value: rin }, uOut: { value: rout }, uSeed: { value: seed }, uR: { value: 1 }, uTint: { value: new THREE.Vector3(tintC.r * .9 + .15, tintC.g * .85 + .12, tintC.b * .8 + .1) }, uPC: { value: new THREE.Vector3() } });
+    const ru = pu({ uIn: { value: rin }, uOut: { value: rout }, uSeed: { value: seed }, uR: { value: 1 }, uTint: { value: new THREE.Vector3(tintC.r * .9 + .15, tintC.g * .85 + .12, tintC.b * .8 + .1) }, uPC: { value: new THREE.Vector3() } }, L);
     ring = new THREE.Mesh(new THREE.RingGeometry(rin, rout, 160, 1), new THREE.ShaderMaterial({ vertexShader: RING_VS, fragmentShader: RING_FS, uniforms: ru, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2 + .12;
     tilt.add(ring);
@@ -374,7 +392,7 @@ function createPlanet(item, i) {
   btn.onpointerleave = () => { const p = planets.get(item.name); if (p) p.hl = false; };
   lblBox.append(btn);
 
-  const p = { name: item.name, kind: item.kind || 'project', sig: lookSig(item), sats: new Map(), burn: 0, burnT: 0, smoke: null, nextQuake: 2, type, seed, pivot, orbitLine, holder, body, tilt, mesh, clouds, shell, ring, beacon, glow, hit, uni, atmU, btn, b, sp,
+  const p = { name: item.name, U: UU, kind: item.kind || 'project', sig: lookSig(item), sats: new Map(), burn: 0, burnT: 0, smoke: null, nextQuake: 2, type, seed, pivot, orbitLine, holder, body, tilt, mesh, clouds, shell, ring, beacon, glow, hit, uni, atmU, btn, b, sp,
     a: i * 2.39996 + rg() * .5, r: 20, rT: 20, R: 1.6, RT: 1.6, spin: .05 + rg() * .09, col: new THREE.Color('#6f6f7c'), st: 'offline', hot: 0, hl: false, moons: new Map(), dim: 1, lights: 0, atm, bursts: [], nextBurst: rand(.2, 1.2), lastBurst: 0,
     scars: [], impacts: [], kick: new THREE.Vector3(), kickV: new THREE.Vector3(), hurt: 0, hitUntil: 0 };
   hit.userData.planet = p; mesh.userData.planet = p;
@@ -394,7 +412,7 @@ function syncMoons(p, users) {
         new THREE.BufferGeometry().setFromPoints(Array.from({ length: 96 }, (_, k) => new THREE.Vector3(Math.cos(k / 96 * 6.2832), 0, Math.sin(k / 96 * 6.2832)))),
         new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: .0, depthWrite: false }));
       g.add(ml);
-      const mu = pu({ uSeed: { value: rg() }, uType: { value: 3 }, uDim: { value: 1 }, uLights: { value: 0 }, uHot: { value: 0 }, uTint: { value: new THREE.Vector3(col.r, col.g, col.b) }, uAtm: { value: new THREE.Vector3(col.r, col.g, col.b) }, ...dmgU() });
+      const mu = pu({ uSeed: { value: rg() }, uType: { value: 3 }, uDim: { value: 1 }, uLights: { value: 0 }, uHot: { value: 0 }, uTint: { value: new THREE.Vector3(col.r, col.g, col.b) }, uAtm: { value: new THREE.Vector3(col.r, col.g, col.b) }, ...dmgU() }, p.U.light);
       const mesh = new THREE.Mesh(new THREE.SphereGeometry(.2, 32, 24), new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: PLANET_FS, uniforms: mu }));
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: col, transparent: true, opacity: .7, depthWrite: false, blending: THREE.AdditiveBlending }));
       glow.scale.setScalar(1.2);
@@ -646,7 +664,7 @@ api.rocket = function (o) {
   if (!api.mounted || REDUCE) return 0;
   const pt = planets.get(o.to); if (!pt) return 0;
   const pf = o.from ? planets.get(o.from) || null : null;
-  const C = pf ? pf.holder.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(), T = pt.holder.getWorldPosition(new THREE.Vector3());
+  const C = pf ? pf.holder.getWorldPosition(new THREE.Vector3()) : pt.U.center.clone(), T = pt.holder.getWorldPosition(new THREE.Vector3());
   const same = pf === pt, dist = same ? pt.R * 8 : C.distanceTo(T);
   const r = { id: o.id, soft: !!o.soft, who: o.who || '', hue: o.hue || 0, pf, pt, same, t0: tScene + (o.delay || 0), dur: Math.min(5.2, Math.max(2.8, 2.4 + dist * .045)), dist,
     launched: false, done: false, tImpact: 0, emit: 0, camDir: new THREE.Vector3(), S: new THREE.Vector3(), E: new THREE.Vector3(), side: new THREE.Vector3(), cur: new THREE.Vector3(), lift: 0, g: null, trail: null, lbl: null };
@@ -658,7 +676,7 @@ api.rocket = function (o) {
 function launchRocket(r) {
   r.launched = true;
   const T = r.pt.holder.getWorldPosition(new THREE.Vector3());
-  const C = r.pf ? r.pf.holder.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(), Rs = r.pf ? r.pf.R : 5.2;
+  const C = r.pf ? r.pf.holder.getWorldPosition(new THREE.Vector3()) : r.pt.U.center.clone(), Rs = r.pf ? r.pf.R : 5.2;
   if (r.same) {
     r.S.copy(C).addScaledVector(UPV, Rs * 1.06);
     r.side.set(Math.cos(r.id * 1.7), 0, Math.sin(r.id * 1.7));
@@ -761,13 +779,13 @@ function cineStep(dt) {
   } else {
     const r = live[0], T = r.pt.holder.getWorldPosition(cT);
     if (!cine.dirv) {
-      const fv = new THREE.Vector3().copy(T).sub(r.pf ? r.pf.holder.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3()); fv.y = 0;
+      const fv = new THREE.Vector3().copy(T).sub(r.pf ? r.pf.holder.getWorldPosition(new THREE.Vector3()) : r.pt.U.center); fv.y = 0;
       if (fv.lengthSq() < .01) fv.set(1, 0, 0);
       cine.dirv = new THREE.Vector3().crossVectors(fv.normalize(), UPV).multiplyScalar(.85).addScaledVector(UPV, .45).normalize();
     }
     let d;
     if (r.done) { cA.copy(T); d = r.pt.R * 10; }
-    else if (!r.launched) { (r.pf ? r.pf.holder.getWorldPosition(cA) : cA.set(0, 0, 0)); d = Math.max(26, r.dist * .75); }
+    else if (!r.launched) { (r.pf ? r.pf.holder.getWorldPosition(cA) : cA.copy(r.pt.U.center)); d = Math.max(26, r.dist * .75); }
     else { const u = Math.min(1, (tScene - r.t0) / r.dur); cA.copy(r.cur).lerp(T, u * .55); d = Math.max(24, r.dist * .75) * (1 - u * .35); }
     cB.copy(cA).addScaledVector(cine.dirv, d);
   }
@@ -1299,7 +1317,7 @@ function updateUShips(dt) {
     const tp = s.target ? planets.get(s.target) : null;
     if (!REDUCE) s.a += dt * s.dir * s.spd * (s.st === 'working' ? .6 : .32);
     // arabir gəzinti: başqa planetə və ya kainatın təsadüfi nöqtəsinə qısa uçuş (hər gəmidə öz vaxtı ilə)
-    if (!REDUCE && !warpS) {
+    if (!REDUCE) {
       s.nextTrip -= dt;
       if (!s.trip && s.nextTrip <= 0) {
         const q = pl.length && s.rg() < .7 ? pl[Math.floor(s.rg() * pl.length)] : null;
@@ -1316,8 +1334,7 @@ function updateUShips(dt) {
       } else usDes.copy(s.trip.pt);
     } else shipPath(s, tp, usDes);
     usLook.copy(s.pos);
-    if (warpS && warpS.me === s.user) warpShip(s);
-    else { const far = s.pos.distanceTo(usDes); s.pos.lerp(usDes, Math.min(1, dt * (far > 20 ? .55 + s.spd * .4 : 2.2))); }
+    const far = s.pos.distanceTo(usDes); s.pos.lerp(usDes, Math.min(1, dt * (far > 20 ? (far > 300 ? .35 : .55) + s.spd * .3 : 2.2)));
     s.vel.copy(s.pos).sub(usLook);
     const g = s.m.g; g.position.copy(s.pos);
     if (s.vel.lengthSq() > 1e-6) { usLook.copy(s.pos).add(s.vel); g.lookAt(usLook); }
@@ -1368,8 +1385,11 @@ function placeBalloons() {
   const vis = [];
   for (const b of balloons.values()) {
     let R = 1, show = true;
-    if (b.ship) { const s = uships.get(b.ship); if (!s) { applyLabel(b.el, null); continue; } wp.copy(s.pos); R = 2; show = !focusName || focusName === s.target; }
-    else { const p = planets.get(b.planet); if (!p) { applyLabel(b.el, null); continue; } p.holder.getWorldPosition(wp); R = p.R; show = !focusName || focusName === b.planet; }
+    let lv = 1;                                                     // balonlar ən dərin səviyyədir: yalnız universə yaxınlaşanda
+    if (b.ship) { const s = uships.get(b.ship); if (!s) { applyLabel(b.el, null); continue; } wp.copy(s.pos); R = 2; lv = uniAt(s.pos).lvD; show = !focusName || focusName === s.target; }
+    else { const p = planets.get(b.planet); if (!p) { applyLabel(b.el, null); continue; } p.holder.getWorldPosition(wp); R = p.R; lv = p.U.lvD; show = !focusName || focusName === b.planet; }
+    if (lv < .05) show = false;
+    b.el.style.opacity = lv < .999 ? lv.toFixed(3) : '';
     if (!focusName && W < 600 && b.el.dataset.lv === '0') show = false;      // dar ekranda ümumi görünüşdə yalnız təcili olanlar
     tmp.copy(wp).project(camera);
     if (!show || tmp.z > 1 || tmp.z < -1) { applyLabel(b.el, null); continue; }
@@ -1387,24 +1407,85 @@ function placeBalloons() {
   }
 }
 
-/* ====== Universlər: hər birinin öz səması, günəşi; aralarında gəmi ilə səyahət (warp) ====== */
+/* ====== Universlər: kosmik xəritədə hər biri öz yerində — uzaqdan qalaktika, yaxınlaşdıqca planetlər, sonra detallar ====== */
 const THEMES = {
-  main: { a: [.2, .1, .38], b: [.05, .22, .36], c: [.38, .1, .2], sa: [1, .36, .04], sb: [1, .82, .32], g1: 0xffa040, g2: 0xff7a30, lbl: 'Komanda', streak: 0xbfd4ff },
-  studio: { a: [.38, .08, .3], b: [.32, .2, .05], c: [.12, .1, .42], sa: [1, .28, .5], sb: [1, .86, .94], g1: 0xff70b0, g2: 0xff4f8f, lbl: 'Studio', streak: 0xffc0e0 },
-  mcp: { a: [.02, .26, .32], b: [.04, .36, .24], c: [.08, .14, .38], sa: [.05, .55, 1], sb: [.75, 1, 1], g1: 0x40d0ff, g2: 0x2090ff, lbl: 'MCP Hub', streak: 0x9ff0ff },
-  agent: { a: [.26, .05, .42], b: [.36, .05, .24], c: [.05, .1, .36], sa: [.5, .18, 1], sb: [.96, .78, 1], g1: 0xb070ff, g2: 0x8040ff, lbl: 'Agentlər', streak: 0xd8b8ff },
+  main: { a: [.2, .1, .38], b: [.05, .22, .36], c: [.38, .1, .2], sa: [1, .36, .04], sb: [1, .82, .32], g1: 0xffa040, g2: 0xff7a30, lbl: 'Komanda', gal: [255, 190, 120], gal2: [150, 130, 255] },
+  studio: { a: [.38, .08, .3], b: [.32, .2, .05], c: [.12, .1, .42], sa: [1, .28, .5], sb: [1, .86, .94], g1: 0xff70b0, g2: 0xff4f8f, lbl: 'Studio', gal: [255, 140, 200], gal2: [255, 210, 120] },
+  mcp: { a: [.02, .26, .32], b: [.04, .36, .24], c: [.08, .14, .38], sa: [.05, .55, 1], sb: [.75, 1, 1], g1: 0x40d0ff, g2: 0x2090ff, lbl: 'MCP Hub', gal: [110, 230, 255], gal2: [90, 255, 190] },
+  agent: { a: [.26, .05, .42], b: [.36, .05, .24], c: [.05, .1, .36], sa: [.5, .18, 1], sb: [.96, .78, 1], g1: 0xb070ff, g2: 0x8040ff, lbl: 'Agentlər', gal: [200, 140, 255], gal2: [255, 120, 200] },
 };
-let skyBake = null, curTheme = 'main', warpS = null, streaks = null, myUser = '';
-function applyTheme(id) {
-  const t = THEMES[id] || THEMES.main; curTheme = id;
-  if (skyBake) {
-    const u = skyBake.mat.uniforms; u.uNA.value.set(...t.a); u.uNB.value.set(...t.b); u.uNC.value.set(...t.c);
-    skyBake.cam.update(renderer, skyBake.scene);
+let streaks = null, myUser = '', skyMix = null, navUni = null, camSpd = 0, warpK = 0, baseFov = 45;
+const prevCam = new THREE.Vector3();
+/** Spiral qalaktika teksturu (kanvasda): iki qol, parlaq nüvə, ulduz tozu */
+function galaxyTex(c1, c2, seed) {
+  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S;
+  const g = cv.getContext('2d'), r = rnd(seed);
+  const core = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  core.addColorStop(0, `rgba(255,248,235,.95)`); core.addColorStop(.08, `rgba(${c1},.55)`); core.addColorStop(.35, `rgba(${c2},.12)`); core.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = core; g.fillRect(0, 0, S, S);
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 2600; i++) {
+    const arm = i % 2, t = Math.pow(r(), .8) * 3.2, ang = t * 1.9 + arm * Math.PI + (r() - .5) * .55, rad = (t / 3.2) * S * .46 + (r() - .5) * 10;
+    const x = S / 2 + Math.cos(ang) * rad, y = S / 2 + Math.sin(ang) * rad * .92, sz = r() * 2.4 + .4, a = (1 - t / 3.4) * (.25 + r() * .55);
+    g.fillStyle = `rgba(${r() < .7 ? c1 : c2},${a.toFixed(3)})`; g.beginPath(); g.arc(x, y, sz, 0, 6.2832); g.fill();
   }
-  sunMesh.material.uniforms.uSA.value.set(...t.sa); sunMesh.material.uniforms.uSB.value.set(...t.sb);
-  sunGlow1.material.color.setHex(t.g1); sunGlow2.material.color.setHex(t.g2);
-  sunLbl.textContent = t.lbl;
-  if (streaks) streaks.material.color.setHex(t.streak);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function buildUniverses() {
+  for (const id of UNI_IDS) {
+    const u = U[id], th = THEMES[id];
+    u.root = new THREE.Group(); u.root.position.copy(u.center); scene.add(u.root);
+    u.sun = new THREE.Mesh(new THREE.SphereGeometry(5.2, 96, 64), new THREE.ShaderMaterial({ vertexShader: SUN_VS, fragmentShader: SUN_FS,
+      uniforms: { uTime: uT, uSA: { value: new THREE.Vector3(...th.sa) }, uSB: { value: new THREE.Vector3(...th.sb) } } }));
+    u.g1 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: th.g1, transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending }));
+    u.g2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: th.g2, transparent: true, opacity: .28, depthWrite: false, blending: THREE.AdditiveBlending }));
+    u.gal = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: galaxyTex(th.gal.join(','), th.gal2.join(','), hash(id)), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    u.gal.rotation.x = -Math.PI / 2 + .25; u.gal.renderOrder = -1;
+    u.galHit = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ visible: false })); u.galHit.userData.uni = id;
+    u.root.add(u.sun, u.g1, u.g2, u.gal, u.galHit);
+    u.lbl = document.createElement('div'); u.lbl.className = 'glabel sunl'; u.lbl.textContent = th.lbl; lblBox.append(u.lbl);
+    u.glbl = document.createElement('button'); u.glbl.className = 'glabel galbl';
+    u.gb = document.createElement('b'); u.gs = document.createElement('span'); u.glbl.append(u.gb, u.gs);
+    u.glbl.onclick = () => api.onPickUni && api.onPickUni(id);
+    lblBox.append(u.glbl);
+  }
+  sunMesh = U.main.sun; sunGlow1 = U.main.g1; sunGlow2 = U.main.g2;
+}
+/** index.php universlərin adını və qısa məlumatını verir (qalaktika etiketi üçün) */
+api.setUniverses = list => { for (const x of list || []) { const u = U[x.id]; if (!u) continue; u.info = x; if (u.gb) { setText(u.gb, x.icon + ' ' + x.name); setText(u.gs, x.sub || ''); } } };
+const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+/** Hər kadr: kameranın universə məsafəsinə görə görünüş səviyyələri (qalaktika → planetlər → detallar) */
+function updateUniverses(dt) {
+  let near = null, nd = 1e18;
+  const fu = focusName ? (focusName === SHIP ? U.main : (planets.get(focusName) || {}).U) : null;
+  for (const u of Object.values(U)) {
+    u.d = camera.position.distanceTo(u.center);
+    const R = Math.max(60, u.maxR);
+    u.lvG = sst(R * 2.6, R * 4.4, u.d);
+    u.lvP = 1 - sst(R * 3.2, R * 5, u.d);
+    u.lvD = fu === u ? 1 : 1 - sst(R * 1.7, R * 2.8, u.d);
+    if (u.lvP > .35 && u.d < nd) { nd = u.d; near = u; }
+    const gs = R * 3.4;
+    u.gal.scale.setScalar(gs); u.gal.material.opacity = .9 * u.lvG; u.gal.visible = u.lvG > .01;
+    u.gal.rotation.z += dt * .01;
+    u.galHit.scale.setScalar(R * 1.25); u.galHit.visible = u.lvG > .3;
+    const sp = 1 + Math.sin(tScene * 1.3 + u.center.x) * .03;
+    u.g1.scale.setScalar(30 * sp * (1 + u.lvG * 3)); u.g2.scale.setScalar((78 + Math.sin(tScene * .7) * 3) * (1 + u.lvG * 2));
+    u.sun.rotation.y += dt * .02;
+    u.lbl.style.opacity = focusName ? 0 : u.lvP;
+    applyLabel(u.lbl, u.lvP > .02 && !focusName ? labelPos(u.center, 5.2, true) : null);
+    const gq = u.lvG > .02 ? labelPos(u.center, R * 1.1, true) : null;
+    applyLabel(u.glbl, gq); u.glbl.style.opacity = u.lvG; u.glbl.style.pointerEvents = u.lvG > .4 ? 'auto' : 'none';
+  }
+  const id = near ? near.id : null;
+  if (id !== navUni) { navUni = id; api.onUniverse && api.onUniverse(id); }
+  // səma: yaxınlaşılan universin rənginə qarışır
+  if (skyMix) {
+    const w = near ? near.lvP : 0, k = Math.min(1, dt * 2);
+    if (near && skyMix.cur !== near.id && w > .5) { skyMix.cur = near.id; skyMix.mat.uniforms.tB.value = skyMix.tex[near.id]; }
+    skyMix.w += ((near && skyMix.cur === near.id ? w : 0) - skyMix.w) * k;
+    skyMix.mat.uniforms.uW.value = skyMix.w;
+  }
 }
 function buildStreaks() {
   const N = 420, pos = new Float32Array(N * 6), seed = new Float32Array(N * 3);
@@ -1426,54 +1507,53 @@ function updateStreaks(k, dt) {
   streaks.geometry.attributes.position.needsUpdate = true;
   streaks.material.opacity = Math.min(1, k * 1.4); streaks.visible = k > .01;
 }
-/** Öz gəmin səyahət zamanı kameranın qabağında uçur: əvvəl uzaqlaşıb yox olur, yeni universdə uzaqdan gəlir */
-const wF = new THREE.Vector3(), wU = new THREE.Vector3();
-function warpShip(s) {
-  const u = (tScene - warpS.t0) / warpS.dur;
-  camera.getWorldDirection(wF); wU.set(0, 1, 0).applyQuaternion(camera.quaternion);
-  const d = u < .5 ? 14 + Math.pow(u / .5, 2.2) * 260 : 14 + Math.pow((1 - u) / .5, 2.2) * 260;
-  s.pos.copy(camera.position).addScaledVector(wF, d).addScaledVector(wU, -3.2);
+/** Sürətli uçuşda (universlər arası) ulduz xətləri və geniş baxış bucağı — kameranın real sürətindən */
+function updateSpeedFx(dt) {
+  if (dt <= 0) return;
+  const v = camera.position.distanceTo(prevCam) / dt; prevCam.copy(camera.position);
+  camSpd += (v - camSpd) * Math.min(1, dt * 5);
+  const want = REDUCE ? 0 : sst(160, 900, camSpd);
+  warpK += (want - warpK) * Math.min(1, dt * 4);
+  updateStreaks(warpK, dt);
+  const f = baseFov + 28 * warpK;
+  if (Math.abs(camera.fov - f) > .01) { camera.fov = f; camera.updateProjectionMatrix(); }
 }
 api.setMe = u => { myUser = u || ''; };
-/** Başqa universə səyahət: theme = universin id-si, onMid = yeni universin məlumatını qurur (ekran ən parlaq olanda) */
-api.warp = (theme, onMid) => {
-  if (!api.mounted || REDUCE || document.hidden) { if (api.mounted) applyTheme(theme); onMid && onMid(); if (api.mounted && !focusName) overview(true); return; }
-  if (warpS) { warpS.theme = theme; warpS.onMid = onMid; return; }
-  if (cine) endCine(false);
-  warpS = { t0: tScene, dur: 2.8, theme, onMid, mid: false, me: uships.has(myUser) ? myUser : null, fov: camera.fov };
-  fly = null; zT = null;
-};
-function stepWarp(dt) {
-  const u = Math.min(1, (tScene - warpS.t0) / warpS.dur), k = Math.sin(Math.PI * u);
-  camera.fov = warpS.fov + 62 * Math.pow(k, 1.5); camera.updateProjectionMatrix();
-  updateStreaks(k, dt);
-  lblBox.style.opacity = String(Math.max(0, 1 - k * 3));
-  controls.enabled = false;
-  if (!warpS.mid) camera.position.addScaledVector(camera.getWorldDirection(wF), k * dt * 25);   // irəli atılma hissi (yalnız köhnə universdə; yenidə kamera hədəf planetə qoyulub)
-  if (!warpS.mid && u >= .5) {
-    warpS.mid = true;
-    screenFlash(0, 0, .9);
-    focusName = null; fly = null;
-    applyTheme(warpS.theme);
-    const fn = warpS.onMid; warpS.onMid = null; fn && fn();
-    if (!focusName && !pendingFocus) overview(true);
-  }
-  if (u >= 1) {
-    camera.fov = warpS.fov; camera.updateProjectionMatrix();
-    streaks.visible = false; lblBox.style.opacity = ''; controls.enabled = true;
-    warpS = null;
-  }
+function uniPose(id) {
+  const u = U[id], asp = W / H, R = Math.max(40, u.maxR), d = Math.max(50, R * 1.5 + 12, R * 1.18 / (.414 * Math.max(asp, .5)));
+  return { pos: u.center.clone().add(new THREE.Vector3(0, d * .52, d * .86)), target: u.center.clone() };
 }
-api.warping = () => !!warpS;
-api.setTheme = id => { if (api.mounted) applyTheme(id); else curTheme = id; };
-api.setPlanShipVisible = v => { if (ship) { ship.holder.visible = !!v; ship.btn.style.display = v ? '' : 'none'; for (const t of ship.trails) t.pts.visible = !!v; } };
+function mapPose() {
+  const asp = W / H, d = 1250 / Math.max(.55, Math.min(1.5, asp)) + 300;
+  return { pos: MAP_TARGET.clone().add(new THREE.Vector3(0, d * .88, d * .48)), target: MAP_TARGET.clone() };
+}
+/** Universə (və ya id = null: bütün xəritəyə) axıcı uçuş; uzaq məsafədə qövslə */
+api.flyUni = (id, instant) => {
+  if (!api.mounted) { pendingUni = id === null ? 'map' : id; return; }
+  flyUniNow(id, instant);
+};
+function flyUniNow(id, instant) {
+  if (cine) endCine(false);
+  if (focusName) { focusName = null; }
+  const o = id && U[id] ? uniPose(id) : mapPose();
+  controls.minDistance = 8; controls.maxDistance = 2600; zA = null; zT = null;
+  if (instant || REDUCE) { camera.position.copy(o.pos); controls.target.copy(o.target); prevCam.copy(o.pos); fly = null; controls.enabled = true; return; }
+  const dist = camera.position.distanceTo(o.pos);
+  startFly({ pos: o.pos, target: o.target }, Math.min(3.4, 1.1 + dist / 700), null, Math.min(320, dist * .28));
+}
+api.home = () => api.flyUni(null);
+let pendingUni = null;
 
 function setData(items) {
-  items = items.slice(0, 16);
+  items = items.slice(0, 64);
   const keep = new Set(items.map(x => x.name));
-  const drop = (k, p) => { scene.remove(p.pivot); p.btn.remove(); for (const [n, m] of p.sats) disposeSat(p, n, m); planets.delete(k); };
+  const drop = (k, p) => { p.pivot.parent && p.pivot.parent.remove(p.pivot); p.btn.remove(); for (const [n, m] of p.sats) disposeSat(p, n, m); planets.delete(k); };
   for (const [k, p] of planets) if (!keep.has(k)) drop(k, p);
-  items.forEach((it, i) => {
+  const per = {}, idxIn = new Map();                     // hər universin içində öz sırası (orbit yeri)
+  for (const it of items) { const u = U[it.uni] ? it.uni : 'main'; it.uni = u; idxIn.set(it, per[u] = (per[u] || 0) + 1); }
+  for (const id of UNI_IDS) { U[id].n = per[id] || 0; U[id].maxR = slotR(Math.max(0, (per[id] || 1) - 1)); }
+  items.forEach(it => {
+    const i = idxIn.get(it) - 1, cnt = per[it.uni];
     let p = planets.get(it.name);
     if (p && p.sig !== lookSig(it)) { const keepPos = { r: p.r, off: p.off, R: p.R }; drop(it.name, p); p = createPlanet(it, i); planets.set(it.name, p); Object.assign(p, keepPos); p.rT = p.r; p.RT = p.R; }
     const RT = it.R ? it.R : it.kind === 'project' || !it.kind ? 2.5 + Math.min(2, Math.log2(1 + it.edits + it.tools / 4) * .34) : it.look ? 2 + it.look.size * .75 : 3.4;
@@ -1483,7 +1563,7 @@ function setData(items) {
       if (pendingFocus === it.name) { const n = pendingFocus; pendingFocus = null; setTimeout(() => api.focus(n, true), 0); }
     }
     p.rT = slotR(i);
-    p.offT = 2 * Math.PI * i / Math.max(items.length, 1);
+    p.offT = 2 * Math.PI * i / Math.max(cnt, 1);
     if (p.off === undefined) p.off = p.offT;
     p.RT = RT;
     if (!p.holder.position.lengthSq()) { p.a = G + p.off; p.holder.position.set(Math.cos(p.a) * p.r, 0, Math.sin(p.a) * p.r); }   // yeni planet: fokus düzgün yerdən hesablansın
@@ -1496,31 +1576,24 @@ function setData(items) {
     syncMoons(p, it.users);
     syncSats(p, it.sats || []);
   });
-  const nm = Math.max(0, items.length - 1);
-  const newMax = slotR(nm);
-  if (Math.abs(newMax - maxR) > .1) {
-    maxR = newMax;
-    if (!focusName && !cine) { controls.maxDistance = Math.max(140, maxR * 4.5); if (!userMoved) overview(true); }
-  }
+  maxR = U.main.maxR;
 }
 function setText(n, t) { if (n.textContent !== t) n.textContent = t; }
 
-function overviewPose() {
-  const asp = W / H, d = Math.max(50, maxR * 1.5 + 12, maxR * 1.18 / (.414 * Math.max(asp, .5)));
-  return { pos: new THREE.Vector3(0, d * .52, d * .86), target: new THREE.Vector3(0, 0, 0) };
-}
+function overviewPose(id) { return uniPose(id || (navUni || 'main')); }
 function overview(instant) {
   const o = overviewPose();
-  controls.minDistance = 10; controls.maxDistance = Math.max(140, maxR * 4.5);
+  controls.minDistance = 8; controls.maxDistance = 2600;
   if (instant || REDUCE) { camera.position.copy(o.pos); controls.target.copy(o.target); fly = null; controls.enabled = true; }
   else startFly({ pos: o.pos, target: o.target }, 1.1);
 }
-function startFly(to, dur, follow) {
-  fly = { t0: performance.now(), dur: (REDUCE ? .01 : dur) * 1000, fp: camera.position.clone(), ft: controls.target.clone(), to, follow: follow || null };
+function startFly(to, dur, follow, arc) {
+  fly = { t0: performance.now(), dur: (REDUCE ? .01 : dur) * 1000, fp: camera.position.clone(), ft: controls.target.clone(), to, follow: follow || null, arc: arc || 0 };
+  zA = null; zT = null;
 }
 function focusPose(p) {
   p.holder.getWorldPosition(tmp);
-  const toSun = tmp2.copy(tmp).multiplyScalar(-1).normalize();
+  const toSun = tmp2.copy(p.U.center).sub(tmp).normalize();
   if (toSun.lengthSq() < .01) toSun.set(0, 0, 1);
   const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), toSun).normalize();
   const off = toSun.clone().multiplyScalar(.78).add(right.multiplyScalar(.5)).add(new THREE.Vector3(0, .26, 0)).normalize().multiplyScalar(p.RT * 6.2);
@@ -1530,9 +1603,11 @@ function focusPose(p) {
 api.focus = function (name, instant) {
   if (!api.mounted) { pendingFocus = name; return; }
   if (cine) endCine(true);
-  if (!name) {
+  if (!name) {                                             // fokusdan çıx: planetin universinin ümumi görünüşünə qayıt
     if (focusName === null) return;
-    focusName = null; overview(); return;
+    const f = focusName === SHIP ? U.main : (planets.get(focusName) || {}).U;
+    focusName = null; controls.minDistance = 8; controls.maxDistance = 2600;
+    const o = uniPose(f ? f.id : 'main'); startFly({ pos: o.pos, target: o.target }, 1.2); return;
   }
   const p = name === SHIP ? ship : planets.get(name);
   if (!p) { pendingFocus = name; return; }
@@ -1542,7 +1617,7 @@ api.focus = function (name, instant) {
   p.holder.getWorldPosition(tmp);
   controls.minDistance = p.RT * 1.7; controls.maxDistance = p.RT * 45;
   if (instant || REDUCE) { camera.position.copy(tmp).add(off); controls.target.copy(tmp); fly = null; controls.enabled = true; }
-  else startFly({ off }, 1.5, p);
+  else { const dist = camera.position.distanceTo(tmp); startFly({ off }, Math.min(3.4, 1.5 + dist / 800), p, dist > 300 ? Math.min(300, dist * .25) : 0); }
 };
 api.debug = () => ({ pr: +pr.toFixed(2), prMax, quality, base: +baseDt.toFixed(4), dist: +camera.position.distanceTo(controls.target).toFixed(2), enabled: controls.enabled, zoom: controls.enableZoom, min: controls.minDistance, max: +controls.maxDistance.toFixed(1), fly: !!fly, focus: focusName });
 api.setQuality = q => {
@@ -1623,7 +1698,26 @@ function updateSound(dt) {
   }
 }
 addEventListener('visibilitychange', () => { if (document.hidden) stopSound(); });
-api.zoom = f => { const cur = camera.position.distanceTo(controls.target); zT = Math.min(controls.maxDistance, Math.max(controls.minDistance, (zT === null ? cur : zT) * f)); };
+api.zoom = f => { if (!focusName) return zoomAt(f, 0, 0); const cur = camera.position.distanceTo(controls.target); zT = Math.min(controls.maxDistance, Math.max(controls.minDistance, (zT === null ? cur : zT) * f)); };
+/** Siçanın altındakı nöqtəyə doğru zoom: kamera və hədəf birlikdə o nöqtəyə yaxınlaşır (xəritədəki kimi) */
+let zA = null;
+const zPlane = new THREE.Plane(), zP = new THREE.Vector3(), zN = new THREE.Vector2(), zUp = new THREE.Vector3(0, 1, 0);
+function zoomAt(f, nx, ny) {
+  if (fly) return;
+  const cam = zA ? zA.cam : camera.position.clone(), tgt = zA ? zA.tgt : controls.target.clone();
+  const dist = cam.distanceTo(tgt), nd = Math.min(2600, Math.max(8, dist * f)), k = nd / dist;
+  if (Math.abs(k - 1) < 1e-4) return;
+  ray.setFromCamera(zN.set(nx, ny), camera);
+  zPlane.set(zUp, -tgt.y);
+  let P = ray.ray.intersectPlane(zPlane, zP);
+  if (!P || P.distanceTo(tgt) > dist * 2.5) P = zP.copy(tgt).addScaledVector(ray.ray.direction, 0);   // üfüqə baxanda: hədəfin özü
+  if (f < 1) {                                                // içəri zoom: qalaktikanın üstündəsə, nöqtə onun mərkəzinə doğru çəkilir
+    const u = uniAt(P), R = Math.max(60, u.maxR), dx = P.x - u.center.x, dz = P.z - u.center.z;
+    if (Math.hypot(dx, dz) < R * 2.2) P.lerp(u.center, Math.min(.85, .25 + .6 * u.lvG + .3 * (1 - u.lvD)));
+  }
+  zA = { cam: P.clone().add(cam.clone().sub(P).multiplyScalar(k)), tgt: P.clone().add(tgt.clone().sub(P).multiplyScalar(k)) };
+  userMoved = true;
+}
 api.setData = items => { if (api.mounted) setData(items); };
 api.setShip = o => { if (ship && o) setText(ship.sp2, o.sub || ''); };
 api.setSunSats = list => { if (api.mounted) syncSats(sunSats, list || [], true); };
@@ -1638,7 +1732,7 @@ function resize() {
   renderer.setPixelRatio(pr);
   renderer.setSize(W, H, false);
   camera.aspect = W / H; camera.updateProjectionMatrix();
-  if (api.mounted && !userMoved && !focusName) overview(true);
+  if (api.mounted && !userMoved && !focusName && !fly) flyUniNow(navUni, true);
   stars.material.uniforms.uPR.value = pr;
 }
 function setPR(v) {
@@ -1659,7 +1753,7 @@ function applyLabel(el, q) {
   el.style.transform = `translate(${q.x.toFixed(1)}px,${q.y.toFixed(1)}px) translateX(-50%)`;
 }
 
-const wp = new THREE.Vector3(), sunWP = new THREE.Vector3(0, 0, 0);
+const wp = new THREE.Vector3();
 function frame(now) {
   requestAnimationFrame(frame);
   if (!active || document.hidden) { last = now; return; }
@@ -1674,14 +1768,16 @@ function frame(now) {
   }
 
   // hover (raycast)
-  hovered = null; hoveredShip = false; let hoveredU = null;
+  updateUniverses(dt);
+  hovered = null; hoveredShip = false; let hoveredU = null, hoveredG = null;
   if (!focusName && ndc.x < 2 && !fly) {
     ray.setFromCamera(ndc, camera);
     const hits = ray.intersectObjects(pickables(), false);
-    if (hits.length) { const u = hits[0].object.userData; if (u.ship) hoveredShip = true; else if (u.uship) hoveredU = u.uship; else hovered = u.planet; }
+    if (hits.length) { const u = hits[0].object.userData; if (u.ship) hoveredShip = true; else if (u.uship) hoveredU = u.uship; else if (u.uni) hoveredG = u.uni; else hovered = u.planet; }
   }
+  for (const u of Object.values(U)) u.glbl.classList.toggle('hov', hoveredG === u.id);
   const anyHover = hovered || hoveredShip || hoveredU || (ship && ship.hl) || [...planets.values()].some(p => p.hl);
-  canvas.style.cursor = hovered || hoveredShip || hoveredU ? 'pointer' : 'grab';
+  canvas.style.cursor = hovered || hoveredShip || hoveredU || hoveredG ? 'pointer' : 'grab';
   for (const s of uships.values()) s.btn.classList.toggle('hov', hoveredU === s.user);
   speed += ((anyHover && !focusName ? 0 : 1) - speed) * Math.min(1, dt * 6);
   const k = REDUCE ? 0 : dt * speed * (focusName ? .35 : 1);
@@ -1694,7 +1790,7 @@ function frame(now) {
     if (p.kick.lengthSq() > 1e-6 || p.kickV.lengthSq() > 1e-6) { p.kickV.addScaledVector(p.kick, -22 * dt).multiplyScalar(Math.exp(-3 * dt)); p.kick.addScaledVector(p.kickV, dt); }
     p.holder.position.set(Math.cos(p.a) * p.r, 0, Math.sin(p.a) * p.r).add(p.kick);
     p.orbitLine.scale.setScalar(p.r);
-    p.orbitLine.visible = !focusName;
+    p.orbitLine.visible = !focusName && p.U.lvP > .02; p.orbitLine.material.opacity = .16 * p.U.lvP;
     p.body.scale.setScalar(p.R);
     if (!REDUCE) { p.mesh.rotation.y += dt * p.spin * (1 - (p.danceK || 0)); if (p.clouds) p.clouds.rotation.y += dt * p.spin * 1.35; }
 
@@ -1716,6 +1812,9 @@ function frame(now) {
       p.atmU.uCol.value.lerp(new THREE.Color(1, .3, .05), Math.min(1, p.burn * .85));
       p.atmU.uAmt.value = Math.max(p.atmU.uAmt.value, .5 + p.burn * .9 * fl);
     }
+    const det = p.U.lvD > .05;                              // detallar (aylar, peyklər) yalnız universə yaxınlaşanda
+    for (const m of p.moons.values()) m.g.visible = det;
+    for (const m of p.sats.values()) m.piv.visible = det;
     updateSats(p, dt, focusName === p.name, p.R);
     // işarə halqası
     const ph = (tScene * (p.st === 'waiting' ? .9 : .5)) % 1;
@@ -1746,13 +1845,13 @@ function frame(now) {
 
   updateShip(dt);
   updateUShips(dt);
-  updateSats(sunSats, dt, !focusName, 1);
+  sunSats.body.visible = U.main.lvD > .05;
+  updateSats(sunSats, dt, !focusName && U.main.lvD > .3, 1);
   if (!REDUCE) updateRockets(dt);
 
   // sürüş / izləmə
   camera.position.sub(shakeOff);
-  if (warpS) stepWarp(dt);
-  else if (cine) { controls.enabled = false; cineStep(dt); }
+  if (cine) { controls.enabled = false; cineStep(dt); }
   else if (fly) {
     const u = Math.min(1, (performance.now() - fly.t0) / fly.dur), e = ease(u);
     if (fly.follow) {
@@ -1763,6 +1862,7 @@ function frame(now) {
       controls.target.lerpVectors(fly.ft, fly.to.target, e);
       camera.position.lerpVectors(fly.fp, fly.to.pos, e);
     }
+    if (fly.arc) camera.position.y += fly.arc * 4 * e * (1 - e);       // uzaq səyahət: yuxarı qalxıb enən qövs
     controls.enabled = false;
     if (u >= 1) { fly = null; controls.enabled = true; }
   } else if (!controls.enabled) { controls.enabled = true; } else if (focusName && focusObj()) {
@@ -1771,7 +1871,12 @@ function frame(now) {
     tmp2.copy(tmp).sub(controls.target);
     camera.position.add(tmp2); controls.target.copy(tmp);
   }
-  if (fly || cine) zT = null;
+  if (fly || cine) { zT = null; zA = null; }
+  if (zA) {                                                  // siçana doğru zoom (axıcı)
+    const k = Math.min(1, dt * 7);
+    camera.position.lerp(zA.cam, k); controls.target.lerp(zA.tgt, k);
+    if (camera.position.distanceTo(zA.cam) < .05) zA = null;
+  }
   if (zT !== null && !fly) {
     tmp.copy(camera.position).sub(controls.target);
     const cur = tmp.length(), nd = cur + (zT - cur) * Math.min(1, dt * 9);
@@ -1782,8 +1887,12 @@ function frame(now) {
   inset += (insT - inset) * Math.min(1, dt * (REDUCE ? 60 : 4));
   if (Math.abs(inset) > .4) camera.setViewOffset(W, H, inset, 0, W, H); else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   updateSound(dt);
-  controls.autoRotate = !REDUCE && !focusName && !anyHover && !fly && !downAt && !cine && !warpS;
+  controls.autoRotate = !REDUCE && !userMoved && !focusName && !anyHover && !fly && !downAt && !cine;
+  // fokusda: sol düymə planetin ətrafında fırladır; xəritədə: sol düymə məkanı sürüşdürür, sağ düymə fırladır
+  const want = focusName ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
+  if (controls.mouseButtons.LEFT !== want) { controls.mouseButtons.LEFT = want; controls.mouseButtons.RIGHT = focusName ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE; controls.touches.ONE = focusName ? THREE.TOUCH.ROTATE : THREE.TOUCH.PAN; }
   controls.update();
+  updateSpeedFx(dt);
   shakeOff.set(0, 0, 0);
   if (shake > .004 && !REDUCE) {
     const a = shake * camera.position.distanceTo(controls.target) * .014;
@@ -1792,19 +1901,17 @@ function frame(now) {
 
   stars.position.copy(camera.position); sky.position.copy(camera.position);
   sky.rotation.y += dt * .0025;
-  const sp = 1 + Math.sin(tScene * 1.3) * .03;
-  sunGlow1.scale.setScalar(30 * sp); sunGlow2.scale.setScalar(78 + Math.sin(tScene * .7) * 3);
-  sunMesh.rotation.y += dt * .02;
-  sunLbl.style.opacity = focusName ? 0 : 1;
-  applyLabel(sunLbl, labelPos(sunWP, 5.2, !focusName));
+  if (skyMix) skyMix.mat.uniforms.uW.value = skyMix.w;
   const items = [];
   for (const p of planets.values()) {
     p.holder.getWorldPosition(wp);
-    items.push({ p, q: labelPos(wp, p.R, !focusName) });
+    const o = p.U.lvP;
+    items.push({ p, q: labelPos(wp, p.R, !focusName && o > .02) });
+    p.btn.style.opacity = o < .999 ? o.toFixed(3) : ''; p.btn.style.pointerEvents = o > .3 ? '' : 'none';
     p.btn.classList.toggle('hov', hovered === p || p.hl);
   }
-  if (ship) { ship.holder.getWorldPosition(shipWP); items.push({ p: ship, q: labelPos(shipWP, ship.R, !focusName), ship: true }); ship.btn.classList.toggle('hov', hoveredShip || ship.hl); }
-  for (const s of uships.values()) items.push({ p: s, q: labelPos(s.pos, 1.6, !focusName || focusName === s.target) });
+  if (ship) { ship.holder.getWorldPosition(shipWP); items.push({ p: ship, q: labelPos(shipWP, ship.R, !focusName && U.main.lvD > .05) }); ship.btn.style.opacity = U.main.lvD.toFixed(3); ship.btn.classList.toggle('hov', hoveredShip || ship.hl); }
+  for (const s of uships.values()) { const o = uniAt(s.pos).lvD; items.push({ p: s, q: labelPos(s.pos, 1.6, o > .05 && (!focusName || focusName === s.target)) }); s.btn.style.opacity = o.toFixed(3); }
   items.sort((a, b) => (a.q ? a.q.y : 1e9 - 0) - (b.q ? b.q.y : 1e9));
   for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
     const A = items[i].q, B = items[j].q;
@@ -1826,26 +1933,29 @@ api.mount = function (el) {
   canvas = renderer.domElement; canvas.className = 'glcanvas';
   box.prepend(canvas);
   lblBox = document.createElement('div'); lblBox.className = 'glbls'; box.insertBefore(lblBox, canvas.nextSibling);
-  sunLbl = document.createElement('div'); sunLbl.className = 'glabel sunl'; sunLbl.textContent = 'Komanda'; lblBox.append(sunLbl);
   kfl = document.createElement('div'); kfl.className = 'kflash'; box.append(kfl);
 
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(45, 1, .1, 3000);
+  camera = new THREE.PerspectiveCamera(45, 1, .1, 9000);
   glowTex = radialTex([[0, 'rgba(255,255,255,1)'], [.18, 'rgba(255,255,255,.55)'], [.5, 'rgba(255,255,255,.12)'], [1, 'rgba(255,255,255,0)']]);
   beaconTex = ringTex();
 
   // səma + ulduzlar
+  // hər universin öz səması bir dəfə bişirilir; yaxınlaşdıqca əsas səma ilə qarışır
   const bakeScene = new THREE.Scene();
-  const t0 = THEMES[curTheme];
   const skyMat = new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide,
-    uniforms: { uTime: { value: 12 }, uNA: { value: new THREE.Vector3(...t0.a) }, uNB: { value: new THREE.Vector3(...t0.b) }, uNC: { value: new THREE.Vector3(...t0.c) } } });
+    uniforms: { uTime: { value: 12 }, uNA: { value: new THREE.Vector3() }, uNB: { value: new THREE.Vector3() }, uNC: { value: new THREE.Vector3() } } });
   bakeScene.add(new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), skyMat));
-  const skyRT = new THREE.WebGLCubeRenderTarget(768);
-  const cubeCam = new THREE.CubeCamera(.1, 100, skyRT); cubeCam.update(renderer, bakeScene);
-  skyBake = { scene: bakeScene, mat: skyMat, cam: cubeCam };
+  const skyTex = {};
+  for (const id of UNI_IDS) {
+    const t = THEMES[id], rt = new THREE.WebGLCubeRenderTarget(id === 'main' ? 768 : 512);
+    skyMat.uniforms.uNA.value.set(...t.a); skyMat.uniforms.uNB.value.set(...t.b); skyMat.uniforms.uNC.value.set(...t.c);
+    new THREE.CubeCamera(.1, 100, rt).update(renderer, bakeScene); skyTex[id] = rt.texture;
+  }
   sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 16), new THREE.ShaderMaterial({
-    vertexShader: SKY_VS, uniforms: { tCube: { value: skyRT.texture } }, side: THREE.BackSide, depthWrite: false,
-    fragmentShader: 'uniform samplerCube tCube; varying vec3 vDir; void main(){ gl_FragColor=vec4(textureCube(tCube,normalize(vDir)).rgb,1.); }' }));
+    vertexShader: SKY_VS, uniforms: { tA: { value: skyTex.main }, tB: { value: skyTex.main }, uW: { value: 0 } }, side: THREE.BackSide, depthWrite: false,
+    fragmentShader: 'uniform samplerCube tA, tB; uniform float uW; varying vec3 vDir; void main(){ vec3 d=normalize(vDir); gl_FragColor=vec4(mix(textureCube(tA,d).rgb,textureCube(tB,d).rgb,uW),1.); }' }));
+  skyMix = { mat: sky.material, tex: skyTex, cur: 'main', w: 0 };
   sky.renderOrder = -2; scene.add(sky);
   const N = 3000, pos = new Float32Array(N * 3), size = new Float32Array(N), ph = new Float32Array(N), col = new Float32Array(N * 3), r = rnd(7);
   for (let i = 0; i < N; i++) {
@@ -1861,22 +1971,20 @@ api.mount = function (el) {
   stars = new THREE.Points(sg, new THREE.ShaderMaterial({ vertexShader: STAR_VS, fragmentShader: STAR_FS, uniforms: { uTime: uT, uPR: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   stars.renderOrder = -1; stars.frustumCulled = false; scene.add(stars);
 
-  // günəş
-  sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5.2, 96, 64), new THREE.ShaderMaterial({ vertexShader: SUN_VS, fragmentShader: SUN_FS, uniforms: { uTime: uT, uSA: { value: new THREE.Vector3(1, .36, .04) }, uSB: { value: new THREE.Vector3(1, .82, .32) } } }));
-  scene.add(sunMesh);
-  sunGlow1 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xffa040, transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending }));
-  sunGlow2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff7a30, transparent: true, opacity: .28, depthWrite: false, blending: THREE.AdditiveBlending }));
-  scene.add(sunGlow1, sunGlow2);
+  // universlər (hər birinin günəşi, qalaktikası, etiketləri)
+  buildUniverses();
   buildShip();
   buildStreaks();
-  applyTheme(curTheme);
-  sunSats.body = new THREE.Group(); scene.add(sunSats.body);
+  sunSats.body = new THREE.Group(); U.main.root.add(sunSats.body);
 
   controls = new OrbitControls(camera, canvas);
-  controls.enableDamping = true; controls.dampingFactor = .06; controls.enablePan = false;
-  controls.enableZoom = true; controls.rotateSpeed = .7; controls.zoomSpeed = 1.1; controls.autoRotateSpeed = .45; controls.maxPolarAngle = Math.PI * .92; controls.minPolarAngle = .08;
-  controls.addEventListener('start', () => { userMoved = true; });
-  overview(true);
+  controls.enableDamping = true; controls.dampingFactor = .06; controls.enablePan = true; controls.screenSpacePanning = false; controls.panSpeed = 1.1;
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+  controls.enableZoom = false; controls.rotateSpeed = .7; controls.zoomSpeed = 1.1; controls.autoRotateSpeed = .45; controls.maxPolarAngle = Math.PI * .92; controls.minPolarAngle = .08;
+  controls.addEventListener('start', () => { userMoved = true; zA = null; });
+  controls.minDistance = 8; controls.maxDistance = 2600;
+  flyUniNow(pendingUni && pendingUni !== 'map' ? pendingUni : null, true); pendingUni = null;   // başlanğıc: bütün universlərin kosmik xəritəsi
 
   canvas.addEventListener('pointermove', e => {
     const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
@@ -1889,7 +1997,7 @@ api.mount = function (el) {
       const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       const hits = ray.intersectObjects(pickables(), false);
-      if (hits.length) { const u = hits[0].object.userData; if (u.ship) api.onShip && api.onShip(); else if (u.uship) api.onUserShip && api.onUserShip(u.uship); else if (api.onPick) api.onPick(u.planet.name); }
+      if (hits.length) { const u = hits[0].object.userData; if (u.ship) api.onShip && api.onShip(); else if (u.uship) api.onUserShip && api.onUserShip(u.uship); else if (u.uni) api.onPickUni && api.onPickUni(u.uni); else if (api.onPick) api.onPick(u.planet.name); }
     }
     downAt = null;
   });
@@ -1897,7 +2005,9 @@ api.mount = function (el) {
     if (e.target.closest && e.target.closest('.dock')) return;
     e.preventDefault(); e.stopPropagation();
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY;
-    api.zoom(Math.exp(dy * (e.ctrlKey ? .012 : .0019)));
+    const f = Math.exp(dy * (e.ctrlKey ? .012 : .0019));
+    if (focusName) api.zoom(f);
+    else { const r = canvas.getBoundingClientRect(); zoomAt(f, ((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); }
   }, { passive: false, capture: true });
   new ResizeObserver(resize).observe(box);
   resize();
