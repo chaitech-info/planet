@@ -541,7 +541,9 @@ body.v-space::before { display: none; }
 .tcard .tt { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
 .tcard .tm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
 .tcard .tp { background: var(--line); color: var(--text); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
-.tcard .tdesc { font-size: 13px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+.tcard .tdesc { font-size: 13px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; }
+.tcard .tdesc.open { -webkit-line-clamp: unset; display: block; }
+.tcard .tcmd summary .dot { width: 7px; height: 7px; }
 .tcard .tcmd { margin-top: 8px; font-size: 12.5px; } .tcard .tcmd summary { cursor: pointer; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .tcard .tcmd pre { margin: 6px 0 0; padding: 8px; border-radius: 8px; background: rgba(0,0,0,.25); font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; color: var(--text); }
 .tcard .tact { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; } .tcard .tact .gbtn { padding: 4px 10px; font-size: 12.5px; }
@@ -727,7 +729,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
   <header>
     <div class="brand"><div class="logo">C</div><h1>Komanda Claude</h1></div>
     <nav class="tabs"><a id="tab-panel" href="#">Panel</a><a id="tab-space" href="#kainat">Kainat</a><a id="tab-board" href="#lovhe">Lövhə <span class="tbadge" id="tbadge" hidden></span></a></nav>
-    <div class="meta"><span class="live" id="live"><span class="dot"></span><span id="conn">qoşulur…</span></span><span class="who" id="who"></span><button class="gbtn" id="b-adm" hidden>İstifadəçilər</button><button class="gbtn" id="b-prj" hidden>Proyektlər</button><button class="gbtn" id="b-ntf" hidden>Bildirişlər</button><button class="gbtn" id="b-plan" title="Proyektlərin planları, scope-ları və tapşırıqları (kainatdakı uçan gəmi)">🛸 Plan</button><button class="gbtn" id="b-msg" title="Komanda yoldaşına və ya hamıya mesaj (raketlə çatır)">✉ Mesaj <span class="tbadge" id="mbadge" hidden></span></button><button class="gbtn" id="b-rep">📊 Hesabat</button><a class="gbtn" href="kit.php?doc=1" target="_blank" rel="noopener" title="Addım-addım başlanğıc təlimatı">📖 Təlimat</a><a class="gbtn" href="kit.php" title="Quraşdırma paketi (hook, agent, təlimat)">📦 Paket</a><button class="gbtn" id="b-acc">Hesab</button><a href="?logout=1">Çıxış</a></div>
+    <div class="meta"><span class="live" id="live"><span class="dot"></span><span id="conn">qoşulur…</span></span><span class="who" id="who"></span><button class="gbtn" id="b-adm" hidden>İstifadəçilər</button><button class="gbtn" id="b-prj" hidden>Proyektlər</button><button class="gbtn" id="b-ntf" hidden>Bildirişlər</button><button class="gbtn" id="b-plan" title="Proyektlərin planları, scope-ları və tapşırıqları (kainatdakı uçan gəmi)">🛸 Plan</button><button class="gbtn" id="b-msg" title="Komanda yoldaşına və ya hamıya mesaj (raketlə çatır)">💬 Mesaj <span class="tbadge" id="mbadge" hidden></span></button><button class="gbtn" id="b-rep">📊 Hesabat</button><a class="gbtn" href="kit.php?doc=1" target="_blank" rel="noopener" title="Addım-addım başlanğıc təlimatı">📖 Təlimat</a><a class="gbtn" href="kit.php" title="Quraşdırma paketi (hook, agent, təlimat)">📦 Paket</a><button class="gbtn" id="b-acc">Hesab</button><a href="?logout=1">Çıxış</a></div>
   </header>
 
   <div class="alerts" id="alerts" hidden></div>
@@ -938,7 +940,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
 </div>
 <div class="modal" id="msg" hidden>
   <div class="mbox">
-    <div class="mhead"><b>Mesaj</b><button class="ibtn" data-close="msg" aria-label="Bağla">✕</button></div>
+    <div class="mhead"><b>💬 Mesaj</b><button class="ibtn" data-close="msg" aria-label="Bağla">✕</button></div>
     <div class="filters" id="msg-tabs"><button id="mt-write" class="on">Yaz</button><button id="mt-inbox">Qutu <span class="count" id="mt-cnt">0</span></button></div>
     <div id="msg-write">
       <select id="msg-to" aria-label="Kimə"></select>
@@ -1452,6 +1454,7 @@ async function identify() {
   if (!getTok()) { myName = null; return; }
   try { const { status, d } = await cmdApi('whoami'); myName = status === 200 ? d.user : null; } catch (e) { myName = null; }
 }
+const AGENT_TTL = 30;   // agent bu qədər saniyə səs verməyibsə oflayn sayılır (agent 10 san-dan bir ping edir, tapşırıq icrasında 3 san-dan bir poll)
 const CMD_ST = { pending: ['təsdiq gözləyir', 'waiting'], queued: ['növbədə', 'offline'], running: ['işləyir', 'working'], done: ['bitdi', 'idle'], failed: ['xəta', 'waiting'], canceled: ['ləğv edildi', 'offline'] };
 function makeCmd() {
   const n = el('div', 'card cmdc');
@@ -1474,7 +1477,7 @@ function renderCmd() {
       w.dataset.n = myName; w.replaceChildren(document.createTextNode(myName + ' kompüterinə · '), Object.assign(el('a', null, 'tokeni sil'), { onclick: () => { setTok(''); myName = null; renderCmd(); } }));
     }
     const ag = (data.agents || []).find(a => a.user === myName);
-    const live = ag && now() - ag.last_seen < 20;
+    const live = ag && now() - ag.last_seen < AGENT_TTL;
     const s = $('agentst'); setCls(s, 'agentst' + (live ? ' on' : ''));
     s.replaceChildren(el('i'), document.createTextNode(live ? 'agent onlayn' : 'agent oflayn'));
     s.title = live ? '' : 'Kompüterində işlət: python3 agent/claude-team-agent.py';
@@ -1803,7 +1806,7 @@ async function admRefresh() {
   for (const u of d.users) {
     const row = el('div', 'urow');
     row.append(el('span', 'un', u.name), el('span', 'ur', u.role === 'admin' ? 'admin' : u.role === 'student' ? '🎓 student' : 'üzv'));
-    const live = u.agent_seen && d.now - u.agent_seen < 20;
+    const live = u.agent_seen && d.now - u.agent_seen < AGENT_TTL;
     const st = el('span', 'us'); st.append(el('span', 'dot ' + (live ? 'idle' : '')), document.createTextNode(live ? 'agent onlayn' : u.agent_seen ? 'agent oflayn' : 'agent heç qoşulmayıb'));
     row.append(st);
     const rs = el('button', 'gbtn', 'Token/parol yenilə');
@@ -2192,10 +2195,12 @@ function makeTask() {
   const n = el('div', 'tcard');
   const tt = el('div', 'tt'), tm = el('div', 'tm'), tp = el('span', 'tp'), who = el('span'), age = el('span'), due = el('span', 'tdue');
   tm.append(tp, who, age, due);
-  const desc = el('div', 'tdesc'), cmd = el('details', 'tcmd'), sm = el('summary'), pre = el('pre'); cmd.append(sm, pre);
+  const desc = el('div', 'tdesc'), cmd = el('details', 'tcmd'), sm = el('summary'), dot = el('span', 'dot'), sl = el('span'), pre = el('pre');
+  sm.append(dot, sl); cmd.append(sm, pre);
+  desc.title = 'Tam mətn üçün klik et'; desc.onclick = () => desc.classList.toggle('open');   // 3 sətirdən uzun təsvir: klik ilə açılır
   const act = el('div', 'tact');
   n.append(tt, tm, desc, cmd, act);
-  n._r = { tt, tp, who, age, due, desc, cmd, sm, pre, act, sig: '' };
+  n._r = { tt, tp, who, age, due, desc, cmd, sm, dot, sl, pre, act, sig: '' };
   return n;
 }
 /** Tapşırıq kartını yeniləyir (lövhədə və Designer planetində) */
@@ -2207,9 +2212,15 @@ function updTask(n, t) {
   setText(r.desc, t.details || ''); r.desc.hidden = !t.details;
   const cm = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
   r.cmd.hidden = !cm;
-  if (cm) {
-    const [lbl] = CMD_ST[cm.status] || [cm.status];
-    setText(r.sm, 'Claude: ' + lbl); setText(r.pre, cm.result || (cm.status === 'queued' ? 'Agent götürənə qədər növbədə gözləyir…' : cm.status === 'running' ? 'İşləyir…' : ''));
+  if (cm) {                                                     // Claude Code-un bu tapşırıq üzrə vəziyyəti (agent onlayndırmı da görünür)
+    const [, dc] = CMD_ST[cm.status] || [cm.status, 'offline'], ag = agentInfo(t.assignee);
+    const txt = cm.status === 'queued' ? (ag.online ? 'Claude: növbədə, indi başlayır…' : 'Claude: növbədə · agent oflayndır') :
+      cm.status === 'running' ? 'Claude: işləyir · ' + ago(cm.started_at) :
+      cm.status === 'done' ? 'Claude: bitdi · ' + ago(cm.finished_at) :
+      cm.status === 'failed' ? 'Claude: xəta · ' + ago(cm.finished_at) :
+      cm.status === 'canceled' ? 'Claude: dayandırıldı' : 'Claude: ' + (CMD_ST[cm.status] || [cm.status])[0];
+    setCls(r.dot, 'dot ' + dc); setText(r.sl, txt);
+    setText(r.pre, cm.result || (cm.status === 'queued' ? (ag.online ? 'Agent indi götürür…' : t.assignee + '-in agenti oflayndır: kompüterində agent işə düşəndə başlayacaq.') : cm.status === 'running' ? 'İşləyir, nəticə bitəndə burada görünəcək…' : ''));
     if ((cm.status === 'done' || cm.status === 'failed') && !r.cmd._o) { r.cmd._o = true; r.cmd.open = cm.status === 'failed'; }
   }
   const btns = taskButtons(t), sig = t.status + '|' + btns.map(b => b[0]).join(',') + '|' + (ME ? ME.name : '');
@@ -2221,8 +2232,10 @@ function taskButtons(t) {
   const mine = ME && t.assignee === ME.name, admin = ME && ME.role === 'admin', creator = ME && t.creator === ME.name;
   const canMove = mine || admin || creator, canEdit = admin || creator, B = [];
   const mv = (label, to, cls) => B.push([label, cls || '', async () => { const { status, d } = await TSK('move', { id: t.id, status: to }); if (status !== 200) bmsg(d.error || 'Alınmadı'); load(); }]);
-  if (mine && (t.status === 'todo' || t.status === 'doing')) {
-    B.push(['▶ Claude ilə', 'go', async () => {
+  const cmNow = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
+  const busy = cmNow && ['pending', 'queued', 'running'].includes(cmNow.status);   // artıq göndərilib: ikinci dəfə göndərmə düyməsi lazım deyil
+  if (mine && (t.status === 'todo' || t.status === 'doing') && !busy) {
+    B.push([agentInfo(t.assignee).online ? '▶ Claude ilə' : '▶ Claude ilə (agent oflayn)', 'go', async () => {
       if (!getTok() || !myName) { $('btoken').hidden = false; $('btok-in').focus(); return; }
       const { status, d } = await cmdApi('run_task', { task_id: t.id });
       if (status !== 200) bmsg(d.error || 'Göndərmək alınmadı'); else bmsg('');
@@ -2231,9 +2244,9 @@ function taskButtons(t) {
   }
   if (canMove && t.status === 'todo') mv('Başla', 'doing');
   if (canMove && t.status === 'doing') mv('Yoxlamaya ver', 'review');
-  if (canMove && t.status === 'doing') B.push(['Dayandır', 'danger', async () => {
+  if (canMove && t.status === 'doing') B.push([busy ? (cmNow.status === 'running' ? '■ Claude-u dayandır' : '✕ Növbədən çıxar') : 'Dayandır', 'danger', async () => {
     const cm = (data.commands || []).find(x => +x.id === +t.command_id);
-    if (cm && (cm.status === 'running' || cm.status === 'queued')) await CTL('stop_command', { id: cm.id });
+    if (cm && ['pending', 'queued', 'running'].includes(cm.status)) await CTL('stop_command', { id: cm.id });
     else { const { status, d } = await TSK('move', { id: t.id, status: 'todo' }); if (status !== 200) bmsg(d.error || 'Alınmadı'); }
     load();
   }]);
@@ -2510,7 +2523,7 @@ function mcpList() {
 }
 function agentInfo(u) {
   const ag = (data.agents || []).find(a => a.user === u);
-  const online = !!(ag && now() - ag.last_seen < 20);
+  const online = !!(ag && now() - ag.last_seen < AGENT_TTL);
   const cm = (data.commands || []).filter(c => c.user === u);
   return { ag, online, cm, run: cm.filter(c => c.status === 'running'), queued: cm.filter(c => c.status === 'queued'), login: !ag || +ag.claude_ok === 1 };
 }
@@ -2710,7 +2723,7 @@ function renderDesktopPlanet(u) {
     } else if (!g) {
       const lock = el('div', 'xd-lock');
       lock.append(el('div', 'xd-lock-t', '🔒 ' + u + ' hələ sənə icazə verməyib'), el('div', 'mnote', 'Onun kompüterinə komanda göndərmək üçün ' + u + ' Desktop planetində sənə icazə verməlidir. Bir mesajla xatırlat:'));
-      const rq = el('button', 'gbtn go', '✉ İcazə istə');
+      const rq = el('button', 'gbtn go', '💬 İcazə istə');
       rq.onclick = () => { openMsg(u); $('msg-body').value = 'Salam! Desktop Universe-də mənə Claude Code-una komanda göndərməyə icazə verə bilərsən? (Desktop planetinə gir → "+ İcazə ver")'; };
       lock.append(rq); manage.append(lock);
     }
@@ -2843,7 +2856,8 @@ function renderAgentPlanet(u) {
     const [lbl] = CMD_ST[c.status] || [c.status];
     const row = el('div', 'prow'), t = (data.tasks || []).find(x => +x.command_id === +c.id);
     row.dataset.s = c.status === 'done' ? 'pass' : c.status === 'failed' ? 'fail' : '';
-    row.append(el('div', 'pt', c.prompt.split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + lbl + ' · ' + ago(c.created_at) + (t && t.creator !== u ? ' · ' + t.creator + ' → ' + u : '')));
+    const rem = c.creator && c.creator !== u;                      // Desktop Universe-dən uzaqdan göndərilib
+    row.append(el('div', 'pt', xdPrompt(c).split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + lbl + ' · ' + ago(c.created_at) + (rem ? ' · 🖥 ' + c.creator + ' → ' + u : t && t.creator !== u ? ' · ' + t.creator + ' → ' + u : '')));
     { const pbx = promptBox(c); if (pbx) row.append(pbx); const ib = imgStrip(c); if (ib) row.append(ib); }
     if (c.result) row.append(resultBox(c.result, c.id));
     if ((mine || admin) && (c.status === 'running' || c.status === 'queued')) { const pa = el('div', 'pa'), st = el('button', 'gbtn danger', 'Dayandır'); st.onclick = async () => { await CTL('stop_command', { id: c.id }); load(); }; pa.append(st); row.append(pa); }

@@ -87,7 +87,7 @@ if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude 
     $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?)")
         ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0]);
     $id = (int)$pdo->lastInsertId();
-    json_out(['ok' => true, 'id' => $id, 'agent_online' => $now - (int)$a['last_seen'] < 20, 'claude_login' => (bool)$a['claude_ok'], 'allowed' => $allowed]);
+    json_out(['ok' => true, 'id' => $id, 'agent_online' => $now - (int)$a['last_seen'] < 30, 'claude_login' => (bool)$a['claude_ok'], 'allowed' => $allowed]);
 }
 
 if ($act !== 'session') {
