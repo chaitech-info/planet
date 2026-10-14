@@ -7,6 +7,9 @@
   const J = { watch: new Map(), conn: null, ready: false, state: 'off', micCtx: null, micNode: null, micStream: null, outCtx: null, outGain: null, outAn: null, micLv: 0,
     nextT: 0, sources: new Set(), muted: false, t0: 0, lastUsage: 0, usageTimer: null, ending: false, lines: [], cur: { user: null, jarvis: null }, session: null };
 
+  /* Modullar üçün hadisələr: state, ready, stop, user, bot, tool (alət icra olundu), command (Claude Code tapşırığının statusu dəyişdi) */
+  const EV = {};
+  const emit = (ev, ...args) => { for (const f of EV[ev] || []) { try { f(...args); } catch (e) { console.error('Jarvis ' + ev, e); } } };
   /* ---------- UI ---------- */
   const css = `
 #jv-btn.on { background: linear-gradient(135deg,#0ea5e9,#f59e0b); border-color: transparent; color: #fff; }
@@ -44,6 +47,7 @@
   const ST = { off: 'hazırdır', connecting: 'qoşulur…', listening: 'dinləyirəm', speaking: 'danışır', tool: 'icra edir…', muted: 'mikrofon bağlıdır', error: 'xəta' };
   function setState(s, txt) {
     J.state = s; $j('jv-st').textContent = txt || ST[s] || s;
+    emit('state', s);
     btn.classList.toggle('on', s !== 'off' && s !== 'error');
     $j('jv-go').textContent = s === 'off' || s === 'error' ? '▶ Başla' : '■ Bitir';
     $j('jv-go').classList.toggle('go', s === 'off' || s === 'error');
@@ -276,6 +280,7 @@
       try {
         const fn = TOOLS[fc.name]; if (!fn) throw new Error('naməlum alət: ' + fc.name);
         response = { result: await fn(fc.args || {}) };
+        emit('tool', fc.name, fc.args || {}, response.result);
       } catch (e) {
         const msg = String(e && e.message || e);
         if (!/^Not confirmed/.test(msg)) line('e', '✗ ' + msg);
@@ -295,6 +300,7 @@
     for (const [id, w] of J.watch) {
       const c = data.commands.find(x => +x.id === id); if (!c || c.status === w.st) continue;
       w.st = c.status;
+      emit('command', c, w);
       if (c.status === 'running') { line('i', `🤖 Claude Code işləyir (#${id}, ${w.project})…`); continue; }
       if (c.status === 'queued') continue;
       J.watch.delete(id);
@@ -416,6 +422,7 @@
 
   /* ---------- Adapterlər ----------
      Hər adapter: inRate/chunkMs (mikrofon), connect(sess, h) → { audio(b64), toolResults(out), note(text), mute(on), close() }.
+     context(text) cavab istəmədən kontekst əlavə edir (məs. istifadəçinin baxdığı ekran).
      h (nüvədən): ready(), audio(b64, rate), user(text, replace), bot(text), interrupted(), turnDone(), tools([{id,name,args}]), info(msg), closed(code, reason) */
   const ADAPTERS = {
     gemini: {
@@ -443,6 +450,7 @@
           audio: data => send({ realtimeInput: { audio: { data, mimeType: 'audio/pcm;rate=16000' } } }),
           toolResults: out => send({ toolResponse: { functionResponses: out } }),
           note: text => send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }),
+          context: text => send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: false } }),
           mute: on => { if (on) send({ realtimeInput: { audioStreamEnd: true } }); },
           close: () => { if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
         };
@@ -501,6 +509,7 @@
             send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
             if (!inResp && !waitCreate) create();
           },
+          context: text => send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }),
           mute: () => {},
           close: () => { if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
         };
@@ -546,14 +555,15 @@
         J.ready = true; J.t0 = J.lastUsage = Date.now(); setState(J.muted ? 'muted' : 'listening');
         line('i', 'Qoşuldu · ' + d.model);
         J.usageTimer = setInterval(reportUsage, 30000);
+        emit('ready', d);
       },
       audio: (data, rate) => play(data, rate),
       user(text, replace) {
         J.cur.jarvis = null;
         if (replace && J.cur.user) { J.cur.user._t = ''; }
-        stream('user', text);
+        stream('user', text); emit('user', text);
       },
-      bot: text => stream('jarvis', text),
+      bot: text => { stream('jarvis', text); emit('bot', text); },
       interrupted() { stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); },
       turnDone: endTurn,
       tools: calls => { endTurn(); runTools(calls); },
@@ -583,7 +593,7 @@
     J.micStream = J.micCtx = J.micNode = J.outCtx = J.outAn = J.outGain = null;
     const c = J.conn; J.conn = null; if (c) c.close();
   }
-  function stop(msg) { if (J.state === 'off') return; J.state = 'off'; cleanup(); setState('off'); if (msg) line('i', msg); }
+  function stop(msg) { if (J.state === 'off') return; J.state = 'off'; cleanup(); setState('off'); if (msg) line('i', msg); emit('stop'); }
   function toggleMute() {
     J.muted = !J.muted;
     $j('jv-mic').textContent = J.muted ? '🔇 Mikrofon bağlı' : '🎙 Mikrofon açıq'; $j('jv-mic').classList.toggle('on', J.muted);
@@ -599,5 +609,26 @@
     if (e.altKey && (e.code === 'KeyJ')) { e.preventDefault(); if (box.hidden) { box.hidden = false; start(); } else if (J.state === 'off' || J.state === 'error') start(); else stop('Sessiya bitdi'); }
   });
   addEventListener('beforeunload', () => cleanup());
-  window.Jarvis = { start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)), tools: TOOLS, state: () => J.state, adapters: ADAPTERS, msgpack: MP };
+  /** Səs səviyyəsi 0..1 (danışanda Jarvis-in səsi, dinləyəndə mikrofon) — HUD/kainat effektləri üçün */
+  function level() {
+    if (J.outAn && J.state === 'speaking') { const a = new Uint8Array(J.outAn.fftSize); J.outAn.getByteTimeDomainData(a); let s = 0; for (const v of a) s += ((v - 128) / 128) ** 2; return Math.min(1, Math.sqrt(s / a.length) * 4); }
+    return J.state === 'listening' ? Math.min(1, J.micLv * 5) : 0;
+  }
+  /* Modul API-si (jarvis-*.js fayllarından istifadə olunur):
+     registerTool(name, fn)  — alət icrası (deklarasiyası jarvis_modules/*.php-dədir); fn(args) nəticə qaytarır və ya xəta atır
+     on(event, cb)           — state | ready | stop | user | bot | tool | command
+     say(text)               — modelə sistem qeydi göndərir (o, istifadəçiyə danışır)
+     context(text)           — səssiz kontekst qeydi (cavab yaratmır)
+     watch(id, {project, prompt}) — Claude Code tapşırığını izlə (bitəndə Jarvis danışır)
+     util                    — paylaşılan köməkçilər */
+  window.Jarvis = {
+    start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)),
+    context: t => J.ready && J.conn && J.conn.context(String(t)),   // səssiz kontekst (cavab yaratmır) tools: TOOLS, state: () => J.state, ready: () => !!J.ready, level,
+    adapters: ADAPTERS, msgpack: MP,
+    registerTool(name, fn) { TOOLS[name] = fn; },
+    on(ev, cb) { (EV[ev] = EV[ev] || []).push(cb); },
+    watch(id, w) { J.watch.set(+id, { st: 'queued', ...w }); },
+    panel: box, button: btn,
+    util: { line, best, norm, planetNames, need, ok, confirmed, R, when, parseWhen, userName, api, findTask },
+  };
 })();
