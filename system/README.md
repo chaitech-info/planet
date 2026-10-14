@@ -37,7 +37,7 @@ Lokal Emil tokeni ilə hook hadisəsini əl ilə yoxlamaq: `curl -X POST http://
 - **Test Planet** (🧪): planetə gir, test ediləcək proyekti seç. Proyekt üzrə test ssenariləri (keçdi / xəta + qeyd), "Yeni raund" ilə sıfırlama və Claude agentinə test promptu göndərmək. Xəta varsa Test Planet qırmızı yanır, proyektin planetində "🧪 N xəta" görünür.
 
 ## Kosmik xəritə və universlər
-Kainat açılanda bütün universlər bir kosmik xəritədə qalaktika kimi görünür. Keçid üçün düymə yoxdur: siçan təkəri ilə kursorun altındakı yerə yaxınlaşıb-uzaqlaşırsan, sol düymə ilə məkanı sürüşdürürsən, sağ düymə ilə fırladırsan (planetə fokusda sol düymə fırladır). Qalaktikaya klik etmək onun içinə axıcı uçuşdur; 🗺 düyməsi bütün xəritəyə qaytarır.
+Kainat açılanda bütün universlər bir kosmik xəritədə qalaktika kimi görünür. Keçid üçün düymə yoxdur: sol düymə ilə sürükləyəndə məkan bütün istiqamətlərdə sərbəst 360° fırlanır, sağ düymə ilə sürüşdürürsən, siçan təkəri ilə kursorun altındakı yerə yaxınlaşıb-uzaqlaşırsan (toxunma ekranında: bir barmaq fırladır, iki barmaq zoom və sürüşdürmə). Qalaktikaya klik etmək onun içinə axıcı uçuşdur; 🗺 düyməsi bütün xəritəyə qaytarır.
 Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun adı → planetlər, orbitlər və günəş → aylar, MCP peykləri, gəmilər və tapşırıq balonları. Səma yaxınlaşılan universin rənginə keçir; uzaq səyahətdə ulduz xətləri və geniş baxış bucağı sürət hissi verir.
 - **🌌 Komanda**: proyektlər və istifadəçi planetləri.
 - **🎨 Studio**: Prompt Generator, Designer, Meeting Planet, Test Planet.

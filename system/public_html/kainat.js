@@ -1,6 +1,6 @@
 // Kainat: WebGL (Three.js) 3D kosmos. Hər proyekt bir planet, hər istifadəçi bir ay.
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const STC = { working: '#fbbf24', waiting: '#f87171', idle: '#4ade80', offline: '#6f6f7c', ended: '#6f6f7c', meet: '#5eead4' };
@@ -1537,7 +1537,7 @@ function flyUniNow(id, instant) {
   if (focusName) { focusName = null; }
   const o = id && U[id] ? uniPose(id) : mapPose();
   controls.minDistance = 8; controls.maxDistance = 2600; zA = null; zT = null;
-  if (instant || REDUCE) { camera.position.copy(o.pos); controls.target.copy(o.target); prevCam.copy(o.pos); fly = null; controls.enabled = true; return; }
+  if (instant || REDUCE) { camera.position.copy(o.pos); controls.target.copy(o.target); camera.up.copy(UPV); prevCam.copy(o.pos); fly = null; controls.enabled = true; return; }
   const dist = camera.position.distanceTo(o.pos);
   startFly({ pos: o.pos, target: o.target }, Math.min(3.4, 1.1 + dist / 700), null, Math.min(320, dist * .28));
 }
@@ -1584,7 +1584,7 @@ function overviewPose(id) { return uniPose(id || (navUni || 'main')); }
 function overview(instant) {
   const o = overviewPose();
   controls.minDistance = 8; controls.maxDistance = 2600;
-  if (instant || REDUCE) { camera.position.copy(o.pos); controls.target.copy(o.target); fly = null; controls.enabled = true; }
+  if (instant || REDUCE) { camera.position.copy(o.pos); controls.target.copy(o.target); camera.up.copy(UPV); fly = null; controls.enabled = true; }
   else startFly({ pos: o.pos, target: o.target }, 1.1);
 }
 function startFly(to, dur, follow, arc) {
@@ -1616,10 +1616,10 @@ api.focus = function (name, instant) {
   const off = focusPose(p);
   p.holder.getWorldPosition(tmp);
   controls.minDistance = p.RT * 1.7; controls.maxDistance = p.RT * 45;
-  if (instant || REDUCE) { camera.position.copy(tmp).add(off); controls.target.copy(tmp); fly = null; controls.enabled = true; }
+  if (instant || REDUCE) { camera.position.copy(tmp).add(off); controls.target.copy(tmp); camera.up.copy(UPV); fly = null; controls.enabled = true; }
   else { const dist = camera.position.distanceTo(tmp); startFly({ off }, Math.min(3.4, 1.5 + dist / 800), p, dist > 300 ? Math.min(300, dist * .25) : 0); }
 };
-api.debug = () => ({ pr: +pr.toFixed(2), prMax, quality, base: +baseDt.toFixed(4), dist: +camera.position.distanceTo(controls.target).toFixed(2), enabled: controls.enabled, zoom: controls.enableZoom, min: controls.minDistance, max: +controls.maxDistance.toFixed(1), fly: !!fly, focus: focusName });
+api.debug = () => ({ pr: +pr.toFixed(2), prMax, quality, base: +baseDt.toFixed(4), dist: +camera.position.distanceTo(controls.target).toFixed(2), enabled: controls.enabled, up: camera.up.toArray().map(v => +v.toFixed(2)), min: controls.minDistance, max: +controls.maxDistance.toFixed(1), fly: !!fly, focus: focusName });
 api.setQuality = q => {
   quality = q === 'high' ? 'high' : 'auto';
   prMax = Math.min(devicePixelRatio || 1, 2);
@@ -1732,6 +1732,7 @@ function resize() {
   renderer.setPixelRatio(pr);
   renderer.setSize(W, H, false);
   camera.aspect = W / H; camera.updateProjectionMatrix();
+  if (controls) controls.handleResize();
   if (api.mounted && !userMoved && !focusName && !fly) flyUniNow(navUni, true);
   stars.material.uniforms.uPR.value = pr;
 }
@@ -1863,6 +1864,7 @@ function frame(now) {
       camera.position.lerpVectors(fly.fp, fly.to.pos, e);
     }
     if (fly.arc) camera.position.y += fly.arc * 4 * e * (1 - e);       // uzaq səyahət: yuxarı qalxıb enən qövs
+    camera.up.lerp(UPV, Math.min(1, e * 1.5)).normalize();              // uçuşda kamera yenidən düz (üfüqi) vəziyyətə gəlir
     controls.enabled = false;
     if (u >= 1) { fly = null; controls.enabled = true; }
   } else if (!controls.enabled) { controls.enabled = true; } else if (focusName && focusObj()) {
@@ -1887,10 +1889,11 @@ function frame(now) {
   inset += (insT - inset) * Math.min(1, dt * (REDUCE ? 60 : 4));
   if (Math.abs(inset) > .4) camera.setViewOffset(W, H, inset, 0, W, H); else if (camera.view && camera.view.enabled) camera.clearViewOffset();
   updateSound(dt);
-  controls.autoRotate = !REDUCE && !userMoved && !focusName && !anyHover && !fly && !downAt && !cine;
-  // fokusda: sol düymə planetin ətrafında fırladır; xəritədə: sol düymə məkanı sürüşdürür, sağ düymə fırladır
-  const want = focusName ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN;
-  if (controls.mouseButtons.LEFT !== want) { controls.mouseButtons.LEFT = want; controls.mouseButtons.RIGHT = focusName ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE; controls.touches.ONE = focusName ? THREE.TOUCH.ROTATE : THREE.TOUCH.PAN; }
+  // toxunulmamış xəritə yavaş-yavaş öz oxu ətrafında dönür (istifadəçi bir dəfə idarə edəndən sonra dayanır)
+  if (!REDUCE && !userMoved && !focusName && !anyHover && !fly && !downAt && !cine) {
+    tmp.copy(camera.position).sub(controls.target).applyAxisAngle(camera.up, dt * .047);
+    camera.position.copy(controls.target).add(tmp);
+  }
   controls.update();
   updateSpeedFx(dt);
   shakeOff.set(0, 0, 0);
@@ -1977,11 +1980,12 @@ api.mount = function (el) {
   buildStreaks();
   sunSats.body = new THREE.Group(); U.main.root.add(sunSats.body);
 
-  controls = new OrbitControls(camera, canvas);
-  controls.enableDamping = true; controls.dampingFactor = .06; controls.enablePan = true; controls.screenSpacePanning = false; controls.panSpeed = 1.1;
-  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
-  controls.enableZoom = false; controls.rotateSpeed = .7; controls.zoomSpeed = 1.1; controls.autoRotateSpeed = .45; controls.maxPolarAngle = Math.PI * .92; controls.minPolarAngle = .08;
+  // Trackball: sürükləyəndə bütün istiqamətlərdə sərbəst 360° fırlanma (qütb bucağı məhdudiyyəti yoxdur).
+  // Sol düymə / bir barmaq = fırlat, sağ düymə = sürüşdür, təkər = kursora doğru zoom (öz idarəmiz).
+  controls = new TrackballControls(camera, canvas);
+  controls.rotateSpeed = 2.4; controls.panSpeed = .9; controls.zoomSpeed = 1.2;   // təkəri biz idarə edirik (kursora doğru); Trackball-ın zoomu yalnız iki barmaqla (pinch)
+  controls.staticMoving = false; controls.dynamicDampingFactor = .12;
+  controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.addEventListener('start', () => { userMoved = true; zA = null; });
   controls.minDistance = 8; controls.maxDistance = 2600;
   flyUniNow(pendingUni && pendingUni !== 'map' ? pendingUni : null, true); pendingUni = null;   // başlanğıc: bütün universlərin kosmik xəritəsi
