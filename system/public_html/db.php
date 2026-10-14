@@ -59,6 +59,11 @@ function db(): PDO
         started_at INT NOT NULL,
         finished_at INT NOT NULL
     )");
+    try {
+        $pdo->exec("ALTER TABLE commands ADD COLUMN images TEXT NOT NULL DEFAULT ''");   // prompta əlavə şəkillər: JSON fayl adları (data/cmdimg/)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS agents (
         user VARCHAR(64) NOT NULL PRIMARY KEY,
         last_seen INT NOT NULL
@@ -252,6 +257,50 @@ function token_user(): ?string
     $st->execute([hash('sha256', $t)]);
     $n = $st->fetchColumn();
     return $n === false ? null : (string)$n;
+}
+
+/* ---------- Prompt şəkilləri: brauzerdən yüklənir, agent cmdimg.php ilə götürür ---------- */
+const CMD_IMG_MAX = 4;                      // bir prompta ən çox şəkil
+const CMD_IMG_BYTES = 5 * 1024 * 1024;      // hər şəkil üçün maksimum ölçü
+const CMD_IMG_TTL = 7 * 86400;              // bu müddətdən köhnə şəkillər silinir
+const CMD_IMG_TYPES = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+
+/** Şəkillərin qovluğu (data/ içində, birbaşa URL ilə açılmır; yalnız cmdimg.php verir). Yaradıla bilmirsə null. */
+function cmdimg_dir(): ?string
+{
+    $dir = __DIR__ . '/data/cmdimg';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return null;
+    }
+    if (!is_file($dir . '/.htaccess')) {
+        @file_put_contents($dir . '/.htaccess', "Require all denied\n");
+    }
+    return $dir;
+}
+
+/** Fayl adı yalnız bizim yaratdığımız formadadırsa (təsadüfi hex + uzantı) true. */
+function cmdimg_name_ok(string $f): bool
+{
+    return (bool)preg_match('/^[a-f0-9]{24}\.(png|jpg|gif|webp)$/', $f);
+}
+
+/** Köhnə promptların şəkillərini silir (arabir çağırılır). */
+function cmdimg_cleanup(PDO $pdo): void
+{
+    $dir = cmdimg_dir();
+    if ($dir === null) {
+        return;
+    }
+    $q = $pdo->prepare("SELECT id, images FROM commands WHERE images != '' AND created_at < ?");
+    $q->execute([time() - CMD_IMG_TTL]);
+    foreach ($q->fetchAll() as $r) {
+        foreach ((array)json_decode((string)$r['images'], true) as $f) {
+            if (is_string($f) && cmdimg_name_ok($f)) {
+                @unlink($dir . '/' . $f);
+            }
+        }
+        $pdo->prepare("UPDATE commands SET images = '' WHERE id = ?")->execute([$r['id']]);
+    }
 }
 
 /* ---------- Studentlər: ayrıca univers, yalnız öz universlərini görürlər ---------- */

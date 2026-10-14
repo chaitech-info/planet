@@ -399,6 +399,14 @@ body.v-space::before { display: none; }
 .loginhint code { background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 5px; font-size: 12px; }
 .cmdbox .loginhint[hidden] { display: none !important; }
 .cmderr { color: #f87171; font-size: 13px; margin: 6px 0; }
+.cmdbox textarea.drop { outline: 2px dashed var(--accent); outline-offset: 1px; }
+.cmdimgs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.cmdimgs .cimg { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.3); }
+.cmdimgs .cimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cmdimgs .cimg .rm { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; cursor: pointer; display: grid; place-items: center; }
+.cmdc .ci { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
+.cmdc .ci a { display: block; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.3); }
+.cmdc .ci img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .agentst { font-size: 11px; text-transform: none; letter-spacing: 0; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
 .agentst i { width: 7px; height: 7px; border-radius: 50%; background: var(--off); } .agentst.on i { background: var(--idle); }
 .cmdc { padding: 12px 14px; }
@@ -741,8 +749,10 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
               <button class="gbtn" id="toksave">Təsdiq et</button>
             </div>
             <div id="cmdmain" hidden>
-              <textarea id="cmdin" rows="3" maxlength="4000" placeholder="Bu proyektdə nə etsin? (Cmd/Ctrl+Enter ilə göndər)"></textarea>
-              <div class="cmdbar"><span class="cmdwho" id="cmdwho"></span><button class="gbtn go" id="cmdsend">Göndər</button></div>
+              <textarea id="cmdin" rows="3" maxlength="4000" placeholder="Bu proyektdə nə etsin? (Enter göndərir, Shift+Enter yeni sətir; şəkli yapışdır və ya bura sürüşdür)"></textarea>
+              <div class="cmdimgs" id="cmdimgs" hidden></div>
+              <input type="file" id="cmdfile" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+              <div class="cmdbar"><span class="cmdwho" id="cmdwho"></span><span style="display:flex;gap:8px"><button class="gbtn" id="cmdatt" title="Şəkil əlavə et (ən çox 4)">🖼 Şəkil</button><button class="gbtn go" id="cmdsend">Göndər</button></span></div>
             </div>
             <div class="agentrow" id="agentrow" hidden>
               <a class="gbtn go" id="agentstart" href="claudeteam://start">▶ Agenti işə sal</a>
@@ -1396,11 +1406,11 @@ function makeCmd() {
   const n = el('div', 'card cmdc');
   const h = el('div', 'ch'), who = el('b'), when = el('span'), st = el('span', 'st'), dot = el('span', 'dot'), lab = el('span');
   st.append(dot, lab); h.append(who, when, st);
-  const cp = el('div', 'cp'), det = el('details'), sm = el('summary', null, 'Nəticə'), pre = el('pre');
-  det.append(sm, pre);
+  const cp = el('div', 'cp'), ci = el('div', 'ci'), det = el('details'), sm = el('summary', null, 'Nəticə'), pre = el('pre');
+  det.append(sm, pre); ci.hidden = true;
   const cx = el('button', 'gbtn cx', 'Ləğv et'); cx.hidden = true;
-  n.append(h, cp, det, cx);
-  n._r = { who, when, dot, lab, cp, det, pre, cx };
+  n.append(h, cp, ci, det, cx);
+  n._r = { who, when, dot, lab, cp, ci, det, pre, cx };
   return n;
 }
 function renderCmd() {
@@ -1434,6 +1444,12 @@ function renderCmd() {
     setText(r.who, c.user); setText(r.when, ago(c.created_at));
     setCls(r.dot, 'dot ' + dc); setText(r.lab, lbl);
     setText(r.cp, c.prompt);
+    const imgs = c.images || [], ik = imgs.join('|');
+    if (r.ci._k !== ik) {                                   // prompta əlavə şəkillər (klik: böyük aç)
+      r.ci._k = ik;
+      r.ci.replaceChildren(...imgs.map(f => { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; const im = el('img'); im.src = a.href; im.alt = 'şəkil'; im.loading = 'lazy'; a.append(im); return a; }));
+    }
+    r.ci.hidden = !imgs.length;
     const hasRes = c.status === 'done' || c.status === 'failed';
     r.det.hidden = !hasRes; setText(r.pre, c.result || '');
     if (hasRes && !r.det._opened) { r.det._opened = true; r.det.open = c.status === 'failed' || (c.result || '').length < 400; }
@@ -1443,13 +1459,60 @@ function renderCmd() {
   });
 }
 function cmdError(t) { const e = $('cmderr'); e.hidden = !t; e.textContent = t || ''; }
+/* Prompta şəkil: düymə, yapışdırma (Cmd/Ctrl+V) və ya sürüşdürmə. Böyük şəkillər brauzerdə kiçildilir ki, yükləmə limitinə düşsün. */
+const CMD_IMG_MAX = 4, CMD_IMG_BYTES = 5 * 1024 * 1024, CMD_IMG_TYPES = /^image\/(png|jpeg|gif|webp)$/;
+let cmdImgs = [];                                         // { file, url }
+function shrinkImage(f) {
+  if (f.size <= 1.5 * 1024 * 1024 || f.type === 'image/gif') return Promise.resolve(f);
+  return new Promise(res => {
+    const img = new Image(), u = URL.createObjectURL(f);
+    img.onload = () => {
+      URL.revokeObjectURL(u);
+      const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(b => res(b && b.size < f.size ? new File([b], f.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }) : f), 'image/jpeg', .9);
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); res(f); };
+    img.src = u;
+  });
+}
+async function cmdAddImages(files) {
+  for (let f of files) {
+    if (!CMD_IMG_TYPES.test(f.type)) { cmdError('Yalnız PNG, JPEG, GIF və ya WebP şəkil'); continue; }
+    if (cmdImgs.length >= CMD_IMG_MAX) { cmdError('Ən çox ' + CMD_IMG_MAX + ' şəkil'); break; }
+    f = await shrinkImage(f);
+    if (f.size > CMD_IMG_BYTES) { cmdError('Şəkil çox böyükdür (ən çox 5 MB)'); continue; }
+    cmdImgs.push({ file: f, url: URL.createObjectURL(f) });
+  }
+  renderCmdImgs();
+}
+function cmdClearImages() { for (const im of cmdImgs) URL.revokeObjectURL(im.url); cmdImgs = []; renderCmdImgs(); }
+function renderCmdImgs() {
+  const box = $('cmdimgs'); box.hidden = !cmdImgs.length;
+  box.replaceChildren(...cmdImgs.map(im => {
+    const d = el('div', 'cimg'), img = el('img'); img.src = im.url; img.alt = im.file.name;
+    const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil';
+    x.onclick = () => { URL.revokeObjectURL(im.url); cmdImgs = cmdImgs.filter(z => z !== im); renderCmdImgs(); };
+    d.append(img, x); return d;
+  }));
+}
 async function sendCmd() {
   const ta = $('cmdin'), text = ta.value.trim();
-  if (!text || cmdBusy || !curPlanet) return;
+  if ((!text && !cmdImgs.length) || cmdBusy || !curPlanet) return;
+  if (!text) return cmdError('Şəkillə birlikdə nə etmək lazım olduğunu da yaz');
   cmdBusy = true; $('cmdsend').disabled = true; cmdError('');
   try {
-    const { status, d } = await cmdApi('send', { project: curPlanet, prompt: text });
-    if (status === 200) { ta.value = ''; load(); }
+    let res;
+    if (cmdImgs.length) {                                  // şəkilli: FormData (JSON yox)
+      const fd = new FormData(); fd.append('action', 'send'); fd.append('project', curPlanet); fd.append('prompt', text);
+      for (const im of cmdImgs) fd.append('images[]', im.file, im.file.name);
+      const r = await fetch('command.php', { method: 'POST', headers: { 'X-Team-Token': getTok() }, body: fd });
+      res = { status: r.status, d: await r.json().catch(() => ({})) };
+      if (r.status === 401) { setTok(''); myName = null; }
+    } else res = await cmdApi('send', { project: curPlanet, prompt: text });
+    const { status, d } = res;
+    if (status === 200) { ta.value = ''; cmdClearImages(); load(); }
     else cmdError(status === 401 ? 'Token yanlışdır, yenidən daxil et.' : (d.error || 'Göndərmək alınmadı'));
   } catch (e) { cmdError('Bağlantı xətası'); }
   cmdBusy = false; $('cmdsend').disabled = false; renderCmd();
@@ -1464,7 +1527,18 @@ function initCmd() {
   $('dtab-send').onclick = () => setTab('send'); $('dtab-live').onclick = () => setTab('live');
   $('cmdsend').onclick = sendCmd;
   $('agentstart').addEventListener('click', () => { agentStarting = now(); setTimeout(renderCmd, 50); });
-  $('cmdin').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendCmd(); } });
+  // Enter göndərir (Shift+Enter yeni sətir); yazı tərkibi (IME) zamanı yox
+  $('cmdin').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendCmd(); } });
+  $('cmdatt').onclick = () => $('cmdfile').click();
+  $('cmdfile').onchange = () => { cmdAddImages([...$('cmdfile').files]); $('cmdfile').value = ''; };
+  $('cmdin').addEventListener('paste', e => {
+    const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean);
+    if (fs.length) { e.preventDefault(); cmdAddImages(fs); }
+  });
+  const ta = $('cmdin');
+  ta.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); ta.classList.add('drop'); } });
+  ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
+  ta.addEventListener('drop', e => { e.preventDefault(); ta.classList.remove('drop'); cmdAddImages([...e.dataTransfer.files]); });
   $('toksave').onclick = async () => {
     const v = $('tokin').value.trim(); if (!v) return;
     setTok(v); $('tokin').value = ''; await identify();

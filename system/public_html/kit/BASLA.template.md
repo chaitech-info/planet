@@ -57,6 +57,7 @@ bash agent/install-launcher.sh
 Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ Agenti işə sal"** düyməsinə bas. İlk dəfə brauzer "ClaudeTeamAgent açılsın?" soruşacaq, icazə ver. Başlıqda **"agent onlayn"** görünəndə prompt yaza bilərsən.
 
 - İlk dəfə **tokenini** prompt qutusundakı sahəyə daxil et. O, yalnız bu brauzerdə qalır.
+- Prompt **Enter** ilə gedir (Shift+Enter yeni sətir). Prompta şəkil də əlavə edə bilərsən: "🖼 Şəkil" düyməsi, yapışdırma və ya sürüşdürmə (ən çox 4, hər biri 5 MB-a qədər); agent onları Claude-a göstərir.
 - Düymə işləmirsə agentı əl ilə başlat: `python3 agent/claude-team-agent.py` (pəncərə açıq qalsın).
 - Agent yalnız hook quraşdırdığın proyektlərə prompt qəbul edir.
 - Claude girişi yoxdursa, panel "Claude girişi yoxdur" xəbərdarlığı göstərir və promptlar növbədə gözləyir.
