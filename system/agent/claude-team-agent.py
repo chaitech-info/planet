@@ -14,7 +14,7 @@ CONF = os.environ.get('CLAUDE_TEAM_CONF', os.path.expanduser('~/.claude-team-das
 PROJECTS = os.environ.get('CLAUDE_TEAM_PROJECTS', os.path.expanduser('~/.claude-team-projects'))
 TIMEOUT = int(os.environ.get('CLAUDE_TEAM_TIMEOUT', '1200'))  # bir tapşırıq üçün maksimum saniyə
 POLL = 3
-PIDFILE = os.path.expanduser('~/.claude-team-agent.pid')
+PIDFILE = os.environ.get('CLAUDE_TEAM_PID', os.path.expanduser('~/.claude-team-agent.pid'))   # ikinci (məs. lokal test) agent üçün ayrıca
 ENVFILE = os.path.expanduser('~/.claude-team-agent.env')   # ehtiyat: CLAUDE_CODE_OAUTH_TOKEN=... (chmod 600)
 # Fayl redaktəsinə əlavə: yalnız OXUMA xarakterli git əmrləri. commit, push, pull, reset, checkout və s. bloklu qalır.
 READONLY_GIT = ','.join([

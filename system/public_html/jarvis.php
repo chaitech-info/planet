@@ -53,6 +53,29 @@ if ($act === 'usage') {                 // brauzer sessiya zamanı hər ~30 sani
     json_out(['ok' => true, 'used' => $used, 'limit' => $limitSec, 'over' => $used >= $limitSec]);
 }
 
+if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude Code agenti (giriş sessiyası ilə, brauzerdə token lazım deyil)
+    $project = trim((string)($in['project'] ?? ''));
+    $prompt = trim((string)($in['prompt'] ?? ''));
+    if ($project === '' || mb_strlen($project) > 128) {
+        json_out(['error' => 'proyekt adı yanlışdır'], 400);
+    }
+    if ($prompt === '' || mb_strlen($prompt) > 4000) {
+        json_out(['error' => 'prompt 1-4000 simvol olmalıdır'], 400);
+    }
+    $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('queued','running')");
+    $c->execute([$me['name']]);
+    if ((int)$c->fetchColumn() >= 5) {
+        json_out(['error' => 'növbədə artıq 5 tapşırıq var, gözlə'], 429);
+    }
+    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?)")
+        ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0]);
+    $id = (int)$pdo->lastInsertId();
+    $ag = $pdo->prepare('SELECT last_seen, claude_ok FROM agents WHERE user = ?');
+    $ag->execute([$me['name']]);
+    $a = $ag->fetch();
+    json_out(['ok' => true, 'id' => $id, 'agent_online' => $a && $now - (int)$a['last_seen'] < 20, 'claude_login' => $a ? (bool)$a['claude_ok'] : null]);
+}
+
 if ($act !== 'session') {
     json_out(['error' => 'naməlum əməliyyat'], 400);
 }
@@ -94,8 +117,10 @@ $tools = [
         'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('project name'), 'test' => $S('test case title'), 'result' => ['type' => 'STRING', 'enum' => ['pass', 'fail', 'todo']], 'note' => $S('what went wrong (for fail)'), 'confirmed' => $confirm], 'required' => ['project', 'test', 'result', 'confirmed']]],
     ['name' => 'send_message', 'description' => 'Send a short message to a teammate (or "all"); it flies as a rocket in the space view.',
         'parameters' => ['type' => 'OBJECT', 'properties' => ['to' => $S('user name or "all"'), 'text' => $S('message text, max 500 chars'), 'confirmed' => $confirm], 'required' => ['to', 'text', 'confirmed']]],
-    ['name' => 'send_agent_prompt', 'description' => "Send a prompt to the current user's own Claude Code agent to run in a project folder (code changes, tests, reviews).",
-        'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('project name'), 'prompt' => $S('full instruction for the agent'), 'confirmed' => $confirm], 'required' => ['project', 'prompt', 'confirmed']]],
+    ['name' => 'run_claude_code', 'description' => "Give a work task to Claude Code, the AI coding agent connected to this dashboard, which runs on the user's computer inside the project folder. Use it for ANY real work: writing or changing code, fixing bugs, adding tests, reviewing code, analysing the repository, explaining how something works in the code, writing docs. It runs in the background; you will get a note when it finishes.",
+        'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('project name; omit to use the planet the user is looking at'), 'prompt' => $S('complete, self-contained instruction for Claude Code in English or Azerbaijani: goal, relevant details from the conversation, and what to report back'), 'confirmed' => $confirm], 'required' => ['prompt', 'confirmed']]],
+    ['name' => 'get_claude_tasks', 'description' => 'Recent Claude Code tasks of the current user with status (queued/running/done/failed) and results.',
+        'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('optional project filter')]]],
     ['name' => 'end_conversation', 'description' => 'End the voice session when the user says goodbye or asks Jarvis to stop listening.',
         'parameters' => ['type' => 'OBJECT', 'properties' => (object)[]]],
 ];
@@ -122,7 +147,9 @@ Rules:
 - Keep spoken answers short: 1-3 sentences, no lists read out loud unless asked; round numbers; say times naturally.
 - Never invent data: call get_overview / get_project / list_tasks / get_report first, then answer from the result.
 - Navigation and questions need no confirmation: just do them.
-- Every action that creates or changes something (tasks, statuses, deadlines, meetings, tests, messages, agent prompts): first say in one short sentence exactly what you will do and ask "Edim?"/"Shall I?". Only after the user clearly agrees call the tool with confirmed=true. Never set confirmed=true on your own.
+- Any request to actually DO work in a project (code, bugs, tests, review, analysis of the code, docs) goes to Claude Code via run_claude_code. Write it a clear, complete prompt; do not try to do the work yourself. Afterwards tell the user it was sent and that you will report when it is done. When you receive a note that a Claude Code task finished, summarise the result in 1-2 spoken sentences (mention failures plainly).
+- If the agent is offline, say the task is queued and will start when the agent on their computer runs.
+- Every action that creates or changes something (tasks, statuses, deadlines, meetings, tests, messages, Claude Code tasks): first say in one short sentence exactly what you will do and ask "Edim?"/"Shall I?". Only after the user clearly agrees call the tool with confirmed=true. Never set confirmed=true on your own.
 - You cannot delete anything; say so if asked.
 - If a tool returns an error, explain it briefly and suggest the fix.
 - Resolve relative dates ("sabah saat 3-də", "next Friday") into local ISO date-times yourself.

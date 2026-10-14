@@ -3,7 +3,7 @@
    mikrofon → 16 kHz PCM → Gemini → 24 kHz PCM → dinamik. Alətləri (tool) burada, panelin mövcud funksiyaları ilə icra edirik.
    index.php-dəki qlobal funksiyalardan istifadə edir: data, TSK, WLD, cmdApi, go, load, ME və s. */
 (() => {
-  const J = { ws: null, state: 'off', micCtx: null, micNode: null, micStream: null, outCtx: null, outGain: null, outAn: null, micLv: 0,
+  const J = { watch: new Map(), ws: null, state: 'off', micCtx: null, micNode: null, micStream: null, outCtx: null, outGain: null, outAn: null, micLv: 0,
     nextT: 0, sources: new Set(), muted: false, t0: 0, lastUsage: 0, usageTimer: null, ending: false, lines: [], cur: { user: null, jarvis: null }, session: null };
 
   /* ---------- UI ---------- */
@@ -240,12 +240,25 @@
       msgSeen.add(+d.message.id); data.messages = [d.message, ...(data.messages || [])]; playMessage(d.message); load();
       return ok(`Mesaj raketlə göndərildi → ${to === '*' ? 'hamı' : to}`);
     },
-    async send_agent_prompt(a) {
-      need(a, 'project', 'prompt'); confirmed(a);
-      if (!getTok() || !myName) throw new Error('Agent tokenin bu brauzerdə daxil edilməyib: planet panelində "Göndər" bölməsindən tokenini bir dəfə daxil et.');
-      const pl = best(planetNames(), a.project, p => [p.name, p.label]); const project = pl ? pl.name : a.project;
-      await R(cmdApi('send', { project, prompt: a.prompt })); await load();
-      return ok(`Agentə göndərildi (${project})`);
+    async run_claude_code(a) {
+      need(a, 'prompt'); confirmed(a);
+      let project = null;
+      if (a.project) { const pl = best(planetNames(), a.project, p => [p.name, p.label]); project = pl ? pl.name : a.project; }
+      else if (curPlanet && !xKind(curPlanet)) project = curPlanet;                       // baxdığı planet
+      else { const ps = buildProjects(); if (ps.length === 1) project = ps[0].name; }
+      if (!project) throw new Error('Hansı proyektdə? Proyekt adını soruş.');
+      const r = await fetch('jarvis.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'agent_send', project, prompt: a.prompt }) });
+      const d = await r.json().catch(() => ({})); if (r.status !== 200) throw new Error(d.error || 'Göndərilmədi');
+      J.watch.set(+d.id, { project, prompt: a.prompt, st: 'queued' });
+      await load();
+      line('a', `🤖 Claude Code-a göndərildi (#${d.id}, ${project})` + (d.agent_online ? '' : ' · agent oflayndır, növbədə gözləyir'));
+      return { ok: true, task_id: d.id, project, agent_online: !!d.agent_online, claude_login: d.claude_login,
+        note: d.agent_online ? 'Running on the user\'s computer; a note will arrive when it finishes.' : 'Agent is offline: queued, it starts when the agent on the user\'s computer runs.' };
+    },
+    get_claude_tasks(a) {
+      let cs = (data.commands || []).filter(c => c.user === ME.name);
+      if (a && a.project) { const pl = best(planetNames(), a.project, p => [p.name, p.label]); cs = cs.filter(c => c.project === (pl ? pl.name : a.project)); }
+      return { tasks: cs.slice(0, 8).map(c => ({ id: +c.id, project: c.project, status: c.status, prompt: c.prompt.slice(0, 200), result: (c.result || '').slice(-600), created: ago(c.created_at) })) };
     },
     end_conversation() { J.ending = true; return { ok: true }; },
   };
@@ -271,6 +284,22 @@
     if (J.ending) setTimeout(waitAndStop, 300);
   }
   function waitAndStop() { if (J.outCtx && J.nextT > J.outCtx.currentTime + .05) return setTimeout(waitAndStop, 300); stop('Görüşənədək'); }
+
+  /* Claude Code tapşırıqlarını izlə: bitəndə Jarvis nəticəni səsli danışır */
+  setInterval(() => {
+    if (!J.watch.size || !data || !data.commands) return;   // data: index.php-dəki qlobal (let), window-da deyil
+    for (const [id, w] of J.watch) {
+      const c = data.commands.find(x => +x.id === id); if (!c || c.status === w.st) continue;
+      w.st = c.status;
+      if (c.status === 'running') { line('i', `🤖 Claude Code işləyir (#${id}, ${w.project})…`); continue; }
+      if (c.status === 'queued') continue;
+      J.watch.delete(id);
+      const res = (c.result || '').trim();
+      line(c.status === 'done' ? 'a' : 'e', `🤖 Claude Code ${c.status === 'done' ? 'bitirdi' : c.status === 'canceled' ? 'dayandırıldı' : 'xəta verdi'} (#${id}, ${w.project})`);
+      if (J.ready) send({ clientContent: { turns: [{ role: 'user', parts: [{ text:
+        `[System note, not spoken by the user] Claude Code task #${id} in project "${w.project}" finished with status "${c.status}". Task: ${w.prompt.slice(0, 300)}\nResult (may be truncated):\n${res.slice(-2500) || '(empty)'}\nTell the user the outcome in 1-2 short sentences.` }] }], turnComplete: true } });
+    }
+  }, 1500);
 
   /* ---------- Səs ---------- */
   const WORKLET = `class JvMic extends AudioWorkletProcessor {
