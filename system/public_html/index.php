@@ -400,7 +400,7 @@ body.v-space::before { display: none; }
 .cmdbox .loginhint[hidden] { display: none !important; }
 .cmderr { color: #f87171; font-size: 13px; margin: 6px 0; }
 .cmdbox textarea.drop { outline: 2px dashed var(--accent); outline-offset: 1px; }
-.cmdimgs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.cmdimgs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; } .cmdimgs[hidden] { display: none; }
 .cmdimgs .cimg { position: relative; width: 64px; height: 64px; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,.16); background: rgba(0,0,0,.3); }
 .cmdimgs .cimg img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cmdimgs .cimg .rm { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border: 0; border-radius: 50%; background: rgba(0,0,0,.65); color: #fff; font-size: 11px; cursor: pointer; display: grid; place-items: center; }
@@ -641,6 +641,54 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
 .prow[data-s="pass"] { border-color: rgba(74,222,128,.4); } .prow[data-s="pass"] .tsst { color: #4ade80; border-color: rgba(74,222,128,.5); }
 .prow[data-s="fail"] { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.07); } .prow[data-s="fail"] .tsst { color: #f87171; border-color: rgba(248,113,113,.55); }
 .prow .tnote { font-size: 13px; color: #fecaca; white-space: pre-wrap; margin-top: 4px; }
+/* Desktop planeti: söhbət tipli komanda paneli (vəziyyət zolağı, axın, yapışqan yazı qutusu) */
+.xd-status { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); }
+.xd-row { display: flex; align-items: center; gap: 8px; font-size: 13.5px; } .xd-row .sp { flex: 1; }
+.xd-i { width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(255,255,255,.22); background: none; color: var(--muted); font: italic 600 13px/1 Georgia, serif; cursor: pointer; flex: none; }
+.xd-i.on { background: rgba(255,255,255,.14); color: #fff; }
+.xd-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; } .xd-pills:empty { display: none; }
+.xd-pill { font-size: 12px; border-radius: 999px; padding: 2px 10px; border: 1px solid rgba(255,255,255,.18); color: rgba(233,233,243,.8); }
+.xd-pill.ok { color: #86efac; border-color: rgba(74,222,128,.45); background: rgba(74,222,128,.08); }
+.xd-pill.man { color: #fcd34d; border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.08); }
+.xd-pill.no { color: #fca5a5; border-color: rgba(248,113,113,.45); background: rgba(248,113,113,.08); }
+.xd-pill.warn { color: #fbbf24; border-color: rgba(251,191,36,.5); background: rgba(251,191,36,.1); }
+.xd-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.45; } .xd-note[hidden] { display: none; }
+.xd-lbl { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.xd-tb { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #ececf1; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+.xd-tb.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.xd-tb.danger { color: #f87171; border-color: rgba(248,113,113,.35); }
+.xd-grant { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 6px; font-size: 13.5px; flex-wrap: wrap; } .xd-grant .sp { flex: 1; }
+.xd-add { padding: 10px 12px; border-radius: 12px; border: 1px dashed rgba(255,255,255,.2); margin-top: 8px; } .xd-add[hidden] { display: none; } .xd-add .fl:first-child { margin-top: 0; }
+.prow.xd-pend { border-color: rgba(251,191,36,.5); background: rgba(251,191,36,.07); }
+.xd-lock { padding: 16px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); margin-top: 14px; text-align: center; }
+.xd-lock-t { font-weight: 600; font-size: 15px; margin-bottom: 4px; } .xd-lock .mnote { margin-bottom: 10px; }
+.xd-empty { color: var(--muted); font-size: 13px; padding: 14px 12px; border: 1px dashed rgba(255,255,255,.14); border-radius: 12px; text-align: center; }
+.xthread { display: grid; gap: 12px; }
+.xmsg { display: grid; gap: 6px; }
+.xbub { border-radius: 14px; padding: 9px 12px; font-size: 13.5px; max-width: 92%; min-width: 0; }
+.xmsg.out .q { justify-self: end; background: rgba(240,138,93,.16); border: 1px solid rgba(240,138,93,.35); border-bottom-right-radius: 4px; }
+.xmsg.in .q { justify-self: start; background: rgba(157,140,255,.14); border: 1px solid rgba(157,140,255,.35); border-bottom-left-radius: 4px; }
+.xbub.r { justify-self: start; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-bottom-left-radius: 4px; }
+.xmsg.in .r { justify-self: end; border-bottom-left-radius: 14px; border-bottom-right-radius: 4px; }
+.xbub.r[data-s="done"] { border-color: rgba(74,222,128,.4); } .xbub.r[data-s="failed"] { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.07); } .xbub.r[data-s="canceled"] { opacity: .7; }
+.xq { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; } .xq.clamp { display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+.xbub .xm { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.xbub .cmdimgs { margin-top: 8px; } .xbub .cmdimgs .cimg { width: 56px; height: 56px; }
+.xst { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(233,233,243,.85); }
+.xbub .pb { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: rgba(233,233,243,.78); max-height: 4.4em; overflow: hidden; margin-top: 8px; }
+.xbub .pb.pbp:not(.open) { display: none; } .xbub .pb.open { max-height: none; overflow: auto; }
+.xbub .pbt, .prow.xd-pend .pbt { margin-top: 4px; font-size: 12px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.xbub .pa { display: flex; gap: 6px; margin-top: 8px; } .xbub .pa .gbtn { padding: 3px 10px; font-size: 12px; } .xbub .pa .danger { color: #f87171; border-color: rgba(248,113,113,.35); }
+.xd-comp { position: sticky; bottom: -14px; margin: 14px -14px -14px; padding: 10px 14px 14px; background: rgba(9,10,20,.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid rgba(255,255,255,.1); }
+.xd-comp[hidden] { display: none; }
+.xd-comp .xd-prj { margin: 0 0 6px; gap: 5px; } .xd-comp .xd-prj button { padding: 3px 11px; font-size: 12.5px; }
+.xd-comp textarea { margin-top: 0; min-height: 44px; max-height: 260px; resize: none; line-height: 1.4; }
+.xd-comp .cmdimgs { margin-top: 8px; }
+.xd-tool { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; } .xd-tool .sp { flex: 1; }
+.xd-hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.xd-send { padding: 6px 16px; } .xd-send:disabled { opacity: .45; }
+.xd-warn { font-size: 12.5px; color: #fcd34d; margin-top: 8px; } .xd-warn[hidden] { display: none; }
+@media (max-width: 520px) { .xd-hint { display: none; } }
 .tsbar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.08); margin: 8px 0 4px; }
 .tsbar i { display: block; } .tsbar .p { background: #4ade80; } .tsbar .f { background: #f87171; }
 .tdue { font-size: 11.5px; border-radius: 999px; padding: 0 8px; border: 1px solid rgba(251,191,36,.45); color: #b45309; }
@@ -2537,142 +2585,212 @@ function desktopList() {
   });
 }
 const myGrantOn = owner => { const gs = (data.grants || []).filter(g => g.owner === owner && ME && (g.grantee === ME.name || g.grantee === '*')); return gs.find(g => g.grantee === ME.name) || gs[0] || null; };
+/* Desktop planeti: söhbət kimi. Yuxarıda vəziyyət zolağı, ortada komanda axını (köhnədən yeniyə), aşağıda yapışqan yazı qutusu.
+   Sahib üçün: təsdiq gözləyənlər və icazələr axının üstündə. Hər blok yalnız öz imzası dəyişəndə yenilənir (yazılan mətn itməsin). */
+const xdOpt = (v, t) => Object.assign(document.createElement('option'), { value: v, textContent: t });
+const xdPrompt = c => c.prompt.replace(/^\[[^\]]*\]\n/, '');
+/** Söhbətdə bir komanda: göndərilən mətn (sağda) və Claude Code-un cavabı/vəziyyəti (solda) */
+function xdMessage(c, u, mine, a) {
+  const w = el('div', 'xmsg' + (mine ? ' in' : ' out'));
+  const q = el('div', 'xbub q'), text = xdPrompt(c), long = text.length > 420 || text.split('\n').length > 7;
+  const body = el('div', 'xq', text); q.append(body);
+  if (long) {
+    const t = el('button', 'pbt'), key = 'p' + c.id, draw = o => { body.classList.toggle('clamp', !o); setText(t, o ? '▴ Yığ' : '▾ Tam göstər'); };
+    t.onclick = () => { const o = body.classList.contains('clamp'); o ? openRes.add(key) : openRes.delete(key); draw(o); };
+    draw(openRes.has(key)); q.append(t);
+  }
+  { const ib = imgStrip(c); if (ib) q.append(ib); }
+  q.append(el('div', 'xm', (mine ? c.creator + ' · ' : '') + '🪐 ' + c.project + ' · ' + ago(c.created_at)));
+  w.append(q);
+  const [, dc] = CMD_ST[c.status] || [c.status, 'offline'];
+  const r = el('div', 'xbub r'); r.dataset.s = c.status;
+  const st = el('div', 'xst'), txt =
+    c.status === 'pending' ? (mine ? 'Sənin təsdiqini gözləyir' : u + '-in təsdiqini gözləyir') :
+    c.status === 'queued' ? (a.online ? 'Növbədə, indi başlayır…' : 'Növbədə · kompüter oflayndır, onlayn olanda başlayacaq') :
+    c.status === 'running' ? 'Claude işləyir · ' + ago(c.started_at) :
+    c.status === 'done' ? 'Bitdi · ' + ago(c.finished_at) :
+    c.status === 'failed' ? 'Xəta · ' + ago(c.finished_at) :
+    'Ləğv edildi' + (c.result ? ' · ' + c.result : '');
+  st.append(el('span', 'dot ' + dc), el('span', null, txt)); r.append(st);
+  if (c.result && c.status !== 'canceled') r.append(resultBox(c.result, c.id));
+  if (['pending', 'queued', 'running'].includes(c.status)) {
+    const pa = el('div', 'pa'), b = el('button', 'gbtn danger', c.status === 'running' ? '■ Dayandır' : '✕ Ləğv et');
+    b.onclick = async () => { b.disabled = true; await CTL('stop_command', { id: c.id }); load(); }; pa.append(b); r.append(pa);
+  }
+  w.append(r);
+  return w;
+}
 function renderDesktopPlanet(u) {
   const box = $('xd-info'); if (!ME) return;
   const mine = ME.name === u, a = agentInfo(u);
-  if (box._u !== u) { box._u = u; box.replaceChildren(el('div', 'xd-top'), el('div', 'xd-form'), el('div', 'xd-list')); box._s = {}; }
-  const [top, form, list] = box.children;
-  const topSig = [u, a.online, a.login, mine, (data.grants || []).map(g => g.owner + g.grantee + g.mode).join(), Math.floor(now() / 20)].join('|');
-  if (box._s.top !== topSig) {
-    box._s.top = topSig; top.replaceChildren();
-    const head = el('div', 'infobox');
-    head.append(el('div', null, (a.online ? '🟢 Kompüter onlayn (agent işləyir)' : a.ag ? '⚫ Agent oflayn · son: ' + ago(a.ag.last_seen) : '⚫ Agent heç qoşulmayıb') + (a.online && !a.login ? ' · ⚠ Claude girişi yoxdur' : '')));
-    head.append(el('div', 'mnote', mine
-      ? 'Bura sənin kompüterindir. Başqası ona komanda göndərə bilməz, sən icazə verməyincə.'
-      : 'Komanda ' + u + '-in öz Claude hesabı ilə, onun kompüterində, agentin məhdud icazələri daxilində işləyir: fayl oxuma və redaktə, git (pull, commit və s.; push və merge yalnız sahibi "full" səviyyə seçibsə). Dağıdıcı git əmrləri (reset --hard, clean, zorla push) və digər terminal əmrləri bloklanıb.'));
-    top.append(head);
+  const fresh = box._u !== u;
+  if (fresh) { box._u = u; box.replaceChildren(el('div', 'xd-status'), el('div', 'xd-manage'), el('div', 'xthread'), el('div', 'xd-comp')); box._s = {}; box._imgs = []; box._fresh = false; box._prj = ''; box._addOpen = false; }
+  const [status, manage, thread, comp] = box.children;
+  const g = mine ? null : myGrantOn(u);
+  const grants = (data.grants || []).filter(x => x.owner === u);
+  const rc = a.cm.filter(c => c.creator && c.creator !== u && (mine || c.creator === ME.name));
+  const pend = mine ? rc.filter(c => c.status === 'pending') : [];
+
+  /* 1. Vəziyyət zolağı: bir baxışda kompüter, Claude girişi və icazə */
+  const stSig = [u, a.online, a.login, !!a.run.length, a.ag && a.ag.last_seen, mine, g && g.mode, grants.map(x => x.grantee + x.mode).join(), Math.floor(now() / 20)].join('|');
+  if (box._s.st !== stSig) {
+    box._s.st = stSig; status.replaceChildren();
+    const row = el('div', 'xd-row');
+    row.append(el('span', 'dot ' + (a.online ? (a.run.length ? 'working' : 'idle') : 'offline')),
+      el('b', null, a.online ? (a.run.length ? 'Kompüter onlayn · Claude işləyir' : 'Kompüter onlayn') : a.ag ? 'Kompüter oflayn · son ' + ago(a.ag.last_seen) : 'Agent hələ qoşulmayıb'));
+    const inf = el('button', 'xd-i', 'i'); inf.type = 'button'; inf.title = 'Bu necə işləyir?'; inf.setAttribute('aria-label', 'Məlumat');
+    row.append(el('span', 'sp'), inf); status.append(row);
+    const pills = el('div', 'xd-pills');
+    if (a.online && !a.login) pills.append(el('span', 'xd-pill warn', '⚠ Claude girişi yoxdur: komandalar növbədə gözləyəcək'));
+    if (mine) pills.append(el('span', 'xd-pill ' + (grants.length ? 'ok' : 'no'), grants.length ? '🔐 İcazə: ' + grants.map(x => x.grantee === '*' ? 'hamı' : x.grantee).join(', ') : '🔒 Heç kimə icazə verməmisən'));
+    else pills.append(el('span', 'xd-pill ' + (g ? (g.mode === 'auto' ? 'ok' : 'man') : 'no'), g ? (g.mode === 'auto' ? '✅ İcazən var · ⚡ komanda dərhal işə düşür' : '✅ İcazən var · ✋ ' + u + ' hər komandanı təsdiqləyir') : '🔒 ' + u + ' sənə icazə verməyib'));
+    status.append(pills);
+    const note = el('div', 'xd-note', mine
+      ? 'Bura sənin kompüterindir. Yalnız icazə verdiyin adamlar komanda göndərə bilər; manual rejimdə hər komandanı sən təsdiqləyirsən, avtomatikdə dərhal işə düşür. İcazəni istənilən vaxt geri ala bilərsən.'
+      : 'Komanda ' + u + '-in öz Claude hesabı ilə, onun kompüterində, agentin məhdud icazələri ilə işləyir: fayl oxuma və redaktə, git (pull, commit; push və merge yalnız sahibi "full" səviyyə seçibsə). Dağıdıcı git əmrləri (reset --hard, clean, zorla push) və digər terminal əmrləri bloklanıb. Nəticə bitəndə burada görünür.');
+    note.hidden = !box._info; inf.classList.toggle('on', !!box._info);
+    inf.onclick = () => { box._info = !box._info; note.hidden = !box._info; inf.classList.toggle('on', box._info); };
+    status.append(note);
+  }
+
+  /* 2. Sahib: təsdiq gözləyənlər və icazələr. Qonaq (icazəsiz): icazə istə */
+  const mSig = [u, mine, !!g, pend.map(c => c.id + (c.images || []).length).join(), grants.map(x => x.grantee + x.mode).join(), (data.users || []).join(), Math.floor(now() / 30)].join('|');
+  if (box._s.m !== mSig) {
+    box._s.m = mSig; manage.replaceChildren();
     if (mine) {
-      top.append(el('div', 'lbl', '🔐 Kimə icazə vermisən'));
-      const mineG = (data.grants || []).filter(g => g.owner === u);
-      if (!mineG.length) top.append(el('div', 'empty', 'Heç kimə. Heç kim kompüterinə komanda göndərə bilməz.'));
-      for (const g of mineG) {
-        const r = el('div', 'prow'), who = g.grantee === '*' ? 'Hamı' : g.grantee;
-        r.append(el('div', 'pt', who), el('div', 'pm', g.mode === 'auto' ? '⚡ Avtomatik: komandalar təsdiqsiz işləyir' : '✋ Manual: hər komandanı sən təsdiq edirsən'));
-        const pa = el('div', 'pa'), rv = el('button', 'gbtn danger', 'İcazəni geri al');
-        rv.onclick = async () => { await RMT('revoke', { grantee: g.grantee }); await load(); };
-        if (g.grantee !== '*') {                                     // rejimi icazəni silmədən dəyiş
-          const tg = el('button', 'gbtn', g.mode === 'auto' ? '✋ Manual rejimə keç' : '⚡ Avtomatik rejimə keç');
-          tg.onclick = async () => {
-            const to = g.mode === 'auto' ? 'approve' : 'auto';
-            if (to === 'auto' && !confirm(who + ' təsdiqsiz, birbaşa sənin kompüterində Claude Code-a fayl dəyişdirə biləcək komandalar göndərə biləcək. Avtomatik rejimə keçilsin?')) return;
-            await RMT('grant', { grantee: g.grantee, mode: to }); await load();
-          };
-          pa.append(tg);
+      if (pend.length) {
+        manage.append(el('div', 'lbl', '⏳ Təsdiqini gözləyir · ' + pend.length));
+        for (const c of pend) {
+          const r = el('div', 'prow xd-pend');
+          r.append(el('div', 'pt', c.creator + ' → 🪐 ' + c.project), el('div', 'pm', ago(c.created_at)), el('div', 'xq', xdPrompt(c)));
+          { const ib = imgStrip(c); if (ib) r.append(ib); }
+          const pa = el('div', 'pa'), ok = el('button', 'gbtn go', '✓ Təsdiq et'), no = el('button', 'gbtn danger', '✕ Rədd et');
+          ok.onclick = async () => { ok.disabled = no.disabled = true; await RMT('approve', { id: c.id }); await load(); };
+          no.onclick = async () => { ok.disabled = no.disabled = true; await RMT('deny', { id: c.id }); await load(); };
+          pa.append(ok, no); r.append(pa); manage.append(r);
         }
-        pa.append(rv); r.append(pa); top.append(r);
       }
+      const gh = el('div', 'lbl xd-lbl'); gh.append(el('span', null, '🔐 Kimə icazə vermisən'));
+      const add = el('button', 'xd-tb', '+ İcazə ver'); add.type = 'button'; gh.append(add); manage.append(gh);
+      if (!grants.length) manage.append(el('div', 'empty', 'Heç kimə. Heç kim kompüterinə komanda göndərə bilməz.'));
+      for (const x of grants) {
+        const r = el('div', 'xd-grant'), who = x.grantee === '*' ? 'Hamı' : x.grantee;
+        r.append(el('b', null, who), el('span', 'xd-pill ' + (x.mode === 'auto' ? 'ok' : 'man'), x.mode === 'auto' ? '⚡ avtomatik' : '✋ təsdiqlə'), el('span', 'sp'));
+        if (x.grantee !== '*') {                                     // rejimi icazəni silmədən dəyiş
+          const tg = el('button', 'xd-tb', x.mode === 'auto' ? '✋ Təsdiqlə' : '⚡ Avtomatik'); tg.title = x.mode === 'auto' ? 'Manual rejimə keç: hər komandanı sən təsdiqləyirsən' : 'Avtomatik rejimə keç: komandalar təsdiqsiz işləyir';
+          tg.onclick = async () => {
+            const to = x.mode === 'auto' ? 'approve' : 'auto';
+            if (to === 'auto' && !confirm(who + ' təsdiqsiz, birbaşa sənin kompüterində Claude Code-a fayl dəyişdirə biləcək komandalar göndərə biləcək. Avtomatik rejimə keçilsin?')) return;
+            await RMT('grant', { grantee: x.grantee, mode: to }); await load();
+          };
+          r.append(tg);
+        }
+        const rv = el('button', 'xd-tb danger', 'Geri al'); rv.title = 'İcazəni geri al: gözləyən komandaları da ləğv olunur';
+        rv.onclick = async () => { if (!confirm(who + ' üçün icazə geri alınsın?')) return; await RMT('revoke', { grantee: x.grantee }); await load(); };
+        r.append(rv); manage.append(r);
+      }
+      const f = el('div', 'xd-add'); f.hidden = !box._addOpen;
       const sel = el('select'), mode = el('select');
-      for (const x of data.users || []) if (x !== u) sel.append(Object.assign(document.createElement('option'), { value: x, textContent: x }));
-      sel.append(Object.assign(document.createElement('option'), { value: '*', textContent: 'Hamıya (yalnız manual rejim)' }));
-      mode.append(Object.assign(document.createElement('option'), { value: 'auto', textContent: '⚡ Avtomatik: təsdiqsiz işləsin' }), Object.assign(document.createElement('option'), { value: 'approve', textContent: '✋ Manual: hər komandanı mən təsdiq edim' }));
-      sel.onchange = () => { mode.disabled = sel.value === '*'; if (sel.value === '*') mode.value = 'approve'; };
-      sel.onchange(); const gb = el('button', 'gbtn go', 'İcazə ver'), err = el('div', 'cmderr'); err.hidden = true;
+      for (const x of data.users || []) if (x !== u && !grants.some(y => y.grantee === x)) sel.append(xdOpt(x, x));
+      if (!grants.some(y => y.grantee === '*')) sel.append(xdOpt('*', 'Hamıya (yalnız təsdiqlə rejimi)'));
+      mode.append(xdOpt('approve', '✋ Hər komandanı mən təsdiqləyim'), xdOpt('auto', '⚡ Təsdiqsiz, dərhal işləsin'));
+      sel.onchange = () => { mode.disabled = sel.value === '*'; if (sel.value === '*') mode.value = 'approve'; }; sel.onchange();
+      const gb = el('button', 'gbtn go', 'İcazə ver'), err = el('div', 'cmderr'); err.hidden = true;
       gb.onclick = async () => {
         err.hidden = true;
+        if (!sel.value) { err.hidden = false; err.textContent = 'Hamıya artıq icazə verilib'; return; }
         if (mode.value === 'auto' && !confirm(sel.value + ' təsdiqsiz, birbaşa sənin kompüterində Claude Code-a fayl dəyişdirə biləcək komandalar göndərə biləcək. Əminsən?')) return;
         const { status, d } = await RMT('grant', { grantee: sel.value, mode: mode.value });
-        if (status === 200) await load(); else { err.hidden = false; err.textContent = d.error || 'Alınmadı'; }
+        if (status === 200) { box._addOpen = false; await load(); } else { err.hidden = false; err.textContent = d.error || 'Alınmadı'; }
       };
-      top.append(sel, mode, el('div', 'cmdbar'), err); top.lastChild.previousSibling.append(el('span', 'cmdwho', 'İstədiyin vaxt geri ala bilərsən.'), gb);
+      const bar = el('div', 'cmdbar'); bar.append(el('span', 'cmdwho', 'İstədiyin vaxt geri ala bilərsən.'), gb);
+      f.append(el('label', 'fl', 'Kimə'), sel, el('label', 'fl', 'Rejim'), mode, err, bar); manage.append(f);
+      add.onclick = () => { box._addOpen = !box._addOpen; f.hidden = !box._addOpen; add.classList.toggle('on', box._addOpen); if (box._addOpen) sel.focus(); };
+      add.classList.toggle('on', !!box._addOpen);
+    } else if (!g) {
+      const lock = el('div', 'xd-lock');
+      lock.append(el('div', 'xd-lock-t', '🔒 ' + u + ' hələ sənə icazə verməyib'), el('div', 'mnote', 'Onun kompüterinə komanda göndərmək üçün ' + u + ' Desktop planetində sənə icazə verməlidir. Bir mesajla xatırlat:'));
+      const rq = el('button', 'gbtn go', '✉ İcazə istə');
+      rq.onclick = () => { openMsg(u); $('msg-body').value = 'Salam! Desktop Universe-də mənə Claude Code-una komanda göndərməyə icazə verə bilərsən? (Desktop planetinə gir → "+ İcazə ver")'; };
+      lock.append(rq); manage.append(lock);
     }
   }
-  // komanda forması (yazılan mətn itməsin deyə yalnız vəziyyət dəyişəndə yenilənir)
-  const g = mine ? null : myGrantOn(u);
-  const prjs = [...new Set((data.projects || []).filter(p => p.user === u).map(p => p.project))].sort();
-  const formSig = [u, mine, g && g.mode, prjs.join(), a.online].join('|');
-  if (box._s.form !== formSig) {
-    box._s.form = formSig;
-    const prevTxt = form.querySelector('textarea') ? form.querySelector('textarea').value : '', prevPrj = form.querySelector('select') ? form.querySelector('select').value : '';
-    form.replaceChildren();
-    if (!mine) {
-      form.append(el('div', 'lbl', '🖥 ' + u + '-in Claude Code-una komanda'));
-      if (!g) {
-        form.append(el('div', 'infobox', u + ' hələ sənə öz kompüterinə komanda göndərməyə icazə verməyib.'));
-        const rq = el('button', 'gbtn', '✉ İcazə istə'); rq.style.marginTop = '8px';
-        rq.onclick = () => { openMsg(u); $('msg-body').value = 'Salam! Desktop Universe-də mənə Claude Code-una komanda göndərməyə icazə verə bilərsən? (Desktop planetinə gir → "İcazə ver")'; };
-        form.append(rq);
-      } else {
-        form.append(el('div', 'mnote', '✅ İcazə var · ' + (g.mode === 'auto' ? '⚡ avtomatik: komanda birbaşa işə düşür' : '✋ manual: ' + u + ' hər komandanı özü təsdiq etməlidir')));
-        if (!a.online) form.append(el('div', 'mnote', '⚠ Agent hazırda oflayndır: komanda onlayn olanda işləyəcək.'));
-        const sel = el('select');
-        for (const p of prjs) sel.append(Object.assign(document.createElement('option'), { value: p, textContent: '🪐 ' + p }));
-        if (!prjs.length) sel.append(Object.assign(document.createElement('option'), { value: '', textContent: u + ' hələ heç bir proyekt qurmayıb' }));
-        if (prevPrj && prjs.includes(prevPrj)) sel.value = prevPrj;
-        const ta = el('textarea'); ta.rows = 4; ta.maxLength = 3500; ta.placeholder = 'Onun kompüterində Claude Code nə etsin? (Enter göndərir, Shift+Enter yeni sətir; şəkli yapışdır və ya bura sürüşdür)'; ta.value = prevTxt;
-        const err = el('div', 'cmderr'); err.hidden = true;
-        const imgs = box._imgs || (box._imgs = []), strip = el('div', 'cmdimgs'), file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/gif,image/webp'; file.multiple = true; file.hidden = true;
-        const drawImgs = () => { strip.hidden = !imgs.length; strip.replaceChildren(...imgs.map(im => { const d = el('div', 'cimg'), i = el('img'); i.src = im.url; i.alt = im.file.name; const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil'; x.onclick = () => { URL.revokeObjectURL(im.url); imgs.splice(imgs.indexOf(im), 1); drawImgs(); }; d.append(i, x); return d; })); };
-        const addImgs = async files => { for (let f of files) { if (!CMD_IMG_TYPES.test(f.type)) { err.hidden = false; err.textContent = 'Yalnız PNG, JPEG, GIF və ya WebP şəkil'; continue; } if (imgs.length >= CMD_IMG_MAX) { err.hidden = false; err.textContent = 'Ən çox ' + CMD_IMG_MAX + ' şəkil'; break; } f = await shrinkImage(f); if (f.size > CMD_IMG_BYTES) { err.hidden = false; err.textContent = 'Şəkil çox böyükdür (ən çox 5 MB)'; continue; } imgs.push({ file: f, url: URL.createObjectURL(f) }); } drawImgs(); };
 
-        const fl = el('label', 'mnote'), fc = el('input'); fc.type = 'checkbox'; fc.style.cssText = 'width:auto;margin:0 6px 0 0;vertical-align:middle'; fl.append(fc, document.createTextNode('🆕 Yeni söhbət (əvvəlkini yadda saxlama). Standart: eyni proyektdə söhbət davam edir'));
-        const bt = el('button', 'gbtn go', '🖥 Göndər');
-        const send = async () => {
-          err.hidden = true; if (!sel.value || !ta.value.trim()) { err.hidden = false; err.textContent = 'Proyekt seç və mətn yaz'; return; }
-          bt.disabled = true;
-          let res;
+  /* 3. Söhbət axını: köhnədən yeniyə, ən sonuncusu yazı qutusunun üstündə */
+  const list = rc.filter(c => c.status !== 'pending' || !mine).slice(0, 12).reverse();
+  const tSig = [u, mine, a.online, list.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 30)].join('|');
+  if (box._s.t !== tSig) {
+    box._s.t = tSig; thread.replaceChildren();
+    thread.append(el('div', 'lbl', mine ? '🖥 Kompüterinə göndərilənlər' : '🖥 Söhbət · ' + u + '-in Claude Code-u'));
+    if (!list.length) thread.append(el('div', 'xd-empty', mine ? 'Hələ heç kim komanda göndərməyib.' : (g ? 'Hələ komanda göndərməmisən. Aşağıda yaz, Enter ilə göndər.' : 'İcazə alandan sonra burada söhbət görünəcək.')));
+    for (const c of list) thread.append(xdMessage(c, u, mine, a));
+  }
+
+  /* 4. Yazı qutusu (yalnız icazəsi olan qonaq üçün): proyekt çipləri, böyüyən sahə, şəkil, yeni söhbət, Enter göndərir */
+  const prjs = [...new Set((data.projects || []).filter(p => p.user === u).map(p => p.project))].sort();
+  const cSig = [u, mine, g && g.mode, prjs.join(), a.online].join('|');
+  if (box._s.c !== cSig) {
+    box._s.c = cSig;
+    const prevTa = comp.querySelector('textarea'), prevTxt = prevTa ? prevTa.value : '';
+    comp.replaceChildren(); comp.hidden = mine || !g;
+    if (!mine && g) {
+      const key = 'xdprj:' + u; let prj = box._prj || ''; try { prj = prj || localStorage.getItem(key) || ''; } catch (e) {}
+      if (!prjs.includes(prj)) prj = prjs[0] || '';
+      const chips = el('div', 'filters xd-prj'), upd = () => { bt.disabled = !prj || !ta.value.trim(); };
+      const drawChips = () => { for (const b of chips.children) b.classList.toggle('on', b.dataset.p === prj); };
+      for (const p of prjs) { const b = el('button', null, '🪐 ' + p); b.type = 'button'; b.dataset.p = p; b.title = 'Komanda bu proyektin qovluğunda işləyəcək'; b.onclick = () => { prj = box._prj = p; try { localStorage.setItem(key, p); } catch (e) {} drawChips(); upd(); ta.focus(); }; chips.append(b); }
+      if (!prjs.length) chips.append(el('span', 'xd-warn', u + ' hələ heç bir proyekt qurmayıb: onun kompüterində hook ilə Claude Code işlənməlidir.'));
+      const ta = el('textarea'); ta.rows = 2; ta.maxLength = 3500; ta.placeholder = u + '-in kompüterində Claude Code nə etsin?'; ta.value = prevTxt;
+      const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(260, ta.scrollHeight) + 'px'; };
+      const err = el('div', 'cmderr'); err.hidden = true;
+      const imgs = box._imgs, strip = el('div', 'cmdimgs'), file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/gif,image/webp'; file.multiple = true; file.hidden = true;
+      const drawImgs = () => { strip.hidden = !imgs.length; strip.replaceChildren(...imgs.map(im => { const d = el('div', 'cimg'), i = el('img'); i.src = im.url; i.alt = im.file.name; const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil'; x.onclick = () => { URL.revokeObjectURL(im.url); imgs.splice(imgs.indexOf(im), 1); drawImgs(); }; d.append(i, x); return d; })); };
+      const addImgs = async files => { err.hidden = true; for (let f of files) { if (!CMD_IMG_TYPES.test(f.type)) { err.hidden = false; err.textContent = 'Yalnız PNG, JPEG, GIF və ya WebP şəkil'; continue; } if (imgs.length >= CMD_IMG_MAX) { err.hidden = false; err.textContent = 'Ən çox ' + CMD_IMG_MAX + ' şəkil'; break; } f = await shrinkImage(f); if (f.size > CMD_IMG_BYTES) { err.hidden = false; err.textContent = 'Şəkil çox böyükdür (ən çox 5 MB)'; continue; } imgs.push({ file: f, url: URL.createObjectURL(f) }); } drawImgs(); };
+      const tool = el('div', 'xd-tool');
+      const att = el('button', 'xd-tb', '🖼 Şəkil'); att.type = 'button'; att.title = 'Şəkil əlavə et (ən çox 4). Yapışdırmaq və ya qutuya sürüşdürmək də olar';
+      att.onclick = () => file.click(); file.onchange = () => { addImgs([...file.files]); file.value = ''; };
+      const fb = el('button', 'xd-tb' + (box._fresh ? ' on' : ''), '🆕 Yeni söhbət'); fb.type = 'button';
+      fb.title = 'Seçilidirsə Claude əvvəlki söhbəti yadda saxlamadan sıfırdan başlayır. Seçilməyibsə eyni proyektdəki söhbət davam edir';
+      fb.onclick = () => { box._fresh = !box._fresh; fb.classList.toggle('on', box._fresh); fb.setAttribute('aria-pressed', box._fresh); };
+      fb.setAttribute('aria-pressed', !!box._fresh);
+      const bt = el('button', 'gbtn go xd-send', 'Göndər ➤'); bt.type = 'button';
+      tool.append(att, fb, el('span', 'sp'), el('span', 'xd-hint', 'Enter göndərir · Shift+Enter yeni sətir'), bt);
+      const send = async () => {
+        err.hidden = true; if (!prj) { err.hidden = false; err.textContent = 'Əvvəl proyekt seç'; return; } if (!ta.value.trim()) { ta.focus(); return; }
+        bt.disabled = true; setText(bt, 'Göndərilir…');
+        let res;
+        try {
           if (imgs.length) {                                       // şəkilli: FormData (JSON yox)
-            const fd = new FormData(); fd.append('action', 'send'); fd.append('target', u); fd.append('project', sel.value); fd.append('prompt', ta.value); fd.append('fresh', fc.checked ? '1' : '');
+            const fd = new FormData(); fd.append('action', 'send'); fd.append('target', u); fd.append('project', prj); fd.append('prompt', ta.value); fd.append('fresh', box._fresh ? '1' : '');
             for (const im of imgs) fd.append('images[]', im.file, im.file.name);
             const r = await fetch('remote.php', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: fd });
             res = { status: r.status, d: await r.json().catch(() => ({})) };
             if (r.status === 401) location.reload();
-          } else res = await RMT('send', { target: u, project: sel.value, prompt: ta.value, fresh: fc.checked });
-          const { status, d } = res;
-          bt.disabled = false;
-          if (status === 200) { ta.value = ''; for (const im of imgs) URL.revokeObjectURL(im.url); imgs.length = 0; drawImgs(); miniToast(d.status === 'pending' ? '🖥 Göndərildi, ' + u + '-in təsdiqini gözləyir' : '🖥 Komanda ' + u + '-in kompüterinə yola düşdü'); await load(); }
-          else { err.hidden = false; err.textContent = d.error || 'Göndərilmədi'; }
-        };
-        bt.onclick = send; ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });   // Enter göndərir, Shift+Enter yeni sətir
-        ta.addEventListener('paste', e => { const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean); if (fs.length) { e.preventDefault(); addImgs(fs); } });
-        ta.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); ta.classList.add('drop'); } });
-        ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
-        ta.addEventListener('drop', e => { e.preventDefault(); ta.classList.remove('drop'); addImgs([...e.dataTransfer.files]); });
-        const att = el('button', 'gbtn', '🖼 Şəkil'); att.type = 'button'; att.title = 'Şəkil əlavə et (ən çox 4)'; att.onclick = () => file.click(); file.onchange = () => { addImgs([...file.files]); file.value = ''; };
-        const bar = el('div', 'cmdbar'), btns = el('span'); btns.style.cssText = 'display:flex;gap:8px'; btns.append(att, bt); bar.append(el('span', 'cmdwho'), btns); drawImgs();
-        form.append(sel, ta, strip, file, fl, err, bar);
-      }
+          } else res = await RMT('send', { target: u, project: prj, prompt: ta.value, fresh: !!box._fresh });
+        } catch (e) { res = { status: 0, d: {} }; }
+        const { status, d } = res;
+        setText(bt, 'Göndər ➤');
+        if (status === 200) {
+          ta.value = ''; grow(); for (const im of imgs) URL.revokeObjectURL(im.url); imgs.length = 0; drawImgs(); box._fresh = false; fb.classList.remove('on'); fb.setAttribute('aria-pressed', 'false');
+          miniToast(d.status === 'pending' ? '🖥 Göndərildi, ' + u + '-in təsdiqini gözləyir' : '🖥 Komanda ' + u + '-in kompüterinə yola düşdü');
+          await load(); $('xdock').scrollTo({ top: 1e9, behavior: 'smooth' }); ta.focus();
+        } else { err.hidden = false; err.textContent = status === 0 ? 'Bağlantı xətası' : (d.error || 'Göndərilmədi'); }
+        upd();
+      };
+      bt.onclick = send;
+      ta.addEventListener('input', () => { grow(); upd(); });
+      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });   // Enter göndərir, Shift+Enter yeni sətir
+      ta.addEventListener('paste', e => { const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean); if (fs.length) { e.preventDefault(); addImgs(fs); } });
+      ta.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); ta.classList.add('drop'); } });
+      ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
+      ta.addEventListener('drop', e => { e.preventDefault(); ta.classList.remove('drop'); addImgs([...e.dataTransfer.files]); });
+      const warn = el('div', 'xd-warn');
+      warn.textContent = !a.online ? '⚠ Kompüter oflayndır: komanda növbəyə düşür, onlayn olanda işləyəcək.' : g.mode !== 'auto' ? '✋ ' + u + ' komandanı təsdiqləyəndən sonra işə düşəcək.' : '';
+      warn.hidden = !warn.textContent;
+      comp.append(chips, ta, strip, file, err, tool, warn); drawChips(); drawImgs(); upd(); requestAnimationFrame(grow);
     }
   }
-  // komandalar: sahibə gələn təsdiq gözləyənlər və uzaqdan göndərilənlərin axını
-  const rc = a.cm.filter(c => c.creator && c.creator !== u && (mine || c.creator === ME.name));
-  const listSig = [u, rc.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 30)].join('|');
-  if (box._s.list === listSig) return; box._s.list = listSig; list.replaceChildren();
-  if (mine) {
-    const pend = rc.filter(c => c.status === 'pending');
-    if (pend.length) {
-      list.append(el('div', 'lbl', '⏳ Təsdiqini gözləyənlər'));
-      for (const c of pend) {
-        const r = el('div', 'prow'); r.append(el('div', 'pt', c.creator + ' → ' + c.project), el('div', 'pm', ago(c.created_at)), el('div', 'pb', c.prompt.replace(/^\[[^\]]*\]\n/, '')));
-        r.querySelector('.pb').style.maxHeight = 'none';
-        { const ib = imgStrip(c); if (ib) r.append(ib); }
-        const pa = el('div', 'pa'), ok = el('button', 'gbtn go', 'Təsdiq et'), no = el('button', 'gbtn danger', 'Rədd et');
-        ok.onclick = async () => { await RMT('approve', { id: c.id }); await load(); }; no.onclick = async () => { await RMT('deny', { id: c.id }); await load(); };
-        pa.append(ok, no); r.append(pa); list.append(r);
-      }
-    }
-  }
-  list.append(el('div', 'lbl', mine ? '🖥 Kompüterinə uzaqdan göndərilənlər' : '🖥 Mənim göndərdiklərim'));
-  const rest = rc.filter(c => !(mine && c.status === 'pending'));
-  if (!rest.length) list.append(el('div', 'empty', 'Hələ yoxdur.'));
-  for (const c of rest.slice(0, 10)) {
-    const [lbl] = CMD_ST[c.status] || [c.status], r = el('div', 'prow');
-    r.dataset.s = c.status === 'done' ? 'pass' : c.status === 'failed' ? 'fail' : '';
-    r.append(el('div', 'pt', c.prompt.replace(/^\[[^\]]*\]\n/, '').split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + c.creator + ' → ' + c.user + ' · ' + lbl + ' · ' + ago(c.created_at)));
-    { const pbx = promptBox(c); if (pbx) r.append(pbx); const ib = imgStrip(c); if (ib) r.append(ib); }
-    if (c.result) r.append(resultBox(c.result, c.id));
-    if (['pending', 'queued', 'running'].includes(c.status)) { const pa = el('div', 'pa'), st = el('button', 'gbtn danger', 'Dayandır'); st.onclick = async () => { await CTL('stop_command', { id: c.id }); load(); }; pa.append(st); r.append(pa); }
-    list.append(r);
-  }
+  if (fresh) requestAnimationFrame(() => { $('xdock').scrollTop = $('xdock').scrollHeight; });   // söhbət kimi: ən yeni mesaj və yazı qutusu görünsün
 }
 
 function renderMcpPlanet(name) {
@@ -2901,7 +3019,7 @@ function renderX(name) {
   const sp = xKind(name);
   setText($('xtitle'), sp.icon + ' ' + sp.name);
   for (const k of ['prompt', 'designer', 'meeting', 'test', 'mcpu', 'agentu', 'deskt']) $('x-' + k).hidden = k !== sp.kind;
-  if (sp.kind === 'deskt') { setText($('xmeta'), 'Desktop Universe · ' + sp.name + ' istifadəçisinin kompüteri və Claude Code-u'); return renderDesktopPlanet(sp.name); }
+  if (sp.kind === 'deskt') { setText($('xmeta'), ME && ME.name === sp.name ? 'Sənin kompüterin · kimə uzaqdan komanda icazəsi verdiyin' : sp.name + '-in kompüteri · Claude Code-una uzaqdan komanda'); return renderDesktopPlanet(sp.name); }
   if (sp.kind === 'mcpu') { setText($('xmeta'), 'MCP Universe · server, onu işlədən proyektlər və son çağırışlar'); return renderMcpPlanet(sp.name); }
   if (sp.kind === 'agentu') { setText($('xmeta'), 'Agent Universe · ' + sp.name + ' istifadəçisinin AI agenti'); return renderAgentPlanet(sp.name); }
   if (sp.kind === 'prompt') { setText($('xmeta'), 'AI promptlarını yarat, saxla və komanda ilə paylaş'); renderPrompts(); }
