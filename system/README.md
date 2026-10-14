@@ -16,6 +16,7 @@ Sonra Claude Code-u yenidən başlat.
 - HTTPS istifadə et (Hostingerdə SSL-i aktiv et), yoxsa token açıq gedir.
 - Dashboard prompt mətnini və əmr/fayl adlarını göstərir. Bash əmrinə parol yazma.
 - MySQL istəsən `config.php`-də `db` hissəsini dəyiş.
+- Sxem bir dəfə qurulur (`settings.schema` = `db.php` → `SCHEMA_VERSION`). Yeni cədvəl, sütun və ya indeks əlavə edəndə `SCHEMA_VERSION`-u artır, yoxsa mövcud bazada tətbiq olunmaz.
 - Ləğv etmək: `~/.claude/settings.json`-dan `claude-team-hook.sh` sətirlərini sil.
 
 ## Lokal işə salmaq (inkişaf üçün)

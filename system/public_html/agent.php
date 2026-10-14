@@ -48,9 +48,7 @@ if ($act === 'claim') {
     if ($u->rowCount() !== 1) {
         json_out(['none' => true]);
     }
-    $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');   // ilkin qovluq adları (ad dəyişibsə)
-    $al->execute([$row['project']]);
-    $names = array_merge([$row['project']], array_column($al->fetchAll(), 'src'));
+    $names = project_names($pdo, $row['project']);   // ilkin qovluq adları (ad dəyişibsə)
     $images = array_values(array_filter((array)json_decode((string)$row['images'], true), fn($f) => is_string($f) && cmdimg_name_ok($f)));
     json_out(['id' => (int)$row['id'], 'project' => $row['project'], 'names' => $names, 'prompt' => $row['prompt'], 'creator' => $row['creator'], 'fresh' => (int)$row['fresh'], 'images' => $images]);   // şəkillər: cmdimg.php?f=<ad>
 }

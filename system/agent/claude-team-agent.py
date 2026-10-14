@@ -302,13 +302,17 @@ def main():
     once = '--once' in sys.argv
     if not once:
         single_instance()
-    last_auth, logged_in, warned = 0, True, False
+    last_ping, last_auth, logged_in, warned = 0, 0, True, False
     print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}', flush=True)
     while True:
         try:
-            if time.time() - last_auth > 10:                   # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
-                last_auth = time.time()
-                logged_in = auth_ok(claude)
+            now = time.time()
+            if now - last_ping > 10:                           # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
+                last_ping = now
+                # `claude auth status` ayrıca proses açır (ağırdır): girişlidirsə 60 saniyədən bir, deyilsə 10 saniyədən bir yoxla
+                if now - last_auth > (60 if logged_in else 10):
+                    last_auth = now
+                    logged_in = auth_ok(claude)
                 call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects())})
                 if not logged_in and not warned:
                     warned = True
