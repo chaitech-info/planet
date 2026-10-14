@@ -623,7 +623,8 @@
      util                    — paylaşılan köməkçilər */
   window.Jarvis = {
     start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)),
-    context: t => J.ready && J.conn && J.conn.context(String(t)),   // səssiz kontekst (cavab yaratmır) tools: TOOLS, state: () => J.state, ready: () => !!J.ready, level,
+    context: t => J.ready && J.conn && J.conn.context(String(t)),   // səssiz kontekst (cavab yaratmır)
+    tools: TOOLS, state: () => J.state, ready: () => !!J.ready, level,
     adapters: ADAPTERS, msgpack: MP,
     registerTool(name, fn) { TOOLS[name] = fn; },
     on(ev, cb) { (EV[ev] = EV[ev] || []).push(cb); },

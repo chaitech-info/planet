@@ -11,8 +11,18 @@ Git səviyyəsi (kompüterin sahibi seçir; CLAUDE_TEAM_GIT mühit dəyişəni v
   safe  : (standart) + fetch, pull (yalnız sürətli irəli, birləşmə commit-i yox), add, commit, switch, stash
   full  : + push, merge, checkout. Zorla push (--force) və reset --hard, clean yenə də bloklanıb.
 
+Paralel işçilər (istəyə görə; CLAUDE_TEAM_WORKERS mühit dəyişəni və ya ~/.claude-team-agent.env, standart 1, ən çox 4):
+  N>1 olanda agent eyni anda N tapşırıq götürür. Eyni proyektin ikinci (və sonrakı) eyni vaxtlı tapşırığı ayrıca
+  git worktree-də işləyir (`git worktree add --detach`, ~/.claude-team-worktrees/ içində). Proyekt git deyilsə və ya
+  git səviyyəsi `read`-dirsə, birinci iş bitənə qədər gözləyir. İşdən sonra: commit varsa `jarvis/<id>` budağında
+  saxlanır; commit olunmamış dəyişiklik varsa worktree yerində qalır (yolu nəticədə yazılır); təmizdirsə silinir.
+Canlı gedişat: claude `--output-format stream-json` ilə işləyir, agent hazırkı addımı və faylları saytda göstərir
+  (CLAUDE_TEAM_STREAM=0 ilə söndürülür, onda köhnə `--output-format json`).
+Dayandırmaq: Ctrl+C / SIGTERM → yeni tapşırıq götürülmür, işləyənlər CLAUDE_TEAM_GRACE (30) san gözlənilir,
+  bitməyənlər dayandırılıb "alınmadı" kimi qeyd olunur. İkinci Ctrl+C — dərhal.
+
 İstifadə:  python3 claude-team-agent.py          (davamlı işləyir, Ctrl+C ilə dayandır)
-           python3 claude-team-agent.py --once   (bir tapşırıq götürüb çıxır)
+           python3 claude-team-agent.py --once   (bir tapşırıq götürüb çıxır, həmişə 1 işçi)
 """
 import atexit, json, os, shlex, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 
@@ -21,7 +31,17 @@ PROJECTS = os.environ.get('CLAUDE_TEAM_PROJECTS', os.path.expanduser('~/.claude-
 TIMEOUT = int(os.environ.get('CLAUDE_TEAM_TIMEOUT', '1200'))  # bir tapşırıq üçün maksimum saniyə
 POLL = 3
 PIDFILE = os.environ.get('CLAUDE_TEAM_PID', os.path.expanduser('~/.claude-team-agent.pid'))   # ikinci (məs. lokal test) agent üçün ayrıca
-ENVFILE = os.path.expanduser('~/.claude-team-agent.env')   # ehtiyat: CLAUDE_CODE_OAUTH_TOKEN=... (chmod 600)
+ENVFILE = os.environ.get('CLAUDE_TEAM_ENV', os.path.expanduser('~/.claude-team-agent.env'))   # ehtiyat: CLAUDE_CODE_OAUTH_TOKEN=... (chmod 600)
+WT_DIR = os.environ.get('CLAUDE_TEAM_WORKTREES', os.path.expanduser('~/.claude-team-worktrees'))   # paralel işlər üçün git worktree-lər
+GRACE = int(os.environ.get('CLAUDE_TEAM_GRACE', '30'))     # dayananda işləyən tapşırıqları neçə saniyə gözləsin
+STREAM = os.environ.get('CLAUDE_TEAM_STREAM', '1') != '0'  # canlı gedişat (stream-json)
+WORKERS_MAX = 4
+STOP, HARD, STOP_AT = threading.Event(), threading.Event(), [0.0]   # dayanma: STOP → yeni iş yox; HARD (və ya GRACE keçdi) → işləyəni dayandır
+LOCK = threading.Lock()
+PRIMARY = set()          # əsas iş qovluğu hazırda məşğul olan proyekt yolları
+WORKERS_N = [1]          # bu agentin işçi sayı (main təyin edir)
+PROGRESS_OK = [True]     # köhnə server `progress` bilmirsə bir dəfə xəta verəndən sonra göndərmirik
+STOP_MSG = 'Agent dayandırıldı (kompüterdə agent söndürüldü), tapşırıq yarımçıq qaldı. Yenidən göndər.'
 # Fayl redaktəsinə əlavə: git əmrləri (səviyyəyə görə). Dağıdıcı əmrlər (reset --hard, clean, zorla push) heç vaxt icazəli deyil.
 READONLY_GIT = ','.join([
     'Bash(git status:*)', 'Bash(git log:*)', 'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(git rev-list:*)',
@@ -37,6 +57,15 @@ GIT_DENY = ','.join(['Bash(git push --force:*)', 'Bash(git push -f:*)', 'Bash(gi
 def git_level():
     v = (os.environ.get('CLAUDE_TEAM_GIT') or load_env().get('CLAUDE_TEAM_GIT') or 'safe').strip().lower()
     return v if v in ('read', 'safe', 'full') else 'safe'
+
+
+def workers():
+    """Eyni anda neçə tapşırıq (1..4). Yalnız kompüterin sahibi seçir."""
+    try:
+        n = int((os.environ.get('CLAUDE_TEAM_WORKERS') or load_env().get('CLAUDE_TEAM_WORKERS') or '1').strip())
+    except ValueError:
+        n = 1
+    return max(1, min(WORKERS_MAX, n))
 
 
 def allowed_tools():
@@ -63,7 +92,7 @@ def read_conf():
 
 
 def load_env():
-    """CLI girişi mühitdən görünmürsə (məs. launcher-dən başlayanda), tokeni bu fayldan götür. Yalnız bu 2 açar."""
+    """CLI girişi mühitdən görünmürsə (məs. launcher-dən başlayanda), tokeni bu fayldan götür. Yalnız bu açarlar."""
     out = {}
     try:
         with open(ENVFILE) as f:
@@ -71,7 +100,7 @@ def load_env():
                 line = line.strip()
                 if '=' in line and not line.startswith('#'):
                     k, v = line.split('=', 1)
-                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT'):
+                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT', 'CLAUDE_TEAM_WORKERS'):
                         out[k.strip()] = v.strip().strip('"\'')
     except FileNotFoundError:
         pass
@@ -92,11 +121,11 @@ def read_projects():
     return out
 
 
-def call(base, token, action, payload=None):
+def call(base, token, action, payload=None, timeout=20):
     req = urllib.request.Request(
         f'{base}?a={action}', data=json.dumps(payload or {}).encode(), method='POST',
         headers={'X-Team-Token': token, 'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
 
@@ -150,8 +179,9 @@ def kill_group(proc):
             time.sleep(.1)
 
 
-SESSIONS = os.path.expanduser('~/.claude-team-sessions.json')   # proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
+SESSIONS = os.environ.get('CLAUDE_TEAM_SESSIONS', os.path.expanduser('~/.claude-team-sessions.json'))   # proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
 SESSION_TTL = 24 * 3600
+SESS_LOCK = threading.Lock()   # paralel işçilər faylı eyni anda yazmasın
 
 
 def sess_load():
@@ -176,8 +206,83 @@ def sess_save(d):
         pass
 
 
-def exec_claude(base, token, args, cmd, path):
-    """Bir claude prosesini işlədir; "Dayandır" və vaxt limiti izlənir. Qaytarır: (out, err, returncode) və ya (None, mesaj, 'end')."""
+def stopping_hard():
+    """İşləyən tapşırığı indi dayandırmaq lazımdırmı? (ikinci Ctrl+C və ya gözləmə vaxtı bitdi)"""
+    return HARD.is_set() or (STOP.is_set() and time.time() - STOP_AT[0] >= GRACE)
+
+
+class Progress:
+    """stream-json hadisələrindən canlı gedişat: hazırkı addım, son fayllar, təxmini faiz, sessiya və yekun nəticə."""
+
+    def __init__(self, cwd, step='Claude başlayır'):
+        self.cwd = cwd.rstrip('/') + '/'
+        self.step, self.files, self.msgs, self.text = step, [], set(), ''
+        self.sid, self.result, self.events, self.dirty, self.last = None, None, 0, True, 0.0
+
+    def rel(self, p):
+        p = str(p)
+        return p[len(self.cwd):] if p.startswith(self.cwd) else p
+
+    def set(self, step):
+        self.step, self.dirty = ' '.join(str(step).split())[:160], True
+
+    def tool(self, name, inp):
+        inp = inp if isinstance(inp, dict) else {}
+        f = inp.get('file_path') or inp.get('notebook_path')
+        if f:
+            f = self.rel(f)[:200]
+            self.files = [x for x in self.files if x != f][-5:] + [f]
+        arg = f or inp.get('command') or inp.get('pattern') or inp.get('url') or inp.get('description') or inp.get('query') or ''
+        self.set(f'{name} · {arg}' if arg else name)
+
+    def feed(self, line):
+        try:
+            ev = json.loads(line)
+        except Exception:  # noqa
+            return
+        if not isinstance(ev, dict) or not ev.get('type'):
+            return
+        self.events += 1
+        t = ev['type']
+        if isinstance(ev.get('session_id'), str):
+            self.sid = ev['session_id']
+        if t == 'system' and ev.get('subtype') == 'init':
+            self.set('Sessiya başladı')
+        elif t == 'assistant':
+            m = ev.get('message') if isinstance(ev.get('message'), dict) else {}
+            self.msgs.add(m.get('id') or len(self.msgs))
+            for c in m.get('content') or []:
+                if not isinstance(c, dict):
+                    continue
+                if c.get('type') == 'tool_use':
+                    self.tool(str(c.get('name') or '?'), c.get('input'))
+                elif c.get('type') == 'text' and str(c.get('text') or '').strip():
+                    self.text = str(c['text'])
+                    self.set(self.text[:120])
+        elif t == 'result':
+            self.result = ev
+
+    def payload(self):
+        n = len(self.msgs)   # təxmini: addım sayı adi büdcəyə nisbətən, heç vaxt 100 deyil (100 = finish)
+        return {'step': self.step, 'files': self.files[-6:], 'pct': min(95, round(100 * n / (n + 12))) if n else None, 'at': int(time.time())}
+
+
+def post_progress(base, token, cmd, prog):
+    prog.dirty, prog.last = False, time.time()
+    if not PROGRESS_OK[0]:
+        return
+    try:
+        call(base, token, 'progress', {'id': cmd['id'], 'progress': prog.payload()}, timeout=8)
+    except urllib.error.HTTPError as e:
+        if e.code in (400, 404):         # köhnə server: `progress` yoxdur, bir daha cəhd etmə
+            PROGRESS_OK[0] = False
+    except Exception:  # noqa
+        pass
+
+
+def exec_claude(base, token, args, cmd, path, prog=None):
+    """Bir claude prosesini işlədir; "Dayandır", vaxt limiti və agentin dayanması izlənir. prog verilibsə stdout sətir-sətir
+    oxunur və gedişat ən azı 2 san aralıqla serverə göndərilir. Qaytarır: (out, err, returncode) və ya (None, mesaj, 'end')."""
     env = {**os.environ, **load_env(), **git_env(), 'CLAUDE_TEAM_RUN': str(cmd['id'])}
     try:
         proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=path, env=env,
@@ -191,7 +296,33 @@ def exec_claude(base, token, args, cmd, path):
             box['out'], box['err'] = proc.communicate(cmd['prompt'])
         except Exception as e:  # noqa
             box['exc'] = e
-    th = threading.Thread(target=work, daemon=True)
+
+    def work_stream():
+        def feed_in():
+            try:
+                proc.stdin.write(cmd['prompt'])
+                proc.stdin.close()
+            except Exception:  # noqa
+                pass
+        errs, lines = [], []
+        ts = [threading.Thread(target=feed_in, daemon=True), threading.Thread(target=lambda: errs.append(proc.stderr.read()), daemon=True)]
+        for t in ts:
+            t.start()
+        try:
+            for line in proc.stdout:
+                if not prog.events and len(lines) < 5000:   # hadisə gəlməyibsə xam çıxışı saxla (köhnə üsula keçid üçün)
+                    lines.append(line)
+                try:
+                    prog.feed(line)
+                except Exception:  # noqa
+                    pass
+            proc.wait()
+            for t in ts:
+                t.join(5)
+            box['out'], box['err'] = ''.join(lines), ''.join(errs)
+        except Exception as e:  # noqa
+            box['exc'] = e
+    th = threading.Thread(target=work_stream if prog else work, daemon=True)
     th.start()
     t0, last = time.time(), 0.0
     while th.is_alive():
@@ -200,6 +331,11 @@ def exec_claude(base, token, args, cmd, path):
         if now - t0 > TIMEOUT:
             kill_group(proc); th.join(5)
             return None, f'Vaxt bitdi ({TIMEOUT} san).', 'end'
+        if stopping_hard():
+            kill_group(proc); th.join(5)
+            return None, STOP_MSG, 'end'
+        if prog and prog.dirty and now - prog.last >= 2 and th.is_alive():
+            post_progress(base, token, cmd, prog)
         if now - last >= 3:
             last = now
             try:
@@ -224,25 +360,48 @@ def parse_result(out):
     return None, None, False
 
 
-def run_claude(base, token, claude, cmd, path, extra_args=()):
-    """claude -p işlədir. Eyni proyekt və göndərən üçün əvvəlki söhbəti davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan."""
+def run_claude(base, token, claude, cmd, path, extra_args=(), cwd=None):
+    """claude -p işlədir. Eyni proyekt və göndərən üçün əvvəlki söhbəti davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan.
+    cwd: paralel iş üçün git worktree (onda söhbət davam etdirilmir və saxlanmır, çünki sessiya qovluğa bağlıdır)."""
+    wt = bool(cwd and cwd != path)
+    run_dir = cwd or path
     key = path + '|' + (cmd.get('creator') or '')
-    store = sess_load()
-    sid = None if cmd.get('fresh') else (store.get(key) or {}).get('sid')
-    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
-    out, err, rc = exec_claude(base, token, base_args + (['--resume', sid] if sid else []), cmd, path)
+    sid = None if (cmd.get('fresh') or wt) else (sess_load().get(key) or {}).get('sid')
+    mode = ['stream' if STREAM else 'json']
+    tail = ['--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
+
+    def go(with_sid):
+        """Qaytarır: (out, err, rc, mətn, sessiya, xəta_bayrağı)."""
+        res = ['--resume', with_sid] if with_sid else []
+        if mode[0] == 'json':
+            out, err, rc = exec_claude(base, token, [claude, '-p', '--output-format', 'json'] + tail + res, cmd, run_dir)
+            return (out, err, rc) + ((None, None, False) if rc == 'end' else parse_result(out))
+        prog = Progress(run_dir, '⎇ worktree · Claude başlayır' if wt else 'Claude başlayır')
+        out, err, rc = exec_claude(base, token, [claude, '-p', '--output-format', 'stream-json', '--verbose'] + tail + res, cmd, run_dir, prog)
+        if rc == 'end':
+            return out, err, rc, None, None, False
+        r = prog.result
+        if r is not None:
+            return out, err, rc, str(r.get('result') or ''), r.get('session_id') or prog.sid, bool(r.get('is_error'))
+        if not prog.events and rc != 0 and not with_sid:   # stream-json alınmadı (köhnə claude?): bu iş üçün köhnə üsul
+            mode[0] = 'json'
+            return go(None)
+        if prog.events:                                    # hadisələr gəldi, amma yekun yoxdur (yarımçıq qırıldı)
+            return prog.text, err, rc, None, prog.sid, False
+        return (out, err, rc) + parse_result(out)
+    out, err, rc, text, new_sid, is_err = go(sid)
     if rc == 'end':
         return err, 'failed'
-    text, new_sid, is_err = parse_result(out)
     if sid and (rc != 0 or is_err or text is None):            # köhnə söhbət tapılmadı/xəta: sıfırdan bir də cəhd et
-        out, err, rc = exec_claude(base, token, base_args, cmd, path)
+        out, err, rc, text, new_sid, is_err = go(None)
         if rc == 'end':
             return err, 'failed'
-        text, new_sid, is_err = parse_result(out)
         sid = None
-    if new_sid:
-        store[key] = {'sid': new_sid, 'ts': time.time()}
-        sess_save(store)
+    if new_sid and not wt:
+        with SESS_LOCK:
+            store = sess_load()
+            store[key] = {'sid': new_sid, 'ts': time.time()}
+            sess_save(store)
     if text is None:
         text = out.strip() or err.strip() or '(boş cavab)'
     elif not text.strip():
@@ -251,34 +410,159 @@ def run_claude(base, token, claude, cmd, path, extra_args=()):
     return head + text, ('done' if rc == 0 and not is_err else 'failed')
 
 
+def git(d, *a, timeout=60):
+    return subprocess.run(['git', '-C', d] + list(a), capture_output=True, text=True, timeout=timeout)
+
+
+def can_worktree(path):
+    return git_level() in ('safe', 'full') and os.path.exists(os.path.join(path, '.git'))
+
+
+def wt_add(path, cid):
+    """Proyektin HEAD-indən ayrıca worktree (detached). Qaytarır: (yol, başlanğıc commit) və ya None."""
+    try:
+        os.makedirs(WT_DIR, exist_ok=True)
+        wt = os.path.join(WT_DIR, f'{os.path.basename(path.rstrip("/")) or "proyekt"}-{cid}')
+        if os.path.exists(wt):
+            wt += f'-{int(time.time())}'
+        if git(path, 'worktree', 'add', '--detach', wt, 'HEAD', timeout=180).returncode != 0:
+            return None
+        return wt, git(wt, 'rev-parse', 'HEAD').stdout.strip()
+    except Exception:  # noqa
+        return None
+
+
+def wt_done(path, wt, head0, cid):
+    """İşdən sonra: commit-lər budaqda saxlanır, commit olunmamış dəyişiklik varsa worktree qalır, təmizdirsə silinir. Qaytarır: qeyd."""
+    try:
+        head = git(wt, 'rev-parse', 'HEAD').stdout.strip()
+        br = git(wt, 'symbolic-ref', '-q', '--short', 'HEAD').stdout.strip()
+        notes = []
+        if head and head != head0 and not br:
+            b = f'jarvis/{cid}'
+            if git(wt, 'show-ref', '--verify', '--quiet', f'refs/heads/{b}').returncode == 0:
+                b += f'-{int(time.time())}'
+            if git(wt, 'switch', '-c', b).returncode == 0:
+                br = b
+                notes.append(f'yeni commit-lər `{b}` budağında saxlanıb')
+            else:
+                notes.append(f'yeni commit-lər budağa yazılmadı (HEAD {head[:10]})')
+        elif br:
+            notes.append(f'iş `{br}` budağındadır')
+        if git(wt, 'status', '--porcelain').stdout.strip():
+            notes.append(f'commit olunmamış dəyişikliklər var, worktree saxlanıldı: {wt} (bax, birləşdir, sonra `git worktree remove {wt}`)')
+        elif git(path, 'worktree', 'remove', wt).returncode == 0:
+            notes.append('worktree silindi' if notes else 'dəyişiklik yoxdur, worktree silindi')
+        else:
+            notes.append(f'worktree silinmədi: {wt}')
+        return '; '.join(notes)
+    except Exception as e:  # noqa
+        return f'worktree yoxlanmadı ({e}): {wt}'
+
+
+def acquire(base, token, cmd, path):
+    """Proyekt üçün iş qovluğu: əsas qovluq boşdursa o, deyilsə git worktree; mümkün deyilsə əsas qovluq boşalana qədər gözlə.
+    Qaytarır: (qovluq, worktree_məlumatı | None, None) və ya (None, None, səbəb)."""
+    no_wt, waited, last = False, False, 0.0
+    while True:
+        with LOCK:
+            if path not in PRIMARY:
+                PRIMARY.add(path)
+                return path, None, None
+        if STOP.is_set():
+            return None, None, 'Agent dayandırıldı, tapşırıq başlamadı. Yenidən göndər.'
+        if not no_wt and can_worktree(path):
+            w = wt_add(path, cmd['id'])
+            if w:
+                return w[0], w, None
+            no_wt = True
+        if not waited:
+            waited = True
+            print(f"   #{cmd['id']} gözləyir: bu proyektdə başqa iş gedir", flush=True)
+            post_progress(base, token, cmd, Progress(path, 'Növbədə: bu proyektdə başqa iş gedir, bitməsi gözlənilir'))
+        if time.time() - last >= 3:
+            last = time.time()
+            try:
+                if call(base, token, 'poll', {'id': cmd['id']}).get('cancel'):
+                    return None, None, 'Dayandırıldı.'
+            except Exception:  # noqa
+                pass
+        STOP.wait(1)
+
+
 def run_one(base, token, claude):
     cmd = call(base, token, 'claim')
     if cmd.get('none'):
         return False
+    handle(base, token, claude, cmd)
+    return True
+
+
+def handle(base, token, claude, cmd):
     projects = read_projects()
     path = next((projects[n] for n in (cmd.get('names') or [cmd['project']]) if n in projects), None)
     print(f"[{time.strftime('%H:%M:%S')}] #{cmd['id']} {cmd['project']}: {cmd['prompt'][:80]!r}", flush=True)
     if not path:
         call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
              'result': f"'{cmd['project']}' bu kompüterdə icazəli deyil. ~/.claude-team-projects siyahısına əlavə et."})
-        return True
+        return
     imgdir, extra = None, ()
     if cmd.get('images'):                                   # şəkilli prompt: faylları endir, Claude-a yolunu ver (--add-dir ilə oxuya bilsin)
         try:
             imgdir, files = fetch_images(base, token, cmd['images'])
         except Exception as e:  # noqa
             call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed', 'result': f'Şəkillər saytdan alınmadı: {e}'})
-            return True
+            return
         extra = ('--add-dir', imgdir)
         cmd['prompt'] += '\n\n[Göndərənin prompta əlavə etdiyi şəkillər (Read aləti ilə bax): ' + ', '.join(files) + ']'
+    wt, held = None, False
     try:
-        out, status = run_claude(base, token, claude, cmd, path, extra)
+        cwd, wt, why = acquire(base, token, cmd, path)
+        held = cwd == path
+        if why:
+            out, status = why, 'failed'
+        else:
+            if wt:
+                print(f"   #{cmd['id']} paralel: worktree {cwd}", flush=True)
+                cmd['prompt'] += (f'\n\n[Qeyd: bu tapşırıq eyni proyektdəki başqa işlə paralel getdiyi üçün ayrıca git worktree-də işləyir: {cwd} '
+                                  '(detached HEAD). Yalnız bu qovluqda işlə, budaq dəyişmə. Git-ə düşməyən fayllar (.env, node_modules və s.) burada yoxdur.]')
+            out, status = run_claude(base, token, claude, cmd, path, extra, cwd)
+            if wt:
+                out += '\n\n⎇ Paralel iş ayrıca git worktree-də getdi: ' + wt_done(path, cwd, wt[1], cmd['id'])
     finally:
+        if held:
+            with LOCK:
+                PRIMARY.discard(path)
         if imgdir:
             shutil.rmtree(imgdir, ignore_errors=True)
     call(base, token, 'finish', {'id': cmd['id'], 'status': status, 'result': out[-7500:]})
-    print(f'   → {status}', flush=True)
-    return True
+    print(f"   → #{cmd['id']} {status}" if WORKERS_N[0] > 1 else f'   → {status}', flush=True)
+
+
+def handle_safe(base, token, claude, cmd):
+    """Paralel işçi axını: xəta olsa belə tapşırıq "alınmadı" kimi bağlansın."""
+    try:
+        handle(base, token, claude, cmd)
+    except Exception as e:  # noqa
+        print(f"   #{cmd.get('id')} xəta: {e}", flush=True)
+        try:
+            call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed', 'result': f'Agent xətası: {e}'})
+        except Exception:  # noqa
+            pass
+
+
+def claim_many(base, token, claude, free, threads):
+    """Boş yer qədər tapşırıq götür (slots). Worktree mümkün olmayan və əsas qovluğu məşğul proyektləri ötür (skip)."""
+    with LOCK:
+        busy = set(PRIMARY)
+    skip = sorted(n for n, p in read_projects().items() if p in busy and not can_worktree(p))
+    r = call(base, token, 'claim', {'slots': free, 'skip': skip})
+    items = r['items'] if isinstance(r.get('items'), list) else ([] if r.get('none') else [r])   # köhnə server: tək obyekt
+    for cmd in items[:free]:
+        t = threading.Thread(target=handle_safe, args=(base, token, claude, cmd), daemon=True)
+        t.start()
+        threads.append(t)
+    return bool(items)
 
 
 def single_instance():
@@ -296,20 +580,38 @@ def single_instance():
     atexit.register(lambda: os.path.exists(PIDFILE) and os.unlink(PIDFILE))
 
 
+def on_signal(sig, frm):
+    """Ctrl+C / SIGTERM: yeni tapşırıq götürmə, işləyənləri GRACE san gözlə. İkinci siqnal: dərhal dayandır."""
+    if STOP.is_set():
+        HARD.set()
+        msg = 'Dərhal dayanır: işləyən tapşırıqlar dayandırılır.'
+    else:
+        STOP_AT[0] = time.time()
+        STOP.set()
+        msg = f'Dayanır: yeni tapşırıq götürülmür, işləyənlər {GRACE} san gözlənilir (yenidən Ctrl+C — dərhal).'
+    try:
+        print(msg, flush=True)
+    except Exception:  # noqa
+        pass
+
+
 def main():
     base, token = read_conf()
     claude = find_claude()
     once = '--once' in sys.argv
+    n = WORKERS_N[0] = 1 if once else workers()
     if not once:
         single_instance()
-    last_auth, logged_in, warned = 0, True, False
-    print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}', flush=True)
-    while True:
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    last_auth, logged_in, warned, threads = 0, True, False, []
+    print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}' + (f'  |  {n} paralel işçi' if n > 1 else ''), flush=True)
+    while not STOP.is_set():
         try:
             if time.time() - last_auth > 10:                   # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
                 last_auth = time.time()
                 logged_in = auth_ok(claude)
-                call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects())})
+                call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects()), 'workers': n})
                 if not logged_in and not warned:
                     warned = True
                     print('Claude girişi yoxdur: tapşırıq götürülmür. Terminalda `~/.local/bin/claude` yaz və /login et.', flush=True)
@@ -317,20 +619,44 @@ def main():
                     warned = False
                     print('Claude girişi var, tapşırıqlar götürülür.', flush=True)
             if not logged_in and not once:
-                time.sleep(POLL)
+                STOP.wait(POLL)
                 continue
-            got = run_one(base, token, claude)
-            if once:
-                return
+            if n == 1:
+                got = run_one(base, token, claude)
+                if once:
+                    return
+            else:
+                threads[:] = [t for t in threads if t.is_alive()]
+                got = len(threads) < n and claim_many(base, token, claude, n - len(threads), threads)
+                if len(threads) >= n:
+                    STOP.wait(1)
+                    continue
             if got:
                 continue
         except urllib.error.HTTPError as e:
             print('Server xətası:', e.code, flush=True)
             if e.code == 401:
+                STOP_AT[0] = STOP_AT[0] or time.time()
+                STOP.set()
+                shutdown(threads)
                 sys.exit('Token yanlışdır.')
         except Exception as e:  # şəbəkə kəsilməsi və s.
             print('Bağlantı xətası:', e, flush=True)
-        time.sleep(POLL)
+        STOP.wait(POLL)
+    shutdown(threads)
+
+
+def shutdown(threads):
+    """Paralel işçiləri gözlə: GRACE ərzində bitməyənləri dayandır (exec_claude özü öldürüb "alınmadı" yazır)."""
+    alive = [t for t in threads if t.is_alive()]
+    if not alive:
+        return
+    print(f'{len(alive)} tapşırıq bitməsi gözlənilir…', flush=True)
+    for t in alive:
+        t.join(max(0.0, STOP_AT[0] + GRACE - time.time()))
+    HARD.set()
+    for t in alive:
+        t.join(30)
 
 
 if __name__ == '__main__':
