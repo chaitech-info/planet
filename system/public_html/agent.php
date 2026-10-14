@@ -77,6 +77,10 @@ if ($act === 'poll') {                      // agent işləyərkən: ləğv olun
 }
 
 if ($act === 'ping') {
+    if (isset($in['projects']) && is_array($in['projects'])) {
+        $names = array_slice(array_values(array_filter(array_map(fn($x) => mb_substr(trim((string)$x), 0, 128), $in['projects']), 'strlen')), 0, 100);
+        $pdo->prepare('UPDATE agents SET projects = ? WHERE user = ?')->execute([implode("\n", $names), $user]);
+    }
     json_out(['ok' => true, 'user' => $user]);
 }
 

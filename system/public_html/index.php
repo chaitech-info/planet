@@ -2978,6 +2978,7 @@ addEventListener('kainat-ready', initGL);
 route();
 if (window.Kainat) initGL();
 </script>
+<script src="jarvis.js?v=<?= (int)@filemtime(__DIR__ . '/jarvis.js') ?>"></script>
 <?php endif; ?>
 </div>
 </body>

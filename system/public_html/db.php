@@ -1,5 +1,9 @@
 <?php
 $config = require __DIR__ . '/config.php';
+// Gizli lokal ayarlar (məs. Gemini API açarı): git-ə düşmür, serverdə əl ilə yaradılır
+if (is_file(__DIR__ . '/config.local.php')) {
+    $config = array_replace($config, (array)require __DIR__ . '/config.local.php');
+}
 date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 function db(): PDO
@@ -61,6 +65,11 @@ function db(): PDO
     )");
     try {
         $pdo->exec('ALTER TABLE agents ADD COLUMN claude_ok INT NOT NULL DEFAULT 1');
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    try {
+        $pdo->exec("ALTER TABLE agents ADD COLUMN projects TEXT NOT NULL DEFAULT ''");   // agentin icazəli proyekt qovluqları (ping ilə gəlir)
     } catch (Throwable $e) {
         // sütun artıq var
     }
@@ -190,6 +199,13 @@ function db(): PDO
         creator VARCHAR(64) NOT NULL,
         created_at INT NOT NULL
     )");
+    // Jarvis (səsli agent): istifadəçi üzrə gündəlik istifadə (saniyə)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_usage (
+        user VARCHAR(64) NOT NULL,
+        day VARCHAR(10) NOT NULL,
+        seconds INT NOT NULL,
+        PRIMARY KEY (user, day)
+    )");
     // Test Planet: proyekt üzrə test ssenariləri (keçdi / xəta / yoxlanmayıb)
     $pdo->exec("CREATE TABLE IF NOT EXISTS tests (
         id $id,
@@ -293,7 +309,6 @@ function notify(string $text): bool
         curl_setopt_array($c, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $body, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 3]);
         $r = curl_exec($c);
         $code = curl_getinfo($c, CURLINFO_HTTP_CODE);
-        curl_close($c);
         return $r !== false && $code === 200;
     }
     $ctx = stream_context_create(['http' => ['method' => 'POST', 'header' => 'Content-Type: application/x-www-form-urlencoded', 'content' => $body, 'timeout' => 5]]);

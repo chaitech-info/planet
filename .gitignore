@@ -1,2 +1,5 @@
 system/public_html/data/
 .DS_Store
+system/public_html/config.local.php
+system/dev/agent-local/
+.claude/
