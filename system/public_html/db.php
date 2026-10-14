@@ -78,6 +78,11 @@ function db(): PDO
     } catch (Throwable $e) {
         // sütun artıq var
     }
+    try {
+        $pdo->exec('ALTER TABLE agents ADD COLUMN auto_tasks INT NOT NULL DEFAULT 1');   // 1 = lövhədə ona təyin olunan tapşırıqlar avtomatik agentinə gedir
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (
         name VARCHAR(64) NOT NULL PRIMARY KEY,
         token_hash VARCHAR(64) NOT NULL,
@@ -319,6 +324,61 @@ function cmdimg_cleanup(PDO $pdo): void
         }
         $pdo->prepare("UPDATE commands SET images = '' WHERE id = ?")->execute([$r['id']]);
     }
+}
+
+/* ---------- Lövhə tapşırığı → agent: prompt və avtomatik icra ---------- */
+/** Lövhə tapşırığından Claude Code promptu (əl ilə "▶ Claude ilə" və avtomatik icra eyni mətni işlədir). */
+function task_command_prompt(array $t): string
+{
+    return "Tapşırıq: " . $t['title'] . "\n\n" . trim((string)$t['details']) . "\n\n"
+        . "Bu tapşırığı bu proyektdə yerinə yetir. Fayl dəyişikliyi və əsas git əmrləri (status, pull, add, commit) icazəlidir. Qalan terminal əmrləri (test, quraşdırma, push) bloklana bilər: lazım olsa, əl ilə nəyi işlətmək lazım olduğunu sonda yaz. İşi bitirəndə nə etdiyini qısa yaz.";
+}
+
+/** İstifadəçinin agenti bu proyektin qovluğunu bildiribmi? (panel adı → qovluq adı alias-ları da sayılır). Agent siyahı göndərməyibsə false. */
+function agent_has_project(PDO $pdo, string $user, string $project): bool
+{
+    $st = $pdo->prepare('SELECT projects FROM agents WHERE user = ?');
+    $st->execute([$user]);
+    $raw = $st->fetchColumn();
+    if ($raw === false) {
+        return false;
+    }
+    $allowed = array_values(array_filter(explode("\n", (string)$raw), 'strlen'));
+    if (!$allowed) {
+        return false;
+    }
+    $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');
+    $al->execute([$project]);
+    $names = array_merge([$project], $al->fetchAll(PDO::FETCH_COLUMN));
+    return (bool)array_intersect($names, $allowed);
+}
+
+/**
+ * Tapşırığı icraçının agentinə avtomatik göndərir (agentlər lövhəni özləri işləsin):
+ * icraçının agenti var, avtomatik rejim açıqdır, proyekt onun kompüterində qurulub və növbə dolu deyil.
+ * Uğurlu olsa tapşırıq "İşləyir"ə keçir və komandanın id-si qayıdır; yoxsa null (tapşırıq "Gözləyir"də qalır, əl ilə göndərilə bilər).
+ */
+function auto_run_task(PDO $pdo, array $t, int $now): ?int
+{
+    if (($t['status'] ?? '') !== 'todo') {
+        return null;
+    }
+    $ag = $pdo->prepare('SELECT auto_tasks FROM agents WHERE user = ?');
+    $ag->execute([$t['assignee']]);
+    $auto = $ag->fetchColumn();
+    if ($auto === false || (int)$auto !== 1 || !agent_has_project($pdo, $t['assignee'], $t['project'])) {
+        return null;
+    }
+    $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('pending','queued','running')");
+    $c->execute([$t['assignee']]);
+    if ((int)$c->fetchColumn() >= 5) {
+        return null;
+    }
+    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh) VALUES (?,?,?,?,?,?,?,?,'',1)")
+        ->execute([$t['assignee'], $t['project'], mb_substr(task_command_prompt($t), 0, 4000), 'queued', '', $now, 0, 0]);   // tapşırıq həmişə təzə söhbətdə
+    $cid = (int)$pdo->lastInsertId();
+    $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, updated_at = ? WHERE id = ?")->execute([$cid, $now, $t['id']]);
+    return $cid;
 }
 
 /* ---------- Studentlər: ayrıca univers, yalnız öz universlərini görürlər ---------- */

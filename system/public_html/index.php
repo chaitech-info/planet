@@ -2286,20 +2286,31 @@ function openTaskModal(prj) {
   const isAdmin = ME && ME.role === 'admin';
   for (const u of (isAdmin ? data.users : [ME.name])) who.append(Object.assign(document.createElement('option'), { value: u, textContent: (isAdmin ? 'Kimə: ' : 'Mənə: ') + u }));
   if (ME) who.value = ME.name; who.disabled = !isAdmin;
-  $('tk-hint').textContent = isAdmin ? 'Hər kəsə təyin edə bilərsən.' : 'Tapşırıq sənə təyin olunacaq.';
   $('tk-err').hidden = true;
   if (prj) $('tk-prj').value = prj; else if (!$('tk-prj').value && curPlanet) $('tk-prj').value = curPlanet;
+  tkAutoHint();
   openM('tk'); $('tk-title').focus();
+}
+/** Yeni tapşırıq pəncərəsində: bu tapşırıq agentə avtomatik gedəcəkmi? */
+function tkAutoHint() {
+  const who = $('tk-who').value, prj = $('tk-prj').value.trim(), isAdmin = ME && ME.role === 'admin';
+  const base = isAdmin ? 'Hər kəsə təyin edə bilərsən. ' : '';
+  if (!who) { $('tk-hint').textContent = base; return; }
+  const a = agentInfo(who);
+  $('tk-hint').textContent = base + (taskAutoRun(who, prj) ? '🤖 ' + who + '-in agenti tapşırığı dərhal götürəcək' + (a.online ? '.' : ' (agent oflayndır, onlayn olanda).')
+    : !a.ag ? '✋ ' + who + '-in agenti yoxdur: tapşırıq lövhədə gözləyəcək.' : !a.auto ? '✋ ' + who + ' avtomatik lövhəni söndürüb: tapşırıq gözləyəcək.' : prj ? '✋ "' + prj + '" ' + who + '-in kompüterində qurulmayıb: tapşırıq gözləyəcək.' : '');
 }
 function initBoard() {
   $('bf-prj').onchange = () => { bfPrj = $('bf-prj').value; renderBoard(); };
   $('b-newtask').onclick = () => openTaskModal();
   $('tk').addEventListener('pointerdown', e => { if (e.target === $('tk')) closeM('tk'); });
+  $('tk-prj').addEventListener('input', tkAutoHint); $('tk-who').addEventListener('change', tkAutoHint);
   $('tk-save').onclick = async () => {
     const e = $('tk-err'); e.hidden = true; $('tk-save').disabled = true;
-    const { status, d } = await TSK('create', { title: $('tk-title').value, details: $('tk-det').value, project: $('tk-prj').value, assignee: $('tk-who').value, due_at: fromLocal($('tk-due').value) });
+    const who = $('tk-who').value;
+    const { status, d } = await TSK('create', { title: $('tk-title').value, details: $('tk-det').value, project: $('tk-prj').value, assignee: who, due_at: fromLocal($('tk-due').value) });
     $('tk-save').disabled = false;
-    if (status === 200) { $('tk-title').value = ''; $('tk-det').value = ''; $('tk-due').value = ''; closeM('tk'); load(); }
+    if (status === 200) { $('tk-title').value = ''; $('tk-det').value = ''; $('tk-due').value = ''; closeM('tk'); if (d.auto) miniToast('🤖 Tapşırıq ' + who + '-in agentinə göndərildi'); load(); }
     else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
   };
   $('btok-save').onclick = async () => {
@@ -2525,7 +2536,13 @@ function agentInfo(u) {
   const ag = (data.agents || []).find(a => a.user === u);
   const online = !!(ag && now() - ag.last_seen < AGENT_TTL);
   const cm = (data.commands || []).filter(c => c.user === u);
-  return { ag, online, cm, run: cm.filter(c => c.status === 'running'), queued: cm.filter(c => c.status === 'queued'), login: !ag || +ag.claude_ok === 1 };
+  return { ag, online, cm, run: cm.filter(c => c.status === 'running'), queued: cm.filter(c => c.status === 'queued'), login: !ag || +ag.claude_ok === 1,
+    auto: !!ag && +(ag.auto_tasks ?? 1) === 1, projects: ag ? String(ag.projects || '').split('\n').filter(Boolean) : [] };   // auto: lövhə tapşırıqları avtomatik agentə gedir
+}
+/** Bu tapşırıq icraçının agentinə avtomatik gedəcəkmi? (server də eyni qaydalarla yoxlayır: agent var, avto açıq, proyekt onun kompüterində qurulub) */
+function taskAutoRun(assignee, project) {
+  const a = agentInfo(assignee);
+  return !!(a.ag && a.auto && project && a.projects.includes(project));
 }
 function agentList() {
   return (data.users || []).map(u => {
@@ -2837,7 +2854,7 @@ function renderMcpPlanet(name) {
 function renderAgentPlanet(u) {
   const a = agentInfo(u), mine = ME && ME.name === u, admin = ME && ME.role === 'admin';
   const box = $('xa-info');
-  const sig = [u, a.online, a.login, a.cm.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 15)].join('|');
+  const sig = [u, a.online, a.login, a.auto, !!a.ag, a.cm.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 15)].join('|');
   if (box._sig === sig) return; box._sig = sig; box.replaceChildren();
   const head = el('div', 'infobox');
   head.append(el('div', null, (a.online ? '🟢 Agent onlayn' : a.ag ? '⚫ Agent oflayn · son: ' + ago(a.ag.last_seen) : '⚫ Agent heç qoşulmayıb') + (a.online && !a.login ? ' · ⚠ Claude girişi yoxdur' : '')));
@@ -2845,6 +2862,18 @@ function renderAgentPlanet(u) {
   head.append(el('div', 'mnote', `${a.run.length} işləyir · ${a.queued.length} növbədə · ${done} bitdi · ${fail} xəta (son 40 tapşırıq içində)`));
   if (mine && !a.online) { const l = el('a', 'gbtn go', '▶ Agenti işə sal'); l.href = 'claudeteam://start'; l.style.textDecoration = 'none'; l.style.display = 'inline-block'; l.style.marginTop = '6px'; head.append(l); }
   box.append(head);
+  // Avtomatik lövhə: ona təyin olunan tapşırıqlar agentinə özü gedir, bitəndə "Yoxlamada"ya düşür
+  const au = el('div', 'infobox'); au.style.marginTop = '8px';
+  const ar = el('div', 'row2'); ar.append(el('b', null, a.auto && a.ag ? '⚡ Lövhə avtomatikdir' : '✋ Lövhə əl ilə'), el('span', 'sp'));
+  if (mine) {
+    const tg = el('button', 'gbtn' + (a.auto ? '' : ' go'), a.auto ? 'Söndür' : 'Aç');
+    tg.onclick = async () => { tg.disabled = true; const { status, d } = await CTL('agent_auto', { on: !a.auto }); if (status !== 200) miniToast(d.error || 'Alınmadı'); await load(); };
+    ar.append(tg);
+  }
+  au.append(ar, el('div', 'mnote', a.auto && a.ag
+    ? u + '-ə lövhədə tapşırıq təyin olunan kimi agenti onu götürür (proyekt onun kompüterində qurulubsa), bitirəndə tapşırıq "Yoxlamada"ya keçir, alınmasa "Gözləyir"ə qayıdır.'
+    : a.ag ? 'Tapşırıqlar yalnız "▶ Claude ilə" düyməsi ilə göndərilir.' : 'Agent hələ qoşulmayıb: avtomatik lövhə agent ilk dəfə işə düşəndən sonra işləyir.'));
+  box.append(au);
   const tasks = (data.tasks || []).filter(t => t.assignee === u && t.status !== 'done');
   if (tasks.length) {
     box.append(el('div', 'lbl', '📌 Ona təyin olunan açıq tapşırıqlar'));

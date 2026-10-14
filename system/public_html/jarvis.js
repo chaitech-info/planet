@@ -193,8 +193,9 @@
       if (!assignee) throw new Error('Belə istifadəçi yoxdur: ' + a.assignee);
       const due = parseWhen(a.due); if (Number.isNaN(due)) throw new Error('Tarix başa düşülmədi: ' + a.due);
       const project = pl ? pl.name : a.project;
-      await R(TSK('create', { title: a.title, details: a.details || '', project, assignee, due_at: due || 0 }));
-      await load(); return ok(`Tapşırıq yaradıldı: “${a.title}” → ${assignee}, ${project}` + (due ? ', son tarix ' + when(due) : ''));
+      const d = await R(TSK('create', { title: a.title, details: a.details || '', project, assignee, due_at: due || 0 }));
+      await load(); return ok(`Tapşırıq yaradıldı: “${a.title}” → ${assignee}, ${project}` + (due ? ', son tarix ' + when(due) : '') + (d.auto ? ' · 🤖 agentinə avtomatik göndərildi' : ''),
+        { auto_sent_to_agent: !!d.auto });
     },
     async set_task_status(a) {
       need(a, 'task', 'status'); confirmed(a);

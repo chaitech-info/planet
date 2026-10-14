@@ -60,12 +60,17 @@ if ($act === 'finish') {
     $result = mb_substr((string)($in['result'] ?? ''), 0, 8000);
     $st = $pdo->prepare("UPDATE commands SET status = ?, result = ?, finished_at = ? WHERE id = ? AND user = ? AND status = 'running'");
     $st->execute([$status, $result, $now, (int)($in['id'] ?? 0), $user]);
-    if ($st->rowCount() === 1 && $status === 'done') {
+    if ($st->rowCount() === 1) {
         $tq = $pdo->prepare("SELECT id, title, project FROM tasks WHERE command_id = ? AND assignee = ? AND status = 'doing'");
         $tq->execute([(int)($in['id'] ?? 0), $user]);
         if ($tr = $tq->fetch()) {
-            $pdo->prepare("UPDATE tasks SET status = 'review', updated_at = ? WHERE id = ?")->execute([$now, $tr['id']]);
-            notify_later("🤖 Claude işi bitirdi, yoxlamada: {$tr['title']}\n$user · {$tr['project']}");
+            if ($status === 'done') {                     // bitdi → insan yoxlasın
+                $pdo->prepare("UPDATE tasks SET status = 'review', updated_at = ? WHERE id = ?")->execute([$now, $tr['id']]);
+                notify_later("🤖 Claude işi bitirdi, yoxlamada: {$tr['title']}\n$user · {$tr['project']}");
+            } else {                                      // alınmadı → "Gözləyir"ə qayıdır ki, kartda xəta görünsün və yenidən göndərilə bilsin
+                $pdo->prepare("UPDATE tasks SET status = 'todo', updated_at = ? WHERE id = ?")->execute([$now, $tr['id']]);
+                notify_later("⚠ Claude tapşırığı bacarmadı: {$tr['title']}\n$user · {$tr['project']}");
+            }
         }
     }
     json_out(['ok' => $st->rowCount() === 1]);

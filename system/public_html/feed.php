@@ -100,7 +100,7 @@ foreach ($cmds as $i => &$c) {
     $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
 }
 unset($c);
-$agents = $pdo->query('SELECT user, last_seen, claude_ok, projects FROM agents')->fetchAll();
+$agents = $pdo->query('SELECT user, last_seen, claude_ok, projects, auto_tasks FROM agents')->fetchAll();
 
 $tk = $pdo->prepare("SELECT id, project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at, due_at
     FROM tasks WHERE status != 'done' OR updated_at > ? ORDER BY updated_at DESC LIMIT 300");

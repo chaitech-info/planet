@@ -115,10 +115,8 @@ if ($act === 'run_task') {
     if ((int)$c->fetchColumn() >= 5) {
         json_out(['error' => 'növbədə artıq 5 tapşırıq var, gözlə'], 429);
     }
-    $prompt = "Tapşırıq: " . $t['title'] . "\n\n" . trim((string)$t['details']) . "\n\n"
-        . "Bu tapşırığı bu proyektdə yerinə yetir. Fayl dəyişikliyi və əsas git əmrləri (status, pull, add, commit) icazəlidir. Qalan terminal əmrləri (test, quraşdırma, push) bloklana bilər: lazım olsa, əl ilə nəyi işlətmək lazım olduğunu sonda yaz. İşi bitirəndə nə etdiyini qısa yaz.";
     $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, fresh) VALUES (?,?,?,?,?,?,?,?,1)")
-        ->execute([$user, $t['project'], mb_substr($prompt, 0, 4000), 'queued', '', $now, 0, 0]);   // tapşırıq həmişə təzə söhbətdə
+        ->execute([$user, $t['project'], mb_substr(task_command_prompt($t), 0, 4000), 'queued', '', $now, 0, 0]);   // tapşırıq həmişə təzə söhbətdə
     $cid = (int)$pdo->lastInsertId();
     $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, updated_at = ? WHERE id = ?")->execute([$cid, $now, $t['id']]);
     json_out(['ok' => true, 'command_id' => $cid]);
