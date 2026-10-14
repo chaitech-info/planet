@@ -31,16 +31,16 @@ if ($act === 'stop_session') {
 }
 
 if ($act === 'stop_command') {
-    $q = $pdo->prepare('SELECT id, user, status FROM commands WHERE id = ?');
+    $q = $pdo->prepare('SELECT id, user, status, creator FROM commands WHERE id = ?');
     $q->execute([(int)($in['id'] ?? 0)]);
     $c = $q->fetch();
     if (!$c) {
         json_out(['error' => 'tapşırıq tapılmadı'], 404);
     }
-    if ($c['user'] !== $me['name'] && !$isAdmin) {
+    if ($c['user'] !== $me['name'] && $c['creator'] !== $me['name'] && !$isAdmin) {
         json_out(['error' => 'icazə yoxdur'], 403);
     }
-    if (!in_array($c['status'], ['queued', 'running'], true)) {
+    if (!in_array($c['status'], ['pending', 'queued', 'running'], true)) {
         json_out(['ok' => true, 'note' => 'artıq bitib']);
     }
     $pdo->prepare("UPDATE commands SET status = 'canceled', result = ?, finished_at = ? WHERE id = ?")->execute(['Dayandırıldı', $now, $c['id']]);

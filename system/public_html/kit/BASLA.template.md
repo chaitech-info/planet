@@ -62,7 +62,7 @@ Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ 
 - Agent yalnız hook quraşdırdığın proyektlərə prompt qəbul edir.
 - Claude girişi yoxdursa, panel "Claude girişi yoxdur" xəbərdarlığı göstərir və promptlar növbədə gözləyir.
 
-**Agentın səlahiyyəti qəsdən məhduddur:** fayl oxuya və redaktə edə bilər, oxuma xarakterli `git` əmrlərini (`status`, `log`, `diff`, `show`, `branch`) işlədə bilər. `commit`, `push`, `pull`, fayl silmə və digər terminal əmrləri **bloklanıb**.
+**Agentın səlahiyyəti qəsdən məhduddur:** fayl oxuya və redaktə edə bilər. `git` üçün standart səviyyə **safe**-dir: oxuma əmrləri (`status`, `log`, `diff`, `show`, `branch`) + `fetch`, `pull` (həmişə yalnız sürətli irəli, birləşmə commit-i yaranmır), `add`, `commit`, `switch`, `stash`. `push`, `merge`, `checkout` üçün səviyyəni **full** et: `~/.claude-team-agent.env` faylına `CLAUDE_TEAM_GIT=full` yaz (yalnız oxuma üçün `read`). Zorla push (`--force`), `reset --hard`, `clean`, fayl silmə və digər terminal əmrləri hər halda **bloklanıb**. Bu seçimi yalnız kompüterin sahibi edir.
 
 ## Tapşırıq lövhəsi
 

@@ -621,6 +621,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
 .prow .pt { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
 .prow .pm { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
 .prow .pb { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: rgba(233,233,243,.78); max-height: 4.4em; overflow: hidden; }
+.prow .pb.pbp:not(.open) { display: none; } .prow .pb.open { max-height: none; overflow: auto; } .prow .pbt { margin-top: 4px; font-size: 12px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
 .prow .pa { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .prow .pa .gbtn { padding: 3px 10px; font-size: 12px; }
 .prow .pa .danger { color: #f87171; border-color: rgba(248,113,113,.35); }
 .mcard { padding: 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.05); margin-bottom: 10px; }
@@ -850,6 +851,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
         </div>
         <div id="x-mcpu" hidden><div id="xm-info"></div></div>
         <div id="x-agentu" hidden><div id="xa-info"></div></div>
+        <div id="x-deskt" hidden><div id="xd-info"></div></div>
         <div id="x-meeting" hidden>
           <div class="cmdbar" style="margin-top:10px"><span class="cmdwho">Neytral ərazi: heç kimin proyekti deyil. Görüş vaxtı iştirakçıların gəmiləri bura uçur.</span><button class="gbtn go" id="mt-add">+ Görüş təyin et</button></div>
           <div class="lbl">🔴 İndi gedir</div><div id="mt-live"></div><div class="empty" id="mt-live-e">Hazırda görüş yoxdur.</div>
@@ -1298,6 +1300,7 @@ function renderSpace() {
     studio: [lists.studio.length + ' stansiya', lists.studio.filter(p => p.st === 'working' || p.st === 'meet').length + ' aktiv'],
     mcp: [lists.mcp.length + ' MCP server', lists.mcp.filter(p => p.st === 'working').length + ' indi işləyir'],
     agent: [lists.agent.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'],
+    desktop: [lists.desktop.length + ' kompüter', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'],
     student: [lists.student.length + ' student planeti', (data.students || []).filter(u => (data.presence || []).some(x => x.user === u && now() - x.last_seen < 60)).length + ' saytda'] };
   const hud = navUni ? [UNIVERSES.find(u => u.id === navUni).icon + ' ' + UNIVERSES.find(u => u.id === navUni).name + ' · ' + sums[navUni][0], sums[navUni][1]] : ['🗺 Kosmik xəritə', unis.length + ' univers'];
   setText($('hudA'), hud[0]); setText($('hudB'), hud[1]);
@@ -1401,7 +1404,7 @@ async function identify() {
   if (!getTok()) { myName = null; return; }
   try { const { status, d } = await cmdApi('whoami'); myName = status === 200 ? d.user : null; } catch (e) { myName = null; }
 }
-const CMD_ST = { queued: ['növbədə', 'offline'], running: ['işləyir', 'working'], done: ['bitdi', 'idle'], failed: ['xəta', 'waiting'], canceled: ['ləğv edildi', 'offline'] };
+const CMD_ST = { pending: ['təsdiq gözləyir', 'waiting'], queued: ['növbədə', 'offline'], running: ['işləyir', 'working'], done: ['bitdi', 'idle'], failed: ['xəta', 'waiting'], canceled: ['ləğv edildi', 'offline'] };
 function makeCmd() {
   const n = el('div', 'card cmdc');
   const h = el('div', 'ch'), who = el('b'), when = el('span'), st = el('span', 'st'), dot = el('span', 'dot'), lab = el('span');
@@ -2414,6 +2417,7 @@ const UNIVERSES = [
   { id: 'studio', icon: '🎨', name: 'Studio', hint: 'Prompt Generator, Designer, Meeting, Test' },
   { id: 'mcp', icon: '🛰', name: 'MCP Universe', hint: 'MCP serverləri və onları işlədən proyektlər' },
   { id: 'agent', icon: '🤖', name: 'Agent Universe', hint: 'AI agentləri, tapşırıqları və avtomatlaşdırma' },
+  { id: 'desktop', icon: '🖥', name: 'Desktop Universe', hint: 'Komanda yoldaşlarının kompüterlərindəki Claude Code: icazə verənə uzaqdan komanda göndər' },
   { id: 'student', icon: '🎓', name: 'Student Universe', hint: 'Hər studentin öz planeti' },
 ];
 /** Student yalnız öz universini görür (server də yalnız onun məlumatını verir) */
@@ -2423,18 +2427,20 @@ const stuWorld = n => (data && data.worlds || []).find(w => w.name === n && (dat
 let navUni = null, navTarget;             // navUni: kameranın hazırda olduğu univers (3D-dən gəlir), null = xəritə
 /** Universə (null = bütün xəritəyə) uç; 3D hələ hazır deyilsə, hazır olanda */
 function flyTo(id) { if (isStu()) id = 'student'; if (K && glOn) K.flyUni(id); else navTarget = id; }
-const uniOf = n => !n ? navUni || (isStu() ? 'student' : 'main') : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : specialOf(n) ? 'studio' : stuWorld(n) ? 'student' : 'main';
+const uniOf = n => !n ? navUni || (isStu() ? 'student' : 'main') : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : n.startsWith('desktop:') ? 'desktop' : specialOf(n) ? 'studio' : stuWorld(n) ? 'student' : 'main';
 /** Xüsusi panel açılan planetlər: Studio stansiyaları, MCP serverləri, agentlər */
 function xKind(n) {
   if (!n) return null;
   if (n.startsWith('mcp:')) return { kind: 'mcpu', icon: '🛰', name: n.slice(4) };
   if (n.startsWith('agent:')) return { kind: 'agentu', icon: '🤖', name: n.slice(6) };
+  if (n.startsWith('desktop:')) return { kind: 'deskt', icon: '🖥', name: n.slice(8) };
   return specialOf(n);
 }
 function uniList(full, u) {
   if (u === 'studio') return full.filter(p => specialOf(p.name));
   if (u === 'mcp') return mcpList();
   if (u === 'agent') return agentList();
+  if (u === 'desktop') return desktopList();
   if (u === 'student') return full.filter(p => p.kind === 'custom' && stuWorld(p.name));
   return full.filter(p => !specialOf(p.name) && !stuWorld(p.name));
 }
@@ -2482,10 +2488,193 @@ function fireAgentRockets() {
     if (prev === undefined) {
       const t = (data.tasks || []).find(x => +x.command_id === +c.id);
       const from = t && t.creator !== c.user ? 'agent:' + t.creator : null;
-      K.rocket({ id: 1e6 + +c.id, from, to: 'agent:' + c.user, who: c.project, hue: hue(c.user), soft: true, delay: 0 });
-    } else if (c.status === 'done' || c.status === 'failed') K.burst('agent:' + c.user, c.status === 'done');
+      const rem = c.creator && c.creator !== c.user;                 // başqasının kompüterinə: göndərənin Desktop planetindən
+      K.rocket({ id: 1e6 + +c.id, from: rem ? 'desktop:' + c.creator : from, to: rem ? 'desktop:' + c.user : 'agent:' + c.user, who: rem ? c.creator : c.project, hue: hue(c.creator || c.user), soft: true, delay: 0 });
+    } else if (c.status === 'done' || c.status === 'failed') K.burst((c.creator && c.creator !== c.user ? 'desktop:' : 'agent:') + c.user, c.status === 'done');
   }
 }
+/* ====== Desktop Universe: başqasının kompüterindəki Claude Code-a komanda (YALNIZ sahibinin icazəsi ilə) ====== */
+async function RMT(action, extra) {
+  const r = await fetch('remote.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action, ...extra }) });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) location.reload();
+  return { status: r.status, d };
+}
+/** Uzun nəticə: 4 sətirdə kəsilir, "Tam göstər" ilə açılır */
+const openRes = new Set();                        // açıq saxlanılan nəticələr (siyahı yenilənəndə yığılmasın)
+function resultBox(text, key, label, hidden) {
+  const w = el('div'), pb = el('div', hidden ? 'pb pbp' : 'pb', text); w.append(pb);
+  if (hidden || text.length > 260 || text.split('\n').length > 4) {
+    const lb = label || 'Tam göstər', t = el('button', 'pbt', '▾ ' + lb);
+    const sync = o => { pb.classList.toggle('open', o); setText(t, o ? '▴ Yığ' : '▾ ' + lb); };
+    t.onclick = () => { const o = !pb.classList.contains('open'); o ? openRes.add(key) : openRes.delete(key); sync(o); };
+    sync(openRes.has(key));
+    w.append(t);
+  }
+  return w;
+}
+/** Komandaya əlavə olunmuş şəkillər (klik: böyük aç) */
+function imgStrip(c) {
+  const imgs = c.images || [];
+  if (!imgs.length) return null;
+  const box = el('div', 'cmdimgs');
+  for (const f of imgs) { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; const d = el('div', 'cimg'), im = el('img'); im.src = a.href; im.alt = 'şəkil'; im.loading = 'lazy'; d.append(im); a.append(d); box.append(a); }
+  return box;
+}
+/** Promptun tamamı: başlıqda yalnız ilk sətir görünür, uzundursa "Promptun tamamı" ilə açılır */
+function promptBox(c) {
+  const full = c.prompt.replace(/^\[[^\]]*\]\n/, '');
+  return full.length > 120 || full.includes('\n') ? resultBox(full, 'p' + c.id, 'Promptun tamamı', true) : null;
+}
+function desktopList() {
+  return (data.users || []).map(u => {
+    const a = agentInfo(u), pend = a.cm.filter(c => c.status === 'pending').length;
+    const st = pend ? 'waiting' : a.run.length ? 'working' : a.online ? 'idle' : 'offline';
+    const gr = (data.grants || []).filter(g => g.owner === u).length;
+    const sub = (a.online ? 'kompüter onlayn' : 'oflayn') + (pend ? ' · ' + pend + ' təsdiq gözləyir' : a.run.length ? ' · işləyir' : '') + (ME && ME.name === u ? ' · sənin kompüterin' : '');
+    return { name: 'desktop:' + u, label: '🖥 ' + u, kind: 'desktop', hue: hue(u), R: 3, st, sub,
+      users: new Map(), edits: 0, tools: 0, burn: 0, sats: [] };
+  });
+}
+const myGrantOn = owner => { const gs = (data.grants || []).filter(g => g.owner === owner && ME && (g.grantee === ME.name || g.grantee === '*')); return gs.find(g => g.grantee === ME.name) || gs[0] || null; };
+function renderDesktopPlanet(u) {
+  const box = $('xd-info'); if (!ME) return;
+  const mine = ME.name === u, a = agentInfo(u);
+  if (box._u !== u) { box._u = u; box.replaceChildren(el('div', 'xd-top'), el('div', 'xd-form'), el('div', 'xd-list')); box._s = {}; }
+  const [top, form, list] = box.children;
+  const topSig = [u, a.online, a.login, mine, (data.grants || []).map(g => g.owner + g.grantee + g.mode).join(), Math.floor(now() / 20)].join('|');
+  if (box._s.top !== topSig) {
+    box._s.top = topSig; top.replaceChildren();
+    const head = el('div', 'infobox');
+    head.append(el('div', null, (a.online ? '🟢 Kompüter onlayn (agent işləyir)' : a.ag ? '⚫ Agent oflayn · son: ' + ago(a.ag.last_seen) : '⚫ Agent heç qoşulmayıb') + (a.online && !a.login ? ' · ⚠ Claude girişi yoxdur' : '')));
+    head.append(el('div', 'mnote', mine
+      ? 'Bura sənin kompüterindir. Başqası ona komanda göndərə bilməz, sən icazə verməyincə.'
+      : 'Komanda ' + u + '-in öz Claude hesabı ilə, onun kompüterində, agentin məhdud icazələri daxilində işləyir: fayl oxuma və redaktə, git (pull, commit və s.; push və merge yalnız sahibi "full" səviyyə seçibsə). Dağıdıcı git əmrləri (reset --hard, clean, zorla push) və digər terminal əmrləri bloklanıb.'));
+    top.append(head);
+    if (mine) {
+      top.append(el('div', 'lbl', '🔐 Kimə icazə vermisən'));
+      const mineG = (data.grants || []).filter(g => g.owner === u);
+      if (!mineG.length) top.append(el('div', 'empty', 'Heç kimə. Heç kim kompüterinə komanda göndərə bilməz.'));
+      for (const g of mineG) {
+        const r = el('div', 'prow'), who = g.grantee === '*' ? 'Hamı' : g.grantee;
+        r.append(el('div', 'pt', who), el('div', 'pm', g.mode === 'auto' ? '⚡ Avtomatik: komandalar təsdiqsiz işləyir' : '✋ Manual: hər komandanı sən təsdiq edirsən'));
+        const pa = el('div', 'pa'), rv = el('button', 'gbtn danger', 'İcazəni geri al');
+        rv.onclick = async () => { await RMT('revoke', { grantee: g.grantee }); await load(); };
+        if (g.grantee !== '*') {                                     // rejimi icazəni silmədən dəyiş
+          const tg = el('button', 'gbtn', g.mode === 'auto' ? '✋ Manual rejimə keç' : '⚡ Avtomatik rejimə keç');
+          tg.onclick = async () => {
+            const to = g.mode === 'auto' ? 'approve' : 'auto';
+            if (to === 'auto' && !confirm(who + ' təsdiqsiz, birbaşa sənin kompüterində Claude Code-a fayl dəyişdirə biləcək komandalar göndərə biləcək. Avtomatik rejimə keçilsin?')) return;
+            await RMT('grant', { grantee: g.grantee, mode: to }); await load();
+          };
+          pa.append(tg);
+        }
+        pa.append(rv); r.append(pa); top.append(r);
+      }
+      const sel = el('select'), mode = el('select');
+      for (const x of data.users || []) if (x !== u) sel.append(Object.assign(document.createElement('option'), { value: x, textContent: x }));
+      sel.append(Object.assign(document.createElement('option'), { value: '*', textContent: 'Hamıya (yalnız manual rejim)' }));
+      mode.append(Object.assign(document.createElement('option'), { value: 'auto', textContent: '⚡ Avtomatik: təsdiqsiz işləsin' }), Object.assign(document.createElement('option'), { value: 'approve', textContent: '✋ Manual: hər komandanı mən təsdiq edim' }));
+      sel.onchange = () => { mode.disabled = sel.value === '*'; if (sel.value === '*') mode.value = 'approve'; };
+      sel.onchange(); const gb = el('button', 'gbtn go', 'İcazə ver'), err = el('div', 'cmderr'); err.hidden = true;
+      gb.onclick = async () => {
+        err.hidden = true;
+        if (mode.value === 'auto' && !confirm(sel.value + ' təsdiqsiz, birbaşa sənin kompüterində Claude Code-a fayl dəyişdirə biləcək komandalar göndərə biləcək. Əminsən?')) return;
+        const { status, d } = await RMT('grant', { grantee: sel.value, mode: mode.value });
+        if (status === 200) await load(); else { err.hidden = false; err.textContent = d.error || 'Alınmadı'; }
+      };
+      top.append(sel, mode, el('div', 'cmdbar'), err); top.lastChild.previousSibling.append(el('span', 'cmdwho', 'İstədiyin vaxt geri ala bilərsən.'), gb);
+    }
+  }
+  // komanda forması (yazılan mətn itməsin deyə yalnız vəziyyət dəyişəndə yenilənir)
+  const g = mine ? null : myGrantOn(u);
+  const prjs = [...new Set((data.projects || []).filter(p => p.user === u).map(p => p.project))].sort();
+  const formSig = [u, mine, g && g.mode, prjs.join(), a.online].join('|');
+  if (box._s.form !== formSig) {
+    box._s.form = formSig;
+    const prevTxt = form.querySelector('textarea') ? form.querySelector('textarea').value : '', prevPrj = form.querySelector('select') ? form.querySelector('select').value : '';
+    form.replaceChildren();
+    if (!mine) {
+      form.append(el('div', 'lbl', '🖥 ' + u + '-in Claude Code-una komanda'));
+      if (!g) {
+        form.append(el('div', 'infobox', u + ' hələ sənə öz kompüterinə komanda göndərməyə icazə verməyib.'));
+        const rq = el('button', 'gbtn', '✉ İcazə istə'); rq.style.marginTop = '8px';
+        rq.onclick = () => { openMsg(u); $('msg-body').value = 'Salam! Desktop Universe-də mənə Claude Code-una komanda göndərməyə icazə verə bilərsən? (Desktop planetinə gir → "İcazə ver")'; };
+        form.append(rq);
+      } else {
+        form.append(el('div', 'mnote', '✅ İcazə var · ' + (g.mode === 'auto' ? '⚡ avtomatik: komanda birbaşa işə düşür' : '✋ manual: ' + u + ' hər komandanı özü təsdiq etməlidir')));
+        if (!a.online) form.append(el('div', 'mnote', '⚠ Agent hazırda oflayndır: komanda onlayn olanda işləyəcək.'));
+        const sel = el('select');
+        for (const p of prjs) sel.append(Object.assign(document.createElement('option'), { value: p, textContent: '🪐 ' + p }));
+        if (!prjs.length) sel.append(Object.assign(document.createElement('option'), { value: '', textContent: u + ' hələ heç bir proyekt qurmayıb' }));
+        if (prevPrj && prjs.includes(prevPrj)) sel.value = prevPrj;
+        const ta = el('textarea'); ta.rows = 4; ta.maxLength = 3500; ta.placeholder = 'Onun kompüterində Claude Code nə etsin? (Enter göndərir, Shift+Enter yeni sətir; şəkli yapışdır və ya bura sürüşdür)'; ta.value = prevTxt;
+        const err = el('div', 'cmderr'); err.hidden = true;
+        const imgs = box._imgs || (box._imgs = []), strip = el('div', 'cmdimgs'), file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/gif,image/webp'; file.multiple = true; file.hidden = true;
+        const drawImgs = () => { strip.hidden = !imgs.length; strip.replaceChildren(...imgs.map(im => { const d = el('div', 'cimg'), i = el('img'); i.src = im.url; i.alt = im.file.name; const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil'; x.onclick = () => { URL.revokeObjectURL(im.url); imgs.splice(imgs.indexOf(im), 1); drawImgs(); }; d.append(i, x); return d; })); };
+        const addImgs = async files => { for (let f of files) { if (!CMD_IMG_TYPES.test(f.type)) { err.hidden = false; err.textContent = 'Yalnız PNG, JPEG, GIF və ya WebP şəkil'; continue; } if (imgs.length >= CMD_IMG_MAX) { err.hidden = false; err.textContent = 'Ən çox ' + CMD_IMG_MAX + ' şəkil'; break; } f = await shrinkImage(f); if (f.size > CMD_IMG_BYTES) { err.hidden = false; err.textContent = 'Şəkil çox böyükdür (ən çox 5 MB)'; continue; } imgs.push({ file: f, url: URL.createObjectURL(f) }); } drawImgs(); };
+
+        const fl = el('label', 'mnote'), fc = el('input'); fc.type = 'checkbox'; fc.style.cssText = 'width:auto;margin:0 6px 0 0;vertical-align:middle'; fl.append(fc, document.createTextNode('🆕 Yeni söhbət (əvvəlkini yadda saxlama). Standart: eyni proyektdə söhbət davam edir'));
+        const bt = el('button', 'gbtn go', '🖥 Göndər');
+        const send = async () => {
+          err.hidden = true; if (!sel.value || !ta.value.trim()) { err.hidden = false; err.textContent = 'Proyekt seç və mətn yaz'; return; }
+          bt.disabled = true;
+          let res;
+          if (imgs.length) {                                       // şəkilli: FormData (JSON yox)
+            const fd = new FormData(); fd.append('action', 'send'); fd.append('target', u); fd.append('project', sel.value); fd.append('prompt', ta.value); fd.append('fresh', fc.checked ? '1' : '');
+            for (const im of imgs) fd.append('images[]', im.file, im.file.name);
+            const r = await fetch('remote.php', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: fd });
+            res = { status: r.status, d: await r.json().catch(() => ({})) };
+            if (r.status === 401) location.reload();
+          } else res = await RMT('send', { target: u, project: sel.value, prompt: ta.value, fresh: fc.checked });
+          const { status, d } = res;
+          bt.disabled = false;
+          if (status === 200) { ta.value = ''; for (const im of imgs) URL.revokeObjectURL(im.url); imgs.length = 0; drawImgs(); miniToast(d.status === 'pending' ? '🖥 Göndərildi, ' + u + '-in təsdiqini gözləyir' : '🖥 Komanda ' + u + '-in kompüterinə yola düşdü'); await load(); }
+          else { err.hidden = false; err.textContent = d.error || 'Göndərilmədi'; }
+        };
+        bt.onclick = send; ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });   // Enter göndərir, Shift+Enter yeni sətir
+        ta.addEventListener('paste', e => { const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean); if (fs.length) { e.preventDefault(); addImgs(fs); } });
+        ta.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); ta.classList.add('drop'); } });
+        ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
+        ta.addEventListener('drop', e => { e.preventDefault(); ta.classList.remove('drop'); addImgs([...e.dataTransfer.files]); });
+        const att = el('button', 'gbtn', '🖼 Şəkil'); att.type = 'button'; att.title = 'Şəkil əlavə et (ən çox 4)'; att.onclick = () => file.click(); file.onchange = () => { addImgs([...file.files]); file.value = ''; };
+        const bar = el('div', 'cmdbar'), btns = el('span'); btns.style.cssText = 'display:flex;gap:8px'; btns.append(att, bt); bar.append(el('span', 'cmdwho'), btns); drawImgs();
+        form.append(sel, ta, strip, file, fl, err, bar);
+      }
+    }
+  }
+  // komandalar: sahibə gələn təsdiq gözləyənlər və uzaqdan göndərilənlərin axını
+  const rc = a.cm.filter(c => c.creator && c.creator !== u && (mine || c.creator === ME.name));
+  const listSig = [u, rc.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 30)].join('|');
+  if (box._s.list === listSig) return; box._s.list = listSig; list.replaceChildren();
+  if (mine) {
+    const pend = rc.filter(c => c.status === 'pending');
+    if (pend.length) {
+      list.append(el('div', 'lbl', '⏳ Təsdiqini gözləyənlər'));
+      for (const c of pend) {
+        const r = el('div', 'prow'); r.append(el('div', 'pt', c.creator + ' → ' + c.project), el('div', 'pm', ago(c.created_at)), el('div', 'pb', c.prompt.replace(/^\[[^\]]*\]\n/, '')));
+        r.querySelector('.pb').style.maxHeight = 'none';
+        { const ib = imgStrip(c); if (ib) r.append(ib); }
+        const pa = el('div', 'pa'), ok = el('button', 'gbtn go', 'Təsdiq et'), no = el('button', 'gbtn danger', 'Rədd et');
+        ok.onclick = async () => { await RMT('approve', { id: c.id }); await load(); }; no.onclick = async () => { await RMT('deny', { id: c.id }); await load(); };
+        pa.append(ok, no); r.append(pa); list.append(r);
+      }
+    }
+  }
+  list.append(el('div', 'lbl', mine ? '🖥 Kompüterinə uzaqdan göndərilənlər' : '🖥 Mənim göndərdiklərim'));
+  const rest = rc.filter(c => !(mine && c.status === 'pending'));
+  if (!rest.length) list.append(el('div', 'empty', 'Hələ yoxdur.'));
+  for (const c of rest.slice(0, 10)) {
+    const [lbl] = CMD_ST[c.status] || [c.status], r = el('div', 'prow');
+    r.dataset.s = c.status === 'done' ? 'pass' : c.status === 'failed' ? 'fail' : '';
+    r.append(el('div', 'pt', c.prompt.replace(/^\[[^\]]*\]\n/, '').split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + c.creator + ' → ' + c.user + ' · ' + lbl + ' · ' + ago(c.created_at)));
+    { const pbx = promptBox(c); if (pbx) r.append(pbx); const ib = imgStrip(c); if (ib) r.append(ib); }
+    if (c.result) r.append(resultBox(c.result, c.id));
+    if (['pending', 'queued', 'running'].includes(c.status)) { const pa = el('div', 'pa'), st = el('button', 'gbtn danger', 'Dayandır'); st.onclick = async () => { await CTL('stop_command', { id: c.id }); load(); }; pa.append(st); r.append(pa); }
+    list.append(r);
+  }
+}
+
 function renderMcpPlanet(name) {
   const x = mcpServers().find(s => s.name === name);
   const box = $('xm-info'), evs = (data.events || []).filter(e => (e.tool || '').startsWith('mcp__' + name + '__')).slice(0, 12);
@@ -2537,7 +2726,8 @@ function renderAgentPlanet(u) {
     const row = el('div', 'prow'), t = (data.tasks || []).find(x => +x.command_id === +c.id);
     row.dataset.s = c.status === 'done' ? 'pass' : c.status === 'failed' ? 'fail' : '';
     row.append(el('div', 'pt', c.prompt.split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + lbl + ' · ' + ago(c.created_at) + (t && t.creator !== u ? ' · ' + t.creator + ' → ' + u : '')));
-    if (c.result) row.append(el('div', 'pb', c.result));
+    { const pbx = promptBox(c); if (pbx) row.append(pbx); const ib = imgStrip(c); if (ib) row.append(ib); }
+    if (c.result) row.append(resultBox(c.result, c.id));
     if ((mine || admin) && (c.status === 'running' || c.status === 'queued')) { const pa = el('div', 'pa'), st = el('button', 'gbtn danger', 'Dayandır'); st.onclick = async () => { await CTL('stop_command', { id: c.id }); load(); }; pa.append(st); row.append(pa); }
     box.append(row);
   }
@@ -2710,7 +2900,8 @@ function mcpReset() { mcpEdit = 0; $('mcp-name').value = ''; $('mcp-descr').valu
 function renderX(name) {
   const sp = xKind(name);
   setText($('xtitle'), sp.icon + ' ' + sp.name);
-  for (const k of ['prompt', 'designer', 'meeting', 'test', 'mcpu', 'agentu']) $('x-' + k).hidden = k !== sp.kind;
+  for (const k of ['prompt', 'designer', 'meeting', 'test', 'mcpu', 'agentu', 'deskt']) $('x-' + k).hidden = k !== sp.kind;
+  if (sp.kind === 'deskt') { setText($('xmeta'), 'Desktop Universe · ' + sp.name + ' istifadəçisinin kompüteri və Claude Code-u'); return renderDesktopPlanet(sp.name); }
   if (sp.kind === 'mcpu') { setText($('xmeta'), 'MCP Universe · server, onu işlədən proyektlər və son çağırışlar'); return renderMcpPlanet(sp.name); }
   if (sp.kind === 'agentu') { setText($('xmeta'), 'Agent Universe · ' + sp.name + ' istifadəçisinin AI agenti'); return renderAgentPlanet(sp.name); }
   if (sp.kind === 'prompt') { setText($('xmeta'), 'AI promptlarını yarat, saxla və komanda ilə paylaş'); renderPrompts(); }
