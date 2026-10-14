@@ -536,7 +536,7 @@
   async function start() {
     if (J.state !== 'off' && J.state !== 'error') return;
     if (!window.isSecureContext || !navigator.mediaDevices) { setState('error'); line('e', 'Mikrofon yalnız HTTPS və ya localhost-da işləyir.'); return; }
-    setState('connecting'); J.ending = false; J.ready = false; endTurn();
+    setState('connecting'); J.ending = false; J.ready = false; endTurn(); emit('start');
     if (!prov.options.length) await loadProviders().catch(() => {});
     const { status, d } = await api('session', prov.value ? { provider: prov.value } : {});
     if (status !== 200) {
@@ -564,10 +564,10 @@
         stream('user', text); emit('user', text);
       },
       bot: text => { stream('jarvis', text); emit('bot', text); },
-      interrupted() { stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); },
-      turnDone: endTurn,
+      interrupted() { stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); emit('interrupted'); },
+      turnDone() { endTurn(); emit('turn'); },
       tools: calls => { endTurn(); runTools(calls); },
-      info: msg => line('e', msg),
+      info: msg => { line('e', msg); emit('error', msg); },
       closed(code, reason) {
         if (J.state === 'off') return;
         const why = reason ? reason : code === 1006 ? 'bağlantı qırıldı' : 'kod ' + code;
@@ -616,7 +616,7 @@
   }
   /* Modul API-si (jarvis-*.js fayllarından istifadə olunur):
      registerTool(name, fn)  — alət icrası (deklarasiyası jarvis_modules/*.php-dədir); fn(args) nəticə qaytarır və ya xəta atır
-     on(event, cb)           — state | ready | stop | user | bot | tool | command
+     on(event, cb)           — start | ready | stop | state | user | bot | turn (cavab bitdi) | interrupted | tool | command | error
      say(text)               — modelə sistem qeydi göndərir (o, istifadəçiyə danışır)
      context(text)           — səssiz kontekst qeydi (cavab yaratmır)
      watch(id, {project, prompt}) — Claude Code tapşırığını izlə (bitəndə Jarvis danışır)
@@ -624,7 +624,7 @@
   window.Jarvis = {
     start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)),
     context: t => J.ready && J.conn && J.conn.context(String(t)),   // səssiz kontekst (cavab yaratmır)
-    tools: TOOLS, state: () => J.state, ready: () => !!J.ready, level,
+    tools: TOOLS, state: () => J.state, ready: () => !!J.ready, level, since: () => J.t0 || 0, muted: () => J.muted,
     adapters: ADAPTERS, msgpack: MP,
     registerTool(name, fn) { TOOLS[name] = fn; },
     on(ev, cb) { (EV[ev] = EV[ev] || []).push(cb); },
