@@ -263,6 +263,40 @@ function db(): PDO
         seconds INT NOT NULL,
         PRIMARY KEY (user, day)
     )");
+    // Jarvis HUD: Claude Code tapşırığının canlı gedişatı (agent bildirir) və missiya bağlantısı
+    foreach ([
+        "ALTER TABLE commands ADD COLUMN progress TEXT NOT NULL DEFAULT ''",     // JSON: {step, files[], pct, at} — agent stream-json-dan yeniləyir
+        'ALTER TABLE commands ADD COLUMN mission_id INT NOT NULL DEFAULT 0',      // hansı missiyanın addımıdır (0 = tək tapşırıq)
+        'ALTER TABLE commands ADD COLUMN step INT NOT NULL DEFAULT 0',            // missiyada addım nömrəsi
+    ] as $q) {
+        try {
+            $pdo->exec($q);
+        } catch (Throwable $e) {
+            // sütun artıq var
+        }
+    }
+    // Jarvis missiyaları: böyük hədəf → addımlar (paralel/ardıcıl Claude Code tapşırıqları)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_missions (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        goal TEXT NOT NULL,
+        steps TEXT NOT NULL,
+        status VARCHAR(16) NOT NULL,
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    // Jarvis protokolları: adlı makrolar ("House Party Protocol" və s.)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_protocols (
+        id $id,
+        owner VARCHAR(64) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        descr TEXT NOT NULL,
+        steps TEXT NOT NULL,
+        shared INT NOT NULL DEFAULT 1,
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
     // Test Planet: proyekt üzrə test ssenariləri (keçdi / xəta / yoxlanmayıb)
     $pdo->exec("CREATE TABLE IF NOT EXISTS tests (
         id $id,

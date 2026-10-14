@@ -64,6 +64,15 @@ Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ 
 
 **Agentın səlahiyyəti qəsdən məhduddur:** fayl oxuya və redaktə edə bilər. `git` üçün standart səviyyə **safe**-dir: oxuma əmrləri (`status`, `log`, `diff`, `show`, `branch`) + `fetch`, `pull` (həmişə yalnız sürətli irəli, birləşmə commit-i yaranmır), `add`, `commit`, `switch`, `stash`. `push`, `merge`, `checkout` üçün səviyyəni **full** et: `~/.claude-team-agent.env` faylına `CLAUDE_TEAM_GIT=full` yaz (yalnız oxuma üçün `read`). Zorla push (`--force`), `reset --hard`, `clean`, fayl silmə və digər terminal əmrləri hər halda **bloklanıb**. Bu seçimi yalnız kompüterin sahibi edir.
 
+**Canlı gedişat:** agent işləyərkən saytda Claude-un hazırkı addımı (məs. `Edit · app/scoring.py`), son toxunduğu fayllar və təxmini faiz görünür. Köhnə Claude CLI bunu bacarmırsa agent özü köhnə üsula keçir; söndürmək: `CLAUDE_TEAM_STREAM=0`.
+
+**Paralel işlər (istəyə görə):** standartda agent eyni anda **bir** tapşırıq işlədir. `~/.claude-team-agent.env` faylına `CLAUDE_TEAM_WORKERS=2` (ən çox `4`) yazsan, o qədər tapşırığı paralel götürür. Eyni proyektə eyni anda ikinci tapşırıq gələrsə, o, proyektin ayrıca **git worktree** nüsxəsində (`~/.claude-team-worktrees/`) işləyir ki, iki Claude eyni faylları qarışdırmasın:
+- Claude commit edibsə, commit-lər `jarvis/<nömrə>` budağında qalır (sən baxıb birləşdirirsən).
+- Commit olunmamış dəyişiklik qalıbsa, worktree silinmir, yolu nəticədə yazılır. Baxandan sonra: `git worktree remove <yol>`.
+- Dəyişiklik yoxdursa worktree avtomatik silinir.
+- Proyekt git deyilsə və ya git səviyyəsi `read`-dirsə, ikinci tapşırıq birincinin bitməsini gözləyir.
+- Worktree-də git-ə düşməyən fayllar (`.env`, `node_modules`) olmur və hook işləmir; belə işlər əvvəlki söhbəti davam etdirmir.
+
 ## Tapşırıq lövhəsi
 
 Panelin **Lövhə** tabında komandanın tapşırıqları var (Gözləyir → İşləyir → Yoxlamada → Bitdi). Admin sənə tapşırıq təyin edəndə **Lövhə** tabının yanında rəqəm görünür. Sən özün də özünə tapşırıq yarada bilərsən.
@@ -78,7 +87,7 @@ Panelin **Lövhə** tabında komandanın tapşırıqları var (Gözləyir → İ
 - **Tokenini və parolunu heç kimlə paylaşma** və söhbətə/skrinşota yazma. Token saytdan sənin kompüterində kod işlətməyə imkan verir.
 - Sızdığından şübhələnirsənsə, adminə de, tokenini yeniləyəcək.
 - Panel prompt mətnlərini, fayl adlarını və əmrləri komandaya göstərir. Parol və açar yazma.
-- Agentı yalnız işləyəndə aç. Dayandırmaq üçün: `pkill -f claude-team-agent.py`.
+- Agentı yalnız işləyəndə aç. Dayandırmaq üçün: `pkill -f claude-team-agent.py` (və ya Ctrl+C). Agent yeni tapşırıq götürmür, işləyənləri 30 saniyə gözləyir, bitməyənləri dayandırıb saytda "alınmadı" kimi qeyd edir (yenidən göndərmək olar). İkinci Ctrl+C dərhal dayandırır.
 
 ## Problem olarsa
 

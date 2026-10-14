@@ -156,6 +156,20 @@ $tools = [
         'parameters' => ['type' => 'object', 'properties' => (object)[]]],
 ];
 
+// Modullar (jarvis_modules/*.php): hər biri ['tools' => [...JSON Schema alətləri], 'prompt' => 'sistem təlimatına əlavə'] qaytarır.
+// Alətlərin icrası brauzerdə, uyğun jarvis-*.js modulundadır (Jarvis.registerTool). Hər modul faylı "defined('JARVIS_MODULE') || exit;" ilə başlayır.
+define('JARVIS_MODULE', 1);
+$modPrompt = '';
+foreach (glob(__DIR__ . '/jarvis_modules/*.php') ?: [] as $mf) {
+    $mod = require $mf;
+    if (is_array($mod)) {
+        $tools = array_merge($tools, array_values($mod['tools'] ?? []));
+        if (!empty($mod['prompt'])) {
+            $modPrompt .= "\n" . trim((string)$mod['prompt']);
+        }
+    }
+}
+
 $users = array_column($pdo->query('SELECT name FROM users ORDER BY name')->fetchAll(), 'name');
 $langLine = $lang === 'az'
     ? 'Speak Azerbaijani (Azərbaycan dili) by default, naturally and correctly; if the user switches to another language, follow them.'
@@ -185,6 +199,7 @@ Rules:
 - If a tool returns an error, explain it briefly and suggest the fix.
 - Resolve relative dates ("sabah saat 3-də", "next Friday") into local ISO date-times yourself.
 - When the user says goodbye or asks you to stop, say a short farewell and call end_conversation.
+{$modPrompt}
 TXT;
 
 $out = ['provider' => $provider, 'lang' => $lang, 'used' => used_today($pdo, $me['name'], $today), 'limit' => $limitSec];

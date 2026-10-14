@@ -218,11 +218,11 @@ void main(){
 }`;
 
 const STAR_VS = `
-attribute float size; attribute float phase; attribute vec3 color; uniform float uTime, uPR; varying vec3 vC; varying float vTw;
-void main(){ vC=color; vTw=.62+.38*sin(uTime*(.5+phase*.9)+phase*60.); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_PointSize=size*uPR; }`;
+attribute float size; attribute float phase; attribute vec3 color; uniform float uTime, uPR, uPulse; varying vec3 vC; varying float vTw;
+void main(){ vC=color; vTw=.62+.38*sin(uTime*(.5+phase*.9)+phase*60.); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); gl_PointSize=size*uPR*(1.+uPulse*.35*(.5+phase)); }`;
 const STAR_FS = `
-varying vec3 vC; varying float vTw;
-void main(){ float d=length(gl_PointCoord-.5); float a=pow(smoothstep(.5,.0,d),1.7); gl_FragColor=vec4(vC*vTw,a*vTw); }`;
+uniform float uPulse; varying vec3 vC; varying float vTw;
+void main(){ float d=length(gl_PointCoord-.5); float a=pow(smoothstep(.5,.0,d),1.7); gl_FragColor=vec4(vC*vTw*(1.+uPulse*1.1),a*vTw); }`;
 
 const BURST_VS = `
 attribute vec3 vel; attribute float life; attribute float size;
@@ -1412,6 +1412,399 @@ function placeBalloons() {
   }
 }
 
+/* ====== Agent donanması: hər Claude Code tapşırığı bir dron — agentin planetindən proyekt planetinə uçur, orbitdən şüa ilə işləyir ======
+   növbədə = agentin üstündə buraxılış meydançasında gözləyir; bitdi = yaşıl parıltı, yük qutusu ilə qayıdır; xəta = qırmızı, tüstü, qayıdır; ləğv = sönür */
+const FLEET_MAX = 12, FW = new THREE.Color(1, 1, 1);
+const fleet = new Map(), fleetGone = new Set();
+const fT1 = new THREE.Vector3(), fT2 = new THREE.Vector3(), fT3 = new THREE.Vector3(), fD = new THREE.Vector3(), fV = new THREE.Vector3(), fS = new THREE.Vector3();
+let FG = null;                                                   // paylaşılan geometriyalar: bir dəfə yaranır, heç vaxt atılmır
+const BEAM_VS = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`;
+const BEAM_FS = `
+uniform float uTime, uAmt, uSeed; uniform vec3 uCol; varying vec2 vUv;
+void main(){
+  float y=vUv.y;
+  float flow=pow(.5+.5*sin(y*42.-uTime*16.+uSeed*9.),4.);
+  float fl=.75+.25*sin(uTime*37.+uSeed*20.);
+  float a=uAmt*(.28+.72*flow)*fl*smoothstep(0.,.12,y);
+  vec3 c=mix(uCol,vec3(1.),flow*.55+y*.2);
+  gl_FragColor=vec4(c*a,a);
+}`;
+function fleetGeo() {
+  if (FG) return FG;
+  const rx = g => g.rotateX(Math.PI / 2);                        // burun +Z: lookAt hədəfə tuşlayır
+  FG = { hull: rx(new THREE.ConeGeometry(.26, 1, 7)), wing: new THREE.BoxGeometry(1, .04, .28), pod: new THREE.SphereGeometry(.13, 10, 6),
+    beam: rx(new THREE.CylinderGeometry(1, .3, 1, 10, 1, true)).translate(0, 0, .5), cargo: new THREE.BoxGeometry(.26, .26, .26),
+    cargoMat: new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: .95, depthWrite: false, blending: THREE.AdditiveBlending }) };
+  return FG;
+}
+const glowSpr = (hex, op, s) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: hex, transparent: true, opacity: op, depthWrite: false, blending: THREE.AdditiveBlending })); m.scale.setScalar(s); return m; };
+const LAMP = { queued: 0xfbbf24, running: 0x5eead4, done: 0x4ade80, failed: 0xf87171, canceled: 0x6f6f7c };
+function buildDrone(col) {
+  const fg = fleetGeo(), hex = col.getHex();
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const hull = new THREE.Mesh(fg.hull, figMat(hex, .35)); hull.scale.set(1, .7, 1); body.add(hull);
+  const wing = new THREE.Mesh(fg.wing, figMat(0x2a2e3a, 0)); wing.position.z = -.18; body.add(wing);
+  const pod = new THREE.Mesh(fg.pod, figMat(0x9fe3ff, .8)); pod.position.set(0, .1, .08); body.add(pod);
+  const eng = glowSpr(col.clone().lerp(FW, .35).getHex(), .9, 1.1); eng.position.z = -.6; body.add(eng);
+  const lamp = glowSpr(LAMP.queued, 0, .7); lamp.position.set(0, .22, -.1); body.add(lamp);
+  const flash = glowSpr(0x4ade80, 0, 3); g.add(flash);
+  const cargo = new THREE.Mesh(fg.cargo, fg.cargoMat); cargo.position.set(0, -.28, -.05); cargo.visible = false; body.add(cargo);
+  const beam = new THREE.Mesh(fg.beam, new THREE.ShaderMaterial({ vertexShader: BEAM_VS, fragmentShader: BEAM_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: { uTime: uT, uAmt: { value: 0 }, uSeed: { value: Math.random() }, uCol: { value: col.clone().lerp(FW, .25) } } }));
+  beam.visible = false; beam.frustumCulled = false;
+  const hit = glowSpr(hex, 0, 1.4); hit.visible = false;
+  const trail = makeTrail(1, 1.1);
+  scene.add(g, beam, hit, trail.pts);
+  return { g, body, eng, lamp, flash, cargo, beam, hit, trail };
+}
+/** Fayl adı üçün kiçik mətn spraytı (yalnız kamera yaxında olanda yaranır) */
+function textSprite(txt) {
+  const c = document.createElement('canvas'), x = c.getContext('2d'), f = '600 26px ui-monospace,Menlo,Consolas,monospace';
+  x.font = f; const w = Math.min(512, Math.ceil(x.measureText(txt).width) + 16); c.width = w; c.height = 36;
+  x.font = f; x.textBaseline = 'middle'; x.shadowColor = 'rgba(0,0,0,.9)'; x.shadowBlur = 6; x.fillStyle = '#bff7ee'; x.fillText(txt, 8, 19);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false, opacity: 0 }));
+  s.center.set(-.06, .5); s.scale.set(w / 36 * .26, .26, 1); s.visible = false;
+  return s;
+}
+function syncMotes(d, files, quiet) {
+  const fs = (files || []).filter(x => typeof x === 'string' && x).slice(-6), keep = new Set(fs);
+  for (let i = d.motes.length - 1; i >= 0; i--) if (!keep.has(d.motes[i].path)) { disposeMote(d.motes[i]); d.motes.splice(i, 1); }
+  const by = new Map(d.motes.map(x => [x.path, x]));
+  d.motes = fs.map(path => {
+    let x = by.get(path);
+    if (!x) {
+      const spr = glowSpr(d.col.clone().lerp(FW, .55).getHex(), 0, .45); spr.visible = false; scene.add(spr);
+      x = { path, name: path.split(/[\\/]/).pop(), spr, lbl: null, born: quiet ? -99 : tScene, ph: Math.random() * 6.28 };   // yeni toxunulan fayl: qığılcım
+    }
+    return x;
+  });
+}
+function disposeMote(x) {
+  scene.remove(x.spr); x.spr.material.dispose();
+  if (x.lbl) { scene.remove(x.lbl); x.lbl.material.map.dispose(); x.lbl.material.dispose(); }
+}
+function disposeSmoke(s) { for (const p of s.ps) scene.remove(p); s.mat.dispose(); }
+function disposeDrone(d) {
+  const m = d.m;
+  scene.remove(m.g, m.beam, m.hit, m.trail.pts);
+  for (const s of [m.eng, m.lamp, m.flash, m.hit]) s.material.dispose();
+  m.beam.material.dispose(); m.trail.g.dispose(); m.trail.mat.dispose();
+  for (const x of d.motes) disposeMote(x);
+  if (d.smoke) disposeSmoke(d.smoke);
+  d.lbl.remove();
+  fleet.delete(d.id); fleetGone.add(d.id);
+  if (fleetGone.size > 300) fleetGone.delete(fleetGone.values().next().value);
+}
+const ENDING = d => d.ph === 'end' || d.ph === 'back' || d.ph === 'fade';
+/** Orbit nöqtəsi: hər dronun öz əyilməsi, paralel dronlar bir planetdə öz "yuvasında" (radius + faza) */
+function droneOrbit(d, p, a, out, k) {
+  p.holder.getWorldPosition(fT1);
+  const rr = (p.R * 1.7 + 1.3 + d.slot * .55) * (k || 1);
+  out.set(Math.cos(a) * rr, Math.sin(a * 2 + d.ph0) * p.R * .18, Math.sin(a) * rr).applyEuler(d.inc);
+  return out.add(fT1);
+}
+/** Buraxılış meydançası: agent planetinin üstündə, növbədəkilər dairəvi düzülür */
+function dronePad(d, ap, out) {
+  ap.holder.getWorldPosition(fT1);
+  const k = d.padI * 1.3 + tScene * .25;
+  return out.set(Math.cos(k) * ap.R * 1.5, ap.R * 1.35 + Math.sin(tScene * 1.7 + d.ph0) * .15, Math.sin(k) * ap.R * 1.5).add(fT1);
+}
+/** Kvadratik qövs: P0 → P2, ortası yuxarı qalxır (P2 hərəkət edən planetlə birlikdə yenilənir) */
+function droneArc(P0, P2, lift, u, out) {
+  fT2.copy(P0).add(P2).multiplyScalar(.5); fT2.y += lift;
+  const v = 1 - u;
+  return out.copy(P0).multiplyScalar(v * v).addScaledVector(fT2, 2 * u * v).addScaledVector(P2, u * u);
+}
+function droneFlight(d, ph, dest) {
+  d.ph = ph; d.t0 = tScene; d.P0.copy(d.pos);
+  const dist = d.pos.distanceTo(dest);
+  d.dur = REDUCE ? .01 : Math.min(6, Math.max(2.2, 2.2 + dist * .0045)); d.lift = Math.min(220, 4 + dist * .22);
+}
+/** Meydançadan qalxış: hədəf planetin orbitinə (planet yoxdursa, öz agentinin orbitinə) */
+function droneLaunch(d) {
+  const tp = planets.get(d.target), ap = planets.get(d.agent), host = tp || ap;
+  if (!host) return false;
+  droneOrbit(d, host, d.a + d.off, fD);
+  droneFlight(d, 'out', fD);
+  if (ap && ap.U.lvD > .05) spawnBurst(ap, false);
+  return true;
+}
+function droneStatus(d, st) {
+  d.st = st;
+  d.m.lamp.material.color.setHex(LAMP[st] || LAMP.running);
+  d.lbl.dataset.on = st === 'running' ? '1' : '';
+  if (ENDING(d)) return;
+  if (st === 'queued') return;
+  if (st === 'running') { if (d.ph === 'pad') droneLaunch(d); return; }
+  if ((st === 'done' || st === 'failed') && d.ph !== 'pad') {
+    d.ph = 'end'; d.t0 = tScene; d.endKind = st;
+    d.m.flash.material.color.setHex(st === 'done' ? 0x4ade80 : 0xff3b30);
+    if (st === 'failed' && !REDUCE) {                           // tüstü buludu: 6 sprayt bir materialla
+      const mat = new THREE.SpriteMaterial({ map: glowTex, color: 0x3a3a42, transparent: true, opacity: .7, depthWrite: false });
+      const ps = [];
+      for (let i = 0; i < 6; i++) {
+        const s = new THREE.Sprite(mat); s.position.copy(d.pos).add(fT1.set(rand(-.3, .3), rand(-.2, .3), rand(-.3, .3)));
+        s.userData.v = new THREE.Vector3(rand(-.5, .5), rand(.2, .7), rand(-.5, .5)); s.scale.setScalar(.6); scene.add(s); ps.push(s);
+      }
+      d.smoke = { mat, ps, t0: tScene };
+    }
+    return;
+  }
+  d.ph = 'fade'; d.t0 = tScene;                                  // ləğv və ya növbədən birbaşa bitən
+}
+/** list: [{id, user, project, status, pct, step, files[], color?}] — id üzrə fərq: yeni dron, status keçidi, itən = sönür */
+api.setFleet = list => {
+  if (!api.mounted) return;
+  const seen = new Set();
+  let live = 0; for (const d of fleet.values()) if (!ENDING(d)) live++;
+  for (const o of list || []) {
+    if (!o || o.id == null) continue;
+    const id = String(o.id), st = String(o.status || '');
+    seen.add(id);
+    let d = fleet.get(id);
+    if (!d) {
+      if ((st !== 'running' && st !== 'queued') || fleetGone.has(id) || live >= FLEET_MAX) continue;
+      const h = hash(id + '|' + (o.user || '')), rg = rnd(h);
+      const col = o.color ? new THREE.Color(o.color) : new THREE.Color().setHSL(hash(o.user || id) % 360 / 360, .58, .55);
+      d = { id, user: o.user || '', agent: 'agent:' + (o.user || ''), target: '', col, m: buildDrone(col), motes: [], st: 'queued', ph: 'pad', t0: tScene, dur: 1, lift: 0,
+        P0: new THREE.Vector3(), pos: new THREE.Vector3(), prev: new THREE.Vector3(), a: rg() * 6.28, off: 0, offT: 0, slot: 0, padI: 0, ph0: rg() * 6.28,
+        inc: new THREE.Euler((rg() - .5) * .9, 0, (rg() - .5) * .9), dir: rg() < .5 ? -1 : 1, bm: 0, emit: 0, smoke: null, endKind: '', lbl: document.createElement('div'), pctS: '' };
+      d.lbl.className = 'slabel'; lblBox.append(d.lbl);
+      fleet.set(id, d); live++;
+      const ap = planets.get(d.agent), tp = planets.get(o.project);
+      if (ap) dronePad(d, ap, d.pos); else if (tp) tp.holder.getWorldPosition(d.pos).add(fT1.set(0, tp.R * 6, 0));
+      d.prev.copy(d.pos);
+      syncMotes(d, o.files, true);
+    } else syncMotes(d, o.files, false);
+    d.target = o.project || '';
+    const pct = o.pct == null || o.pct === '' ? null : Math.round(+o.pct);
+    setText(d.lbl, '🛸 ' + d.user + (pct != null && isFinite(pct) ? ' · ' + pct + '%' : '') + (o.step ? ' · ' + String(o.step).slice(0, 40) : ''));
+    if (st && st !== d.st) droneStatus(d, st);
+  }
+  for (const d of fleet.values()) if (!seen.has(d.id) && !ENDING(d)) droneStatus(d, 'canceled');
+  // yuvalar: eyni planetdəki dronlar faza ilə bərabər paylanır, meydançadakılar dairəyə düzülür
+  const grp = new Map(), pad = new Map();
+  for (const d of [...fleet.values()].sort((a, b) => (+a.id || 0) - (+b.id || 0))) {
+    const M = d.ph === 'pad' ? pad : grp, k = d.ph === 'pad' ? d.agent : d.target || d.agent;
+    if (!M.has(k)) M.set(k, []); M.get(k).push(d);
+  }
+  for (const arr of grp.values()) arr.forEach((d, k) => { d.slot = k % 4; d.offT = 2 * Math.PI * k / arr.length; });
+  for (const arr of pad.values()) arr.forEach((d, k) => { d.padI = k; });
+};
+api.fleetInfo = () => [...fleet.values()].map(d => ({ id: d.id, user: d.user, target: d.target, st: d.st, ph: d.ph, beam: +d.bm.toFixed(2), files: d.motes.length, pos: d.pos.toArray().map(v => +v.toFixed(1)) }));
+function updateFleet(dt) {
+  if (!fleet.size) return;
+  const pxT = H * pr / (2 * Math.tan(camera.fov * Math.PI / 360));
+  for (const d of fleet.values()) {
+    const m = d.m, tp = planets.get(d.target) || null, ap = planets.get(d.agent) || null, host = tp || ap;
+    if (!host) { m.g.visible = m.beam.visible = m.hit.visible = false; for (const x of d.motes) x.spr.visible = false; applyLabel(d.lbl, null); if (ENDING(d)) disposeDrone(d); continue; }
+    m.g.visible = true;
+    const age = tScene - d.t0;
+    if (!REDUCE) d.a += dt * .55 * d.dir;
+    d.off += Math.atan2(Math.sin(d.offT - d.off), Math.cos(d.offT - d.off)) * Math.min(1, dt * 1.5);
+    d.prev.copy(d.pos);
+    let beamOn = false, sc = 1, flying = false, faceUp = false;
+    if (d.ph === 'pad') {
+      if (ap) { dronePad(d, ap, fD); d.pos.lerp(fD, Math.min(1, dt * 3)); }
+      faceUp = true;
+      if (d.st === 'running') droneLaunch(d);                   // planet sonradan göründüsə
+    } else if (d.ph === 'out') {
+      const u = Math.min(1, age / d.dur);
+      droneOrbit(d, host, d.a + d.off, fD);
+      droneArc(d.P0, fD, d.lift, ease(u), d.pos); flying = true;
+      if (u >= 1) { d.ph = 'orbit'; d.t0 = tScene; }
+    } else if (d.ph === 'orbit' || d.ph === 'end') {
+      droneOrbit(d, host, d.a + d.off, fD); d.pos.lerp(fD, Math.min(1, dt * 4));
+      beamOn = d.ph === 'orbit' && d.st === 'running';
+      if (d.ph === 'end') {
+        const k = Math.min(1, age / .9);
+        const on = d.endKind === 'done' ? 1 : (Math.sin(age * 42) > 0 ? 1 : .15);
+        m.flash.material.opacity = (1 - k) * .9 * on; m.flash.scale.setScalar(2 + k * 4);
+        if (k >= 1) {
+          m.flash.material.opacity = 0;
+          if (ap) fD.copy(ap.holder.getWorldPosition(fT3)).addScaledVector(UPV, ap.R * 1.1); else fD.copy(d.pos).addScaledVector(UPV, 30);
+          droneFlight(d, 'back', fD); m.cargo.visible = d.endKind === 'done';
+        }
+      }
+    } else if (d.ph === 'back') {
+      const u = Math.min(1, age / d.dur);
+      if (ap) fD.copy(ap.holder.getWorldPosition(fT3)).addScaledVector(UPV, ap.R * 1.1); else fD.copy(d.P0).addScaledVector(UPV, 30);
+      droneArc(d.P0, fD, d.lift, ease(u), d.pos); flying = true;
+      sc = u > .85 ? Math.max(0, (1 - u) / .15) : 1;
+      if (!REDUCE) { m.cargo.rotation.x += dt * 2.1; m.cargo.rotation.y += dt * 1.4; }
+      if (u >= 1) { if (ap && d.endKind === 'done' && ap.U.lvD > .05) spawnBurst(ap, false); disposeDrone(d); continue; }
+    } else if (d.ph === 'fade') {
+      sc = 1 - age / 1.2;
+      if (sc <= 0) { disposeDrone(d); continue; }
+    }
+    // istiqamət: hərəkət vektoruna (meydançada burun yuxarı)
+    const g = m.g; g.position.copy(d.pos); g.scale.setScalar(Math.max(.001, sc) * 1.3);
+    if (faceUp) g.lookAt(fV.copy(d.pos).add(UPV));
+    else { fV.copy(d.pos).sub(d.prev); if (fV.lengthSq() > 1e-8) g.lookAt(fV.add(d.pos)); }
+    m.body.rotation.z = Math.sin(tScene * 1.6 + d.ph0) * .15;
+    m.eng.scale.setScalar((flying ? 1.9 : 1.1) * (1 + .15 * Math.sin(tScene * 40 + d.ph0)));
+    m.eng.material.opacity = .9 * sc;
+    m.lamp.material.opacity = (d.st === 'queued' ? (Math.sin(tScene * 3 + d.ph0) > 0 ? .9 : .15) : d.st === 'running' ? (Math.sin(tScene * 8 + d.ph0) > .2 ? .9 : .2) : .7) * sc;
+    if (flying && !REDUCE) { d.emit -= dt; if (d.emit <= 0) { d.emit = .045; g.updateMatrixWorld(true); trailAdd(m.trail, g.localToWorld(fT3.set(0, 0, -.6)), .5); } }
+    m.trail.mat.uniforms.uPx.value = pxT;
+    // detallar (şüa, fayl zərrələri, etiketlər) yalnız yaxında
+    const dc = camera.position.distanceTo(d.pos), det = host.U.lvD > .05 && dc < 260;
+    d.bm += ((beamOn ? 1 : 0) - d.bm) * Math.min(1, dt * 5);
+    if (det && d.bm > .01) {
+      host.holder.getWorldPosition(fT1);
+      fT2.copy(d.pos).sub(fT1).normalize();
+      fT2.x += Math.sin(tScene * 1.3 + d.ph0) * .38; fT2.y += Math.cos(tScene * 1.1 + d.ph0 * 2) * .38; fT2.z += Math.sin(tScene * .7 + d.ph0) * .38;   // şüa səthi skan edir
+      fT2.normalize();
+      fT3.copy(fT1).addScaledVector(fT2, host.R);
+      const w = .07 * (1 + .35 * Math.sin(tScene * 11 + d.ph0));
+      m.beam.position.copy(d.pos); m.beam.lookAt(fT3); m.beam.scale.set(w, w, Math.max(.01, d.pos.distanceTo(fT3)));
+      m.beam.material.uniforms.uAmt.value = d.bm; m.beam.visible = true;
+      m.hit.position.copy(fT3).addScaledVector(fT2, .06); m.hit.scale.setScalar(1.1 + .45 * Math.sin(tScene * 9 + d.ph0));
+      m.hit.material.opacity = d.bm * .85; m.hit.visible = true;
+    } else { m.beam.visible = false; m.hit.visible = false; }
+    // fayl zərrələri: dronun arxasınca eyni orbitdə; ən yenisi dronun yanında
+    const showM = det && (d.ph === 'orbit' || d.ph === 'end'), near = showM && dc < host.R * 9 + 14;
+    const n = d.motes.length;
+    for (let j = 0; j < n; j++) {
+      const x = d.motes[j];
+      if (!showM) { x.spr.visible = false; if (x.lbl) x.lbl.visible = false; continue; }
+      droneOrbit(d, host, d.a + d.off - d.dir * (.22 + (n - 1 - j) * .17), x.spr.position, .93);
+      x.spr.position.y += Math.sin(tScene * 2 + x.ph) * .12;
+      const sa = tScene - x.born, sp = sa < .9 ? 1 + 2.4 * (1 - sa / .9) : 1;
+      x.spr.scale.setScalar(.45 * sp); x.spr.material.opacity = Math.min(1, .7 + .2 * Math.sin(tScene * 5 + x.ph) + (sp - 1) * .3);
+      x.spr.visible = true;
+      if (near && !x.lbl) { x.lbl = textSprite(x.name); scene.add(x.lbl); }
+      if (x.lbl) {
+        x.lbl.visible = near;
+        if (near) { x.lbl.position.copy(x.spr.position); x.lbl.material.opacity = Math.min(1, x.lbl.material.opacity + dt * 3); } else x.lbl.material.opacity = 0;
+      }
+    }
+    applyLabel(d.lbl, det && dc < host.R * 14 + 20 && (!focusName || focusName === host.name) && sc > .3 ? labelPos(d.pos, .5, true) : null);
+  }
+}
+function updateSmoke(dt) {
+  for (const d of fleet.values()) {
+    const s = d.smoke; if (!s) continue;
+    const age = tScene - s.t0;
+    if (age > 2.2) { disposeSmoke(s); d.smoke = null; continue; }
+    for (const p of s.ps) { p.position.addScaledVector(p.userData.v, dt); p.scale.setScalar(.6 + age * 1.8); }
+    s.mat.opacity = .6 * (1 - age / 2.2);
+  }
+}
+
+/* ====== Fırtına: riskli planet (gecikən tapşırıq / keçmiş deadline) üzərində fırlanan qara siklon və arabir ildırım ====== */
+const STORM_FS = `
+uniform float uTime, uSeed, uAmt, uFlash; uniform vec3 uC, uFP, uLight;
+varying vec3 vObj; varying vec3 vNW; varying vec3 vWP;
+${NOISE}
+void main(){
+  vec3 n=normalize(vObj);
+  float d=dot(n,uC);
+  float k=(1.-d)*5.5-uTime*.5;
+  vec3 q=n*cos(k)+cross(uC,n)*sin(k)+uC*d*(1.-cos(k));
+  float f=fbm(q*3.1+uSeed*13.);
+  float cl=smoothstep(-.3,.22,f);
+  float m=smoothstep(-.7,.3,d)*smoothstep(.99,.95,d);
+  float fl=uFlash*exp(-length(n-uFP)*6.);
+  float day=.35+.65*smoothstep(-.2,.6,dot(normalize(vNW),normalize(uLight-vWP)));
+  vec3 c=mix(vec3(.035,.03,.05),vec3(.16,.15,.2),smoothstep(.2,.8,f))*day;
+  c+=vec3(.65,.75,1.)*fl*(.6+cl)*1.6+vec3(.4,.5,.9)*uFlash*.08*cl;
+  gl_FragColor=vec4(c,clamp((cl*.82+.12)*m*uAmt+fl*.4*uAmt,0.,1.));
+}`;
+const storms = new Map(), stormWant = new Set();
+let stormGeo = null;
+api.storm = (name, on) => { if (!name) return; if (on) stormWant.add(name); else stormWant.delete(name); };
+api.stormInfo = () => [...storms.values()].map(s => ({ name: s.p.name, amt: +s.amt.toFixed(2), vis: s.mesh.visible, inScene: !!s.mesh.parent }));
+function makeStorm(p) {
+  stormGeo = stormGeo || new THREE.SphereGeometry(1.2, 48, 32);
+  const rg = rnd(hash(p.name) ^ 0x2545f491);
+  const C = new THREE.Vector3(rg() - .5, .7 + rg() * .5, rg() - .5).normalize();
+  const uni = pu({ uSeed: { value: rg() }, uAmt: { value: 0 }, uFlash: { value: 0 }, uC: { value: C }, uFP: { value: C.clone() } }, p.U.light);   // C = siklonun mərkəzi (uniform ilə eyni obyekt)
+  const mesh = new THREE.Mesh(stormGeo, new THREE.ShaderMaterial({ vertexShader: PLANET_VS, fragmentShader: STORM_FS, uniforms: uni, transparent: true, depthWrite: false }));
+  const bolt = new THREE.Line(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(8 * 3), 3)),
+    new THREE.LineBasicMaterial({ color: 0xcfe0ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  bolt.frustumCulled = false;
+  const fl = glowSpr(0xbcd0ff, 0, .9);
+  p.body.add(mesh, bolt, fl);
+  return { p, mesh, uni, bolt, fl, C, amt: 0, next: 1 + rg() * 2, tF: -9, rg };
+}
+function disposeStorm(n) {
+  const s = storms.get(n); if (!s) return;
+  s.p.body.remove(s.mesh, s.bolt, s.fl);
+  s.mesh.material.dispose(); s.bolt.geometry.dispose(); s.bolt.material.dispose(); s.fl.material.dispose();
+  storms.delete(n);
+}
+function strike(s) {
+  const fp = s.uni.uFP.value.copy(s.C).add(fT1.set(s.rg() - .5, s.rg() - .5, s.rg() - .5).multiplyScalar(1.1)).normalize();
+  const P = s.bolt.geometry.attributes.position;
+  for (let i = 0; i < 8; i++) {                                  // zigzaq: buluddan (1.2) səthə (1.0)
+    const t = i / 7, j = Math.sin(t * Math.PI) * .07;
+    fT2.copy(fp).multiplyScalar(1.2 - .2 * t).add(fT1.set(s.rg() - .5, s.rg() - .5, s.rg() - .5).multiplyScalar(j * 2));
+    P.setXYZ(i, fT2.x, fT2.y, fT2.z);
+  }
+  P.needsUpdate = true;
+  s.fl.position.copy(fp).multiplyScalar(1.14);
+  s.tF = tScene;
+}
+function updateStorms(dt) {
+  for (const n of stormWant) { const p = planets.get(n); if (p && (!storms.has(n) || storms.get(n).p !== p)) { disposeStorm(n); storms.set(n, makeStorm(p)); } }
+  for (const [n, s] of storms) {
+    const want = stormWant.has(n) && planets.get(n) === s.p;
+    s.amt += ((want ? 1 : 0) - s.amt) * Math.min(1, dt * (want ? .8 : 1.5));
+    if (!want && s.amt < .01) { disposeStorm(n); continue; }
+    const vis = s.p.U.lvP > .05;
+    s.mesh.visible = s.bolt.visible = s.fl.visible = vis;
+    if (!vis) continue;
+    s.uni.uAmt.value = s.amt;
+    fT1.copy(camera.position); s.p.body.worldToLocal(fT1).normalize().multiplyScalar(.8).add(UPV);   // siklon yavaşca kameraya görünən tərəfə sürüşür
+    s.C.lerp(fT1.normalize(), Math.min(1, dt * .25)).normalize();
+    s.next -= dt;
+    if (s.next <= 0 && !REDUCE && s.amt > .5) { strike(s); s.next = .7 + s.rg() * 2.6; }
+    const a = tScene - s.tF, fl = a > 1.5 ? 0 : Math.exp(-a * 9) * (a < .06 || (a > .11 && a < .2) ? 1 : .35);   // ikiqat çaxma
+    s.uni.uFlash.value = fl * 1.4; s.bolt.material.opacity = Math.min(1, fl * 1.5) * s.amt; s.fl.material.opacity = fl * .9 * s.amt;
+  }
+}
+
+/* ====== Canlı kainat: Jarvis danışanda / dinləyəndə ulduzlar, səma, qalaktikalar səslə birlikdə nəfəs alır; danışmağa başlayanda zərbə dalğası ====== */
+let pulseT = 0, pulseS = 0, pulseAt = -9, shockR = null;
+api.pulse = lv => { pulseT = Math.max(0, Math.min(1, +lv || 0)); pulseAt = tScene; };
+api.shock = hex => {
+  if (!api.mounted || REDUCE) return;
+  if (!shockR) {
+    shockR = new THREE.Mesh(new THREE.RingGeometry(.965, 1, 160, 1), new THREE.MeshBasicMaterial({ color: 0x7fe8ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    shockR.rotation.x = -Math.PI / 2; shockR.frustumCulled = false; scene.add(shockR);
+  }
+  shockR.material.color.setHex(hex || 0x7fe8ff);
+  shockR.userData.t0 = tScene; shockR.visible = true;
+};
+function updatePulse(dt) {
+  if (tScene - pulseAt > .4) pulseT = 0;                         // çağırış kəsildisə (Jarvis söndü) — sakitləş
+  pulseS += (pulseT - pulseS) * Math.min(1, dt * (pulseT > pulseS ? 9 : 2.5));
+  const v = pulseS * (REDUCE ? .4 : .85 + .15 * Math.sin(tScene * 2.2));
+  stars.material.uniforms.uPulse.value = v;
+  sky.material.uniforms.uP.value = v * .55;
+  if (shockR && shockR.visible) {
+    const u = (tScene - shockR.userData.t0) / 1.6;
+    if (u >= 1 || u < 0) { shockR.visible = false; return; }
+    const D = camera.position.distanceTo(controls.target);
+    shockR.position.copy(controls.target);
+    shockR.scale.setScalar(D * (.05 + 1.15 * (1 - Math.pow(1 - u, 3))));
+    shockR.material.opacity = .42 * (1 - u) * (1 - u);
+  }
+}
+/** Planetin ekran koordinatları (UI göstəricisi üçün): x,y = viewport (clientX/Y), lx,ly = kainat qutusuna görə, r = ekranda radius px */
+api.screenPos = name => {
+  if (!api.mounted) return null;
+  const p = planets.get(name); if (!p) return null;
+  p.holder.getWorldPosition(fS);
+  const dist = Math.max(.001, camera.position.distanceTo(fS));
+  fS.project(camera);
+  const lx = (fS.x * .5 + .5) * W, ly = (-fS.y * .5 + .5) * H, b = box.getBoundingClientRect();
+  const visible = active && !p.U.hidden && p.U.lvP > .1 && fS.z > -1 && fS.z < 1 && lx > -40 && lx < W + 40 && ly > -40 && ly < H + 40;
+  return { x: b.left + lx, y: b.top + ly, lx, ly, r: p.R * H / (2 * Math.tan(camera.fov * Math.PI / 360) * dist), visible };
+};
+
 /* ====== Universlər: kosmik xəritədə hər biri öz yerində — uzaqdan qalaktika, yaxınlaşdıqca planetlər, sonra detallar ====== */
 const THEMES = {
   main: { a: [.2, .1, .38], b: [.05, .22, .36], c: [.38, .1, .2], sa: [1, .36, .04], sb: [1, .82, .32], g1: 0xffa040, g2: 0xff7a30, lbl: 'Komanda', gal: [255, 190, 120], gal2: [150, 130, 255] },
@@ -1508,11 +1901,11 @@ function updateUniverses(dt) {
     u.lvD = fu === u ? 1 : 1 - sst(R * 1.7, R * 2.8, u.d);
     if (u.lvP > .35 && u.d < nd) { nd = u.d; near = u; }
     const gs = GAL_R * 3.4;                                      // sabit ölçü: xəritədə hamısı bərabər
-    u.gal.scale.setScalar(gs); u.gal.material.uniforms.uOp.value = .95 * u.lvG; u.gal.visible = u.lvG > .01;
+    u.gal.scale.setScalar(gs); u.gal.material.uniforms.uOp.value = .95 * u.lvG * (1 + pulseS * .5); u.gal.visible = u.lvG > .01;
     u.gal.material.uniforms.uPx.value = H * pr / (2 * Math.tan(camera.fov * Math.PI / 360));
     if (!REDUCE) u.gal.rotation.y += dt * .035;
     u.galHit.scale.setScalar(GAL_R * 1.25); u.galHit.visible = u.lvG > .3;
-    const sp = 1 + Math.sin(tScene * 1.3 + u.center.x) * .03;
+    const sp = 1 + Math.sin(tScene * 1.3 + u.center.x) * .03 + pulseS * .22;
     u.g1.scale.setScalar(30 * sp * (1 + u.lvG * 3)); u.g2.scale.setScalar((78 + Math.sin(tScene * .7) * 3) * (1 + u.lvG * 2));
     u.sun.rotation.y += dt * .02;
     u.lbl.style.opacity = focusName ? 0 : u.lvP;
@@ -1890,6 +2283,7 @@ function frame(now) {
 
   updateShip(dt);
   updateUShips(dt);
+  updateFleet(dt); updateSmoke(dt); updateStorms(dt);
   sunSats.body.visible = U.main.lvD > .05;
   updateSats(sunSats, dt, !focusName && U.main.lvD > .3, 1);
   if (!REDUCE) updateRockets(dt);
@@ -1948,6 +2342,7 @@ function frame(now) {
 
   stars.position.copy(camera.position); sky.position.copy(camera.position);
   sky.rotation.y += dt * .0025;
+  updatePulse(dt);
   if (skyMix) skyMix.mat.uniforms.uW.value = skyMix.w;
   const items = [];
   for (const p of planets.values()) {
@@ -2000,8 +2395,8 @@ api.mount = function (el) {
     new THREE.CubeCamera(.1, 100, rt).update(renderer, bakeScene); skyTex[id] = rt.texture;
   }
   sky = new THREE.Mesh(new THREE.SphereGeometry(1000, 32, 16), new THREE.ShaderMaterial({
-    vertexShader: SKY_VS, uniforms: { tA: { value: skyTex.main }, tB: { value: skyTex.main }, uW: { value: 0 } }, side: THREE.BackSide, depthWrite: false,
-    fragmentShader: 'uniform samplerCube tA, tB; uniform float uW; varying vec3 vDir; void main(){ vec3 d=normalize(vDir); gl_FragColor=vec4(mix(textureCube(tA,d).rgb,textureCube(tB,d).rgb,uW),1.); }' }));
+    vertexShader: SKY_VS, uniforms: { tA: { value: skyTex.main }, tB: { value: skyTex.main }, uW: { value: 0 }, uP: { value: 0 } }, side: THREE.BackSide, depthWrite: false,
+    fragmentShader: 'uniform samplerCube tA, tB; uniform float uW, uP; varying vec3 vDir; void main(){ vec3 d=normalize(vDir); vec3 c=mix(textureCube(tA,d).rgb,textureCube(tB,d).rgb,uW); gl_FragColor=vec4(c*(1.+uP)+c*c*uP*3.,1.); }' }));
   skyMix = { mat: sky.material, tex: skyTex, cur: 'main', w: 0 };
   sky.renderOrder = -2; scene.add(sky);
   const N = 3000, pos = new Float32Array(N * 3), size = new Float32Array(N), ph = new Float32Array(N), col = new Float32Array(N * 3), r = rnd(7);
@@ -2015,7 +2410,7 @@ api.mount = function (el) {
   const sg = new THREE.BufferGeometry();
   sg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); sg.setAttribute('size', new THREE.BufferAttribute(size, 1));
   sg.setAttribute('phase', new THREE.BufferAttribute(ph, 1)); sg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  stars = new THREE.Points(sg, new THREE.ShaderMaterial({ vertexShader: STAR_VS, fragmentShader: STAR_FS, uniforms: { uTime: uT, uPR: { value: 1 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  stars = new THREE.Points(sg, new THREE.ShaderMaterial({ vertexShader: STAR_VS, fragmentShader: STAR_FS, uniforms: { uTime: uT, uPR: { value: 1 }, uPulse: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   stars.renderOrder = -1; stars.frustumCulled = false; scene.add(stars);
 
   // universlər (hər birinin günəşi, qalaktikası, etiketləri)

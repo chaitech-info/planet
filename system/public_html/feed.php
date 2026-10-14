@@ -93,11 +93,12 @@ $projects->execute([$now - 30 * 86400]);
 // təsdiqi 1 saat gözlənilməyən uzaq komanda ləğv olunur
 $pdo->prepare("UPDATE commands SET status = 'canceled', result = ?, finished_at = ? WHERE status = 'pending' AND created_at < ?")
     ->execute(['Vaxt bitdi: təsdiq edilmədi', $now, $now - 3600]);
-$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind
+$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind, progress, mission_id, step
     FROM commands ORDER BY id DESC LIMIT 40')->fetchAll();
 foreach ($cmds as $i => &$c) {
     $c['result'] = mb_substr($c['result'], 0, $i < 8 ? 8000 : 1500);   // ən yeni 8 cavab tam, köhnələr qısa (hər 3 saniyədə göndərilir)
     $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
+    $c['progress'] = json_decode((string)$c['progress'], true) ?: null;   // canlı gedişat (Jarvis HUD agent kartları)
 }
 unset($c);
 $agents = $pdo->query('SELECT user, last_seen, claude_ok, projects, auto_tasks FROM agents')->fetchAll();
