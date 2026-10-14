@@ -51,10 +51,11 @@ Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun
 Gəmilər hər biri öz trayektoriyası ilə uçur; sahibi işləyəndə öz proyektinin, boş vaxtda (agent onlayndırsa) öz agentinin ətrafında olur və arabir başqa universlərdəki planetlərə uçur.
 URL-lər: `#kainat` (xəritə), `#kainat/@mcp` (universin ümumi görünüşü), `#kainat/<planet>` (planet).
 
-## 🎙 Jarvis (səsli agent, Gemini Live API)
+## 🎙 Jarvis (səsli agent: Grok Voice / Gemini Live)
 Real-time danışan köməkçi: sual verirsən ("kim nə edir?", "hansı planet yanır?"), kainatda gəzdirir ("MCP universinə uç"), əməllər edir (tapşırıq, status, deadline, görüş, test nəticəsi, mesaj raketi, agentə prompt). Dəyişiklik edən hər əmrdən əvvəl səslə təsdiq soruşur; silə bilmir.
-1. `system/public_html/config.local.example.php` faylını `config.local.php` adı ilə kopyala, `gemini_api_key` yaz (Google AI Studio). Bu fayl git-ə düşmür; serverdə də əl ilə yaradılmalıdır.
+1. `system/public_html/config.local.example.php` faylını `config.local.php` adı ilə kopyala, `fal_key` yaz (fal.ai → Keys). Bu fayl git-ə düşmür; serverdə də əl ilə yaradılmalıdır.
 2. Səhifədə `🎙 Jarvis` düyməsi və ya `Alt+J`. Mikrofon yalnız HTTPS və ya localhost-da işləyir; qulaqcıqla daha yaxşıdır.
-- Açar brauzerə getmir: `jarvis.php` 30 dəqiqəlik bir dəfəlik token yaradır, brauzer Gemini-yə birbaşa WebSocket ilə qoşulur.
-- Gündəlik limit: `jarvis_daily_minutes` (standart 60 dəq/istifadəçi). Model, səs və dil də `config.local.php`-dən dəyişir.
+- Səs təminatçısı adapterdir (`jarvis.js` → `ADAPTERS`): **Grok Voice** (xAI, fal.ai üzərindən, ~$0.05/dəq) və **Gemini Live** (Google). Alətlər, panel və Claude Code inteqrasiyası hər ikisi üçün eynidir; adapter yalnız protokolu çevirir. Hazırda yalnız Grok aktivdir: Gemini-ni qaytarmaq üçün `jarvis.php`-də `$enabled` siyahısına `'gemini'` əlavə et (və `gemini_api_key` yaz). Hər ikisi aktiv olanda paneldə seçim çıxır, default `jarvis_provider`.
+- Açar brauzerə getmir: `jarvis.php` qısa ömürlü token yaradır (fal: yalnız `grok-voice` üçün, 2 dəqiqə ərzində qoşulmaq; Gemini: bir dəfəlik), brauzer təminatçıya birbaşa WebSocket ilə qoşulur. fal çərçivələri msgpack-dir (kiçik kodlayıcı `jarvis.js`-in içindədir).
+- Gündəlik limit: `jarvis_daily_minutes` (standart 60 dəq/istifadəçi). Səs (`grok_voice`: rex, leo, eve, ara, orion, …), model və dil də `config.local.php`-dən dəyişir.
 
