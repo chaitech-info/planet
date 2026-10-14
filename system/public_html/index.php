@@ -791,7 +791,7 @@ html { -webkit-text-size-adjust: 100%; }
   #space { --H: calc(100dvh - 140px); min-height: 400px; border-radius: 16px; }
   .zbtns { top: 50px; right: 10px; gap: 5px; } .zbtns button { width: 34px; height: 34px; } .fsbtn { right: 10px; top: 8px; width: 34px; height: 34px; }
   .hud { left: 12px; top: 10px; }
-  .dock { left: 8px; right: 8px; bottom: 8px; height: 64%; padding: 12px; }
+  .dock { left: 8px; right: 8px; bottom: 8px; height: 70%; padding: 12px; transition: transform .5s var(--ease-out), opacity .3s ease, height .25s ease; }
   .dtitle { font-size: 22px; } .dtop .dtitle { font-size: 19px; }
   .xd-comp { margin: 12px -12px -12px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); bottom: -12px; }
   /* Lövhə */
@@ -801,7 +801,10 @@ html { -webkit-text-size-adjust: 100%; }
   .bcol { min-height: 0; border-radius: 16px; }
   .tcard .tact .gbtn { padding: 6px 11px; }
   /* Modallar: aşağıdan açılan vərəq */
-  .modal { padding: 0; place-items: end stretch; }
+  .modal { padding: 0; place-items: end stretch; inset: auto; top: var(--vvt, 0px); left: 0; right: 0; height: var(--vvh, 100dvh); }   /* klaviatura açılanda vərəq görünən sahənin dibində qalır */
+  .dock:focus-within { height: 86%; }   /* yazanda söhbət vərəqi böyüyür */
+  .dock .xd-prj { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; } .dock .xd-prj::-webkit-scrollbar { display: none; } .dock .xd-prj button { flex: none; }
+  .xbub { max-width: 96%; } .xd-tool { gap: 5px; } .xd-tb { padding: 5px 10px; } .xd-send { padding: 7px 14px; }
   .mbox, .mbox.small { width: 100%; max-height: min(94dvh, 100%); border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; }
   .mbox::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.22); margin: -4px auto 12px; }
   .madd { flex-wrap: wrap; } .madd input { flex: 1 1 160px; }
@@ -1194,6 +1197,9 @@ let view = 'panel', curPlanet = null, curShip = false, lastPlanet = null, stagge
 const SHIPKEY = '~plan';
 const primed = {};
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const COARSE = matchMedia('(pointer: coarse)').matches;          // toxunma ekranı: Enter yeni sətirdir, göndərmək düymə ilə (telefon klaviaturasında Shift+Enter yoxdur)
+// Mobil klaviatura açılanda görünən sahə kiçilir: modallar və vərəqlər ona görə yerləşsin (--vvh / --vvt)
+if (window.visualViewport) { const vv = () => { document.documentElement.style.setProperty('--vvh', Math.round(visualViewport.height) + 'px'); document.documentElement.style.setProperty('--vvt', Math.round(visualViewport.offsetTop) + 'px'); }; visualViewport.addEventListener('resize', vv); visualViewport.addEventListener('scroll', vv); vv(); }
 const MAXP = 8;
 function prime(id, fn) { const un = !primed[id]; stagger = quiet = un; fn(); primed[id] = true; stagger = quiet = false; }
 
@@ -1688,7 +1694,8 @@ function initCmd() {
   $('cmdsend').onclick = sendCmd;
   $('agentstart').addEventListener('click', () => { agentStarting = now(); setTimeout(renderCmd, 50); });
   // Enter göndərir (Shift+Enter yeni sətir); yazı tərkibi (IME) zamanı yox
-  $('cmdin').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendCmd(); } });
+  $('cmdin').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !COARSE) { e.preventDefault(); sendCmd(); } });
+  if (COARSE) $('cmdin').placeholder = 'Bu proyektdə nə etsin? (Göndər düyməsi ilə; şəkli 🖼 ilə əlavə et)';
   $('cmdatt').onclick = () => $('cmdfile').click();
   $('cmdfile').onchange = () => { cmdAddImages([...$('cmdfile').files]); $('cmdfile').value = ''; };
   $('cmdin').addEventListener('paste', e => {
@@ -2927,7 +2934,8 @@ function renderDesktopPlanet(u) {
       for (const p of prjs) { const b = el('button', null, '🪐 ' + p); b.type = 'button'; b.dataset.p = p; b.title = 'Komanda bu proyektin qovluğunda işləyəcək'; b.onclick = () => { prj = box._prj = p; try { localStorage.setItem(key, p); } catch (e) {} drawChips(); upd(); ta.focus(); }; chips.append(b); }
       if (!prjs.length) chips.append(el('span', 'xd-warn', u + ' hələ heç bir proyekt qurmayıb: onun kompüterində hook ilə Claude Code işlənməlidir.'));
       const ta = el('textarea'); ta.rows = 2; ta.maxLength = 3500; ta.placeholder = u + '-in kompüterində Claude Code nə etsin?'; ta.value = prevTxt;
-      const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(260, ta.scrollHeight) + 'px'; };
+      const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(COARSE ? 140 : 260, ta.scrollHeight) + 'px'; };
+      ta.addEventListener('focus', () => { if (COARSE) setTimeout(() => $('xdock').scrollTo({ top: 1e9 }), 350); });   // klaviatura açılanda son mesaj və qutu görünsün
       const err = el('div', 'cmderr'); err.hidden = true;
       const imgs = box._imgs, strip = el('div', 'cmdimgs'), file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/gif,image/webp'; file.multiple = true; file.hidden = true;
       const drawImgs = () => { strip.hidden = !imgs.length; strip.replaceChildren(...imgs.map(im => { const d = el('div', 'cimg'), i = el('img'); i.src = im.url; i.alt = im.file.name; const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil'; x.onclick = () => { URL.revokeObjectURL(im.url); imgs.splice(imgs.indexOf(im), 1); drawImgs(); }; d.append(i, x); return d; })); };
@@ -2940,7 +2948,7 @@ function renderDesktopPlanet(u) {
       fb.onclick = () => { box._fresh = !box._fresh; fb.classList.toggle('on', box._fresh); fb.setAttribute('aria-pressed', box._fresh); };
       fb.setAttribute('aria-pressed', !!box._fresh);
       const bt = el('button', 'gbtn go xd-send', 'Göndər ➤'); bt.type = 'button';
-      tool.append(att, fb, el('span', 'sp'), el('span', 'xd-hint', 'Enter göndərir · Shift+Enter yeni sətir'), bt);
+      tool.append(att, fb, el('span', 'sp'), el('span', 'xd-hint', COARSE ? '' : 'Enter göndərir · Shift+Enter yeni sətir'), bt);
       const send = async () => {
         err.hidden = true; if (!prj) { err.hidden = false; err.textContent = 'Əvvəl proyekt seç'; return; } if (!ta.value.trim()) { ta.focus(); return; }
         bt.disabled = true; setText(bt, 'Göndərilir…');
@@ -2965,7 +2973,7 @@ function renderDesktopPlanet(u) {
       };
       bt.onclick = send;
       ta.addEventListener('input', () => { grow(); upd(); });
-      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });   // Enter göndərir, Shift+Enter yeni sətir
+      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !COARSE) { e.preventDefault(); send(); } });   // Enter göndərir, Shift+Enter yeni sətir; telefonda Enter yeni sətirdir
       ta.addEventListener('paste', e => { const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean); if (fs.length) { e.preventDefault(); addImgs(fs); } });
       ta.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); ta.classList.add('drop'); } });
       ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
