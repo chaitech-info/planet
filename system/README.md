@@ -36,10 +36,12 @@ Lokal Emil tokeni ilə hook hadisəsini əl ilə yoxlamaq: `curl -X POST http://
 - **Prompt Generator, Designer, Meeting Planet**: xüsusi planetlər. Prompt yaratma və kitabxana; dizayn layihələri və tapşırıqları; görüşlər, gündəm və müzakirə (görüş vaxtı iştirakçıların gəmiləri ora uçur).
 - **Test Planet** (🧪): planetə gir, test ediləcək proyekti seç. Proyekt üzrə test ssenariləri (keçdi / xəta + qeyd), "Yeni raund" ilə sıfırlama və Claude agentinə test promptu göndərmək. Xəta varsa Test Planet qırmızı yanır, proyektin planetində "🧪 N xəta" görünür.
 
-## Universlər
-Kainatın yuxarısındakı keçid ilə 4 univers arasında gəmi ilə səyahət edilir (warp effekti: ulduz xətləri, öz gəmin önündə uçur, yeni universə çatanda ekran parlayır). Hər universin öz səması və günəşi var.
+## Kosmik xəritə və universlər
+Kainat açılanda bütün universlər bir kosmik xəritədə qalaktika kimi görünür. Keçid üçün düymə yoxdur: siçan təkəri ilə kursorun altındakı yerə yaxınlaşıb-uzaqlaşırsan, sol düymə ilə məkanı sürüşdürürsən, sağ düymə ilə fırladırsan (planetə fokusda sol düymə fırladır). Qalaktikaya klik etmək onun içinə axıcı uçuşdur; 🗺 düyməsi bütün xəritəyə qaytarır.
+Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun adı → planetlər, orbitlər və günəş → aylar, MCP peykləri, gəmilər və tapşırıq balonları. Səma yaxınlaşılan universin rənginə keçir; uzaq səyahətdə ulduz xətləri və geniş baxış bucağı sürət hissi verir.
 - **🌌 Komanda**: proyektlər və istifadəçi planetləri.
 - **🎨 Studio**: Prompt Generator, Designer, Meeting Planet, Test Planet.
 - **🛰 MCP Universe**: hər MCP server bir planetdir (ayları onu işlədən proyektlərdir); paneldə proyektlər və son çağırışlar.
 - **🤖 Agent Universe**: hər istifadəçinin AI agenti bir planetdir (onlayn/işləyir/növbə); yeni tapşırıq agentə raketlə çatır (başqası təyin edibsə, onun agentindən), paneldə avtomatlaşdırma axını.
-Gəmilər daha böyükdür və hər biri öz trayektoriyası, istiqaməti, sürəti ilə uçur, arabir başqa planetlərə qısa səyahətə çıxır.
+Gəmilər hər biri öz trayektoriyası ilə uçur; sahibi işləyəndə öz proyektinin, boş vaxtda (agent onlayndırsa) öz agentinin ətrafında olur və arabir başqa universlərdəki planetlərə uçur.
+URL-lər: `#kainat` (xəritə), `#kainat/@mcp` (universin ümumi görünüşü), `#kainat/<planet>` (planet).

@@ -552,19 +552,11 @@ body.v-space::before { display: none; }
 @media (max-width: 520px) { .row { grid-template-columns: 48px 1fr; } .wrap { padding-top: 16px; } }
 
 /* ===== Yeni: gəmilər, peyklər, balonlar, xüsusi planetlər ===== */
-.unibar { position: absolute; right: 62px; top: 12px; z-index: 3; display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(9,10,20,.55); border: 1px solid rgba(255,255,255,.12); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); max-width: calc(100% - 28px); overflow-x: auto; scrollbar-width: none; }
-.unibar button { display: inline-flex; gap: 6px; align-items: center; border: 0; background: none; color: rgba(233,233,243,.75); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; transition: background-color .2s ease, color .2s ease, transform .15s var(--ease-out); }
-.unibar button b { font-weight: 600; } .unibar button:active { transform: scale(.96); }
-.unibar button.on { background: var(--accent); color: #fff; }
-.unibar button.from { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
-.space.docked .unibar { right: 458px; max-width: calc(100% - 640px); }
-@media (max-width: 1180px) { .space.docked .unibar { display: none; } }
-.warpmsg { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 3; pointer-events: none; text-align: center; color: #fff; opacity: 0; display: grid; gap: 4px; text-shadow: 0 2px 18px rgba(0,0,0,.8); }
-.warpmsg span { font-size: 34px; } .warpmsg b { font-size: 24px; letter-spacing: -.01em; } .warpmsg small { font-size: 13px; color: rgba(233,233,243,.8); }
-.warpmsg.go { animation: warpmsg 2.8s var(--ease-io) both; }
-@keyframes warpmsg { 0% { opacity: 0; transform: translate(-50%, -40%) scale(.9); } 25%, 60% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1.06); } }
-@media (max-width: 760px) { .unibar { left: 14px; right: auto; top: 76px; } .stools { top: 40px; } .unibar button b { display: none; } .unibar button.on b { display: inline; } }
-@media (prefers-reduced-motion: reduce) { .warpmsg.go { animation: none; } }
+.glabel.galbl { font-size: 15px; padding: 6px 12px; } .glabel.galbl b { font-size: 17px; letter-spacing: -.01em; } .glabel.galbl span { font-size: 12.5px; }
+.glabel.galbl.hov b { transform: scale(1.08); }
+.maphint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 2; pointer-events: none; font-size: 12.5px; color: rgba(233,233,243,.7); background: rgba(9,10,20,.5); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 4px 12px; white-space: nowrap; transition: opacity .6s ease; }
+.maphint[hidden] { display: block; opacity: 0; }
+@media (max-width: 760px) { .maphint { display: none !important; } }
 .stools { position: absolute; left: 14px; top: 40px; z-index: 3; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 80px); }
 .stools button { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9e9f3; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; transition: background-color .15s ease, transform .15s var(--ease-out); }
 .stools button:active { transform: scale(.97); }
@@ -715,11 +707,10 @@ body.v-space::before { display: none; }
   <div id="v-space" hidden>
     <div class="space" id="space">
       <div class="hud"><span id="hudA"></span><span id="hudB"></span></div>
-      <div class="unibar" id="unibar"></div>
-      <div class="warpmsg" id="warpmsg" aria-live="polite"></div>
+      <div class="maphint" id="maphint">🖱 Təkərlə yaxınlaş/uzaqlaş · sürüşdür · sağ düymə ilə fırlat · qalaktikaya klik et</div>
       <div class="stools"><button id="t-ship" title="Öz gəmini fərdiləşdir və deadline təyin et">🚀 Gəmim</button><button id="t-world" title="Özünə planet yarat">🪐 Yeni planet</button><button id="t-mcp" title="MCP inteqrasiyaları üçün peyklər">🛰 MCP peykləri</button></div>
       <button class="fsbtn" id="fs" title="Tam ekran" aria-label="Tam ekran">⛶</button>
-      <div class="zbtns"><button id="zin" aria-label="Yaxınlaşdır">+</button><button id="zout" aria-label="Uzaqlaşdır">−</button><button id="sbtn" aria-label="Səs" title="Səs">🔊</button><button id="qbtn" aria-label="Təsvir keyfiyyəti" title="Təsvir keyfiyyəti: Avto / HD (həmişə tam kəskinlik)">HD</button></div>
+      <div class="zbtns"><button id="zin" aria-label="Yaxınlaşdır">+</button><button id="zout" aria-label="Uzaqlaşdır">−</button><button id="zmap" aria-label="Kosmik xəritə" title="Bütün universlərin xəritəsi">🗺</button><button id="sbtn" aria-label="Səs" title="Səs">🔊</button><button id="qbtn" aria-label="Təsvir keyfiyyəti" title="Təsvir keyfiyyəti: Avto / HD (həmişə tam kəskinlik)">HD</button></div>
       <div class="scene" id="scene">
         <div class="cam"><div class="rig">
           <div id="orbits"></div>
@@ -1283,32 +1274,32 @@ function makeOrbit(p) {
 }
 function renderSpace() {
   const all = buildProjects();
-  // universin dəyişməsi: 3D-də gəmi ilə səyahət, ekran ən parlaq olanda yeni universin planetləri qurulur
-  if (shownUni !== uni) {
-    const to = uni;
-    if (K && glOn && view === 'space') { if (!K.warping()) { showWarpMsg(to); K.warp(to, () => { shownUni = to; renderSpace(); }); } }
-    else { shownUni = to; if (K && glOn) K.warp(to, null); }
-  }
-  const list = uniList(spaceList(all), shownUni);
-  const names = new Set(list.map(p => p.name));
-  renderUniBar();
-  const hud = { main: [all.length + ' proyekt', all.filter(p => p.st === 'working').length + ' işləyir'],
-    studio: [list.length + ' stansiya', list.filter(p => p.st === 'working' || p.st === 'meet').length + ' aktiv'],
-    mcp: [list.length + ' MCP server', list.filter(p => p.st === 'working').length + ' indi işləyir'],
-    agent: [list.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'] }[shownUni];
+  // bütün universlər eyni kosmik xəritədədir: hamısının planetləri birlikdə göndərilir
+  const full = spaceList(all), lists = {};
+  for (const u of UNIVERSES) lists[u.id] = uniList(full, u.id);
+  const everything = UNIVERSES.flatMap(u => lists[u.id].map(p => ({ ...p, uni: u.id })));
+  const names = new Set(everything.map(p => p.name));
+  const here = navUni ? lists[navUni] : [];
+  const sums = {
+    main: [all.length + ' proyekt', all.filter(p => p.st === 'working').length + ' işləyir'],
+    studio: [lists.studio.length + ' stansiya', lists.studio.filter(p => p.st === 'working' || p.st === 'meet').length + ' aktiv'],
+    mcp: [lists.mcp.length + ' MCP server', lists.mcp.filter(p => p.st === 'working').length + ' indi işləyir'],
+    agent: [lists.agent.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'] };
+  const hud = navUni ? [UNIVERSES.find(u => u.id === navUni).icon + ' ' + UNIVERSES.find(u => u.id === navUni).name + ' · ' + sums[navUni][0], sums[navUni][1]] : ['🗺 Kosmik xəritə', UNIVERSES.length + ' univers'];
   setText($('hudA'), hud[0]); setText($('hudB'), hud[1]);
-  $('sempty').hidden = list.length > 0;
-  setText($('sempty'), { main: 'Hələ heç bir dünya yoxdur. Hook quraşdırılmış proyektdə Claude Code işlət, ilk planet yaranacaq.', studio: '', mcp: 'Hələ MCP server yoxdur. Claude Code-da MCP aləti işlət və ya 🛰 MCP peykləri bölməsindən əl ilə qeyd et.', agent: 'Hələ istifadəçi yoxdur.' }[shownUni]);
+  $('sempty').hidden = everything.length > 0;
+  $('maphint').hidden = !!navUni || !!curPlanet || curShip;
+  const list = K && glOn ? here : lists.main;
   if (K && glOn) {
-    K.setData(list.map(p => ({ name: p.name, label: p.label || null, kind: p.kind, look: p.look || null, hue: p.hue ?? null, R: p.R || 0, st: p.st, edits: p.edits, tools: p.tools, sub: p.sub, alert: (data.alerts || []).some(a => a.project === p.name),
+    K.setUniverses(UNIVERSES.map(u => ({ id: u.id, icon: u.icon, name: u.name, sub: sums[u.id].join(' · ') })));
+    K.setData(everything.map(p => ({ name: p.name, uni: p.uni, label: p.label || null, kind: p.kind, look: p.look || null, hue: p.hue ?? null, R: p.R || 0, st: p.st, edits: p.edits, tools: p.tools, sub: p.sub, alert: (data.alerts || []).some(a => a.project === p.name),
       burn: p.burn, sats: p.sats, fail: !!p.fail, users: [...p.users].map(([u, v]) => ({ name: u, st: v.st, color: tint(u) })) })));
     syncHits(); K.setAudio(data.sounds || {});
     const pl = data.plans || [], op = k => pl.filter(x => x.kind === k && x.status === 'open').length;
     K.setShip({ sub: op('plan') + ' plan · ' + op('scope') + ' scope' });
-    K.setPlanShipVisible(shownUni === 'main');
-    K.setShips(shipItems(names, shownUni));
-    K.setBalloons(shownUni === 'main' || shownUni === 'studio' ? balloonItems(names) : []);
-    K.setSunSats(shownUni === 'main' ? (data.mcp || []).filter(x => !x.project || !(names.has(x.project) || specialOf(x.project))).map(x => ({ name: x.name, manual: true })) : []);
+    K.setShips(shipItems(names));
+    K.setBalloons(balloonItems(names));
+    K.setSunSats((data.mcp || []).filter(x => !x.project || !names.has(x.project)).map(x => ({ name: x.name, manual: true })));
     fireAgentRockets();
   } else {
     const step = Math.min(9, 46 / Math.max(list.length, 1));
@@ -1321,7 +1312,7 @@ function renderSpace() {
       syncMoons(r.planet, p.users);
     }, { enter: false }));
   }
-  prime('travel', () => sync($('travel'), [...(shownUni === 'main' ? [{ name: SHIPKEY, label: '🛸 Plan' }] : []), ...list], p => p.name, p => {
+  prime('travel', () => sync($('travel'), [...(navUni === 'main' || !(K && glOn) ? [{ name: SHIPKEY, label: '🛸 Plan' }] : []), ...list], p => p.name, p => {
     const b = el('button'), d = el('i', 'tdot'); d.style.setProperty('--h', hue(p.name)); b.append(d, el('span', null, p.label || p.name));
     b.onclick = () => go(p.name); return b;
   }, () => {}));
@@ -1513,7 +1504,7 @@ function renderDock(all) {
 }
 
 /* ====== Görünüşlər və naviqasiya ====== */
-function go(name) { location.hash = name ? '#kainat/' + encodeURIComponent(name) : '#kainat'; }
+function go(name) { location.hash = name ? '#kainat/' + encodeURIComponent(name) : '#kainat/@' + (curPlanet ? uniOf(curPlanet) : curShip ? 'main' : navUni || 'main'); }
 let K = null, glOn = false;
 function initGL() {
   if (glOn) return;
@@ -1523,7 +1514,10 @@ function initGL() {
   $('space').classList.add('gl');
   K.onPick = name => go(name);
   K.onShip = () => go(SHIPKEY);
-  K.setTheme(shownUni);
+  K.onUniverse = id => { navUni = id; render(); };
+  K.onPickUni = id => { location.hash = '#kainat/@' + id; };
+  $('zmap').onclick = () => { if (curPlanet || curShip) location.hash = '#kainat'; else K.home(); };
+  if (navTarget !== undefined) { K.flyUni(navTarget, true); navTarget = undefined; }
   K.onUserShip = u => openShip(u);
   if (ME) K.setMe(ME.name);
   K.onBalloon = id => { const t = (data.tasks || []).find(x => +x.id === +id); if (t) go(t.project); };
@@ -1567,8 +1561,10 @@ function route() {
   const [v, p] = location.hash.slice(1).split('/');
   if (v === 'kainat') {
     const name = p ? decodeURIComponent(p) : null;
-    if (name && name[0] === '@') { setUni(name.slice(1)); setView('space', null); }   // #kainat/@mcp = universin ümumi görünüşü
-    else { if (name && name !== SHIPKEY) setUni(uniOf(name)); else if (name === SHIPKEY) setUni('main'); setView('space', name); }
+    // #kainat = bütün universlərin xəritəsi, #kainat/@mcp = universin ümumi görünüşü, #kainat/<planet> = planet
+    if (name && name[0] === '@') { setView('space', null); flyTo(UNIVERSES.some(u => u.id === name.slice(1)) ? name.slice(1) : 'main'); }
+    else if (name) setView('space', name);
+    else { setView('space', null); flyTo(null); }
   }
   else if (v === 'lovhe') setView('board');
   else setView('panel');
@@ -2336,13 +2332,10 @@ const UNIVERSES = [
   { id: 'mcp', icon: '🛰', name: 'MCP Universe', hint: 'MCP serverləri və onları işlədən proyektlər' },
   { id: 'agent', icon: '🤖', name: 'Agent Universe', hint: 'AI agentləri, tapşırıqları və avtomatlaşdırma' },
 ];
-let uni = (() => { try { const v = localStorage.getItem('tduni'); return UNIVERSES.some(u => u.id === v) ? v : 'main'; } catch (e) { return 'main'; } })();
-let shownUni = uni;
-function setUni(id) {
-  if (!UNIVERSES.some(u => u.id === id) || id === uni) return;
-  uni = id; try { localStorage.setItem('tduni', id); } catch (e) {}
-}
-const uniOf = n => !n ? uni : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : specialOf(n) ? 'studio' : 'main';
+let navUni = null, navTarget;             // navUni: kameranın hazırda olduğu univers (3D-dən gəlir), null = xəritə
+/** Universə (null = bütün xəritəyə) uç; 3D hələ hazır deyilsə, hazır olanda */
+function flyTo(id) { if (K && glOn) K.flyUni(id); else navTarget = id; }
+const uniOf = n => !n ? navUni || 'main' : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : specialOf(n) ? 'studio' : 'main';
 /** Xüsusi panel açılan planetlər: Studio stansiyaları, MCP serverləri, agentlər */
 function xKind(n) {
   if (!n) return null;
@@ -2387,18 +2380,6 @@ function agentList() {
       users: new Map(a.cm.map(c => [c.project, { st: c.status === 'running' ? 'working' : 'idle' }])), edits: 0, tools: 0, burn: 0, sats: [] };
   });
 }
-function renderUniBar() {
-  sync($('unibar'), UNIVERSES, u => u.id, u => {
-    const b = el('button'); b.title = u.hint; b.append(el('span', null, u.icon), el('b', null, u.name));
-    b.onclick = () => { if (u.id !== uni) location.hash = '#kainat/@' + u.id; else if (curPlanet || curShip) go(); };
-    return b;
-  }, (b, u) => setCls(b, (u.id === uni ? 'on' : '') + (u.id === shownUni && shownUni !== uni ? ' from' : '')), { enter: false });
-}
-function showWarpMsg(to) {
-  const u = UNIVERSES.find(x => x.id === to), m = $('warpmsg');
-  m.replaceChildren(el('span', null, '🚀'), el('b', null, u.icon + ' ' + u.name), el('small', null, u.hint));
-  m.classList.remove('go'); void m.offsetWidth; m.classList.add('go');
-}
 /* Agent Universe: yeni tapşırıq agentə raketlə çatır (tapşırığı başqası təyin edibsə, onun agentindən), bitəndə agent planetində partlayış */
 let agentCmdInit = false; const agentCmdSeen = new Map();
 function fireAgentRockets() {
@@ -2408,7 +2389,7 @@ function fireAgentRockets() {
     const prev = agentCmdSeen.get(+c.id);
     if (prev === c.status) continue;
     agentCmdSeen.set(+c.id, c.status);
-    if (shownUni !== 'agent' || !K || !glOn) continue;
+    if (!K || !glOn) continue;
     if (prev === undefined) {
       const t = (data.tasks || []).find(x => +x.command_id === +c.id);
       const from = t && t.creator !== c.user ? 'agent:' + t.creator : null;
@@ -2477,7 +2458,7 @@ function shipOf(u) {
   const s = (data.ships || []).find(x => x.user === u) || { user: u, name: u + ' gəmisi', model: 'shuttle', color: '#cfd6e6', accent: '#f59e0b', deadline: 0, mission: '' };
   return shipDraft && ME && u === ME.name ? { ...s, ...shipDraft } : s;
 }
-function shipItems(names, u2) {
+function shipItems(names) {
   const live = liveMeetings();
   return (data.users || []).map(u => {
     const s = shipOf(u);
@@ -2485,7 +2466,7 @@ function shipItems(names, u2) {
       .sort((a, b) => RANK[b.st] - RANK[a.st] || b.updated_at - a.updated_at);
     let planet = act.length ? act[0].project : null, st = act.length ? act[0].st : 'offline';
     if (live.some(m => m.attendees.split(',').includes(u))) { planet = 'Meeting Planet'; st = 'working'; }
-    if (u2 === 'agent') planet = 'agent:' + u;                 // Agent Universe: gəmi öz agentinin ətrafında
+    if (!planet && agentInfo(u).online) planet = 'agent:' + u;   // boş vaxtda: Agent Universe-də öz agentinin ətrafında
     if (planet && !names.has(planet)) planet = null;
     const dl = +s.deadline, left = dl - now();
     const warn = !dl ? 0 : left < 0 ? 2 : left < DAY ? 1 : 0;
