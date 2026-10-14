@@ -28,7 +28,8 @@
 .jv-bar button:active { transform: scale(.97); } .jv-bar .go { background: linear-gradient(135deg,#0284c7,#d97706); border-color: transparent; font-weight: 600; }
 .jv-bar .on { background: rgba(248,113,113,.18); border-color: rgba(248,113,113,.5); }
 .jv-hint { padding: 0 14px 10px; font-size: 12px; color: rgba(148,163,184,.9); }
-@media (prefers-reduced-motion: reduce) { .jv-orb { animation: none; } }`;
+@media (prefers-reduced-motion: reduce) { .jv-orb { animation: none; } }
+@media (max-width: 700px) { .jv { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; max-height: min(70dvh, calc(100dvh - 24px)); border-radius: 18px; } .jv-orb { width: 58px; height: 58px; } }`;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
   const box = document.createElement('div'); box.className = 'jv'; box.hidden = true;
   box.innerHTML = `<div class="jv-top"><canvas class="jv-orb" width="148" height="148"></canvas><div class="jv-ttl"><b>J.A.R.V.I.S.</b><span id="jv-st">hazırdır</span><select id="jv-prov" class="jv-prov" title="Səs modeli" hidden></select></div><button class="jv-x" id="jv-close" aria-label="Bağla">✕</button></div>
