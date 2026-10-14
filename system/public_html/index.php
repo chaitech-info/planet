@@ -551,6 +551,87 @@ body.v-space::before { display: none; }
 
 @media (max-width: 520px) { .row { grid-template-columns: 48px 1fr; } .wrap { padding-top: 16px; } }
 
+/* ===== Yeni: gəmilər, peyklər, balonlar, xüsusi planetlər ===== */
+.stools { position: absolute; left: 14px; top: 40px; z-index: 3; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 80px); }
+.stools button { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9e9f3; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; transition: background-color .15s ease, transform .15s var(--ease-out); }
+.stools button:active { transform: scale(.97); }
+.space.docked .stools { display: none; }
+.glabel[data-burn="1"] b::after { content: " 💨"; } .glabel[data-burn="2"] b::after { content: " 🔥"; } .glabel[data-burn="3"] b::after { content: " 🔥💥"; }
+.glabel[data-burn="2"] span, .glabel[data-burn="3"] span { color: #fb923c; }
+.glabel[data-kind="prompt"] b { color: #7dd3fc; } .glabel[data-kind="designer"] b { color: #f9a8d4; } .glabel[data-kind="meeting"] b { color: #e2e8f0; }
+.glabel.ushipl { font-size: 12px; padding: 2px 7px; }
+.glabel.ushipl b { font-weight: 600; color: var(--sc, #fcd34d); }
+.glabel.ushipl span { font-size: 11px; }
+.glabel.ushipl[data-warn="1"] span { color: #fca5a5; } .glabel.ushipl[data-warn="2"] span { color: #f87171; font-weight: 600; animation: blinkt 1s steps(2, start) infinite; }
+@keyframes blinkt { to { visibility: hidden; } }
+.slabel { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: none; font-size: 10.5px; color: rgba(190,242,234,.85); white-space: nowrap; text-shadow: 0 1px 6px #000; will-change: transform; }
+.slabel[data-on="1"] { color: #5eead4; }
+.balloon { position: absolute; left: 0; top: 0; visibility: hidden; pointer-events: auto; cursor: pointer; max-width: 210px; padding: 5px 10px 6px; border-radius: 12px;
+  background: rgba(255,250,235,.95); color: #1b1b19; font-size: 12px; line-height: 1.3; box-shadow: 0 6px 18px rgba(0,0,0,.45); will-change: transform; }
+.balloon::after { content: ""; position: absolute; left: 50%; bottom: -6px; margin-left: -6px; border: 6px solid transparent; border-bottom: 0; border-top-color: rgba(255,250,235,.95); }
+.balloon b { display: block; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.balloon span { color: #b45309; font-weight: 600; }
+.balloon[data-lv="1"] span { color: #dc2626; }
+.balloon[data-lv="2"] { background: #fee2e2; } .balloon[data-lv="2"]::after { border-top-color: #fee2e2; } .balloon[data-lv="2"] span { color: #b91c1c; }
+.balloon[data-lv="2"] { animation: bwiggle 2.4s ease-in-out infinite; }
+@keyframes bwiggle { 0%, 100% { margin-top: 0; } 50% { margin-top: -4px; } }
+.dock.noproj .dtabs, .dock.noproj #pane-send, .dock.noproj #pane-live { display: none; }
+.dinfo { display: grid; gap: 8px; margin: 10px 0 4px; }
+.dinfo:empty { display: none; }
+.burnbox { padding: 9px 12px; border-radius: 12px; font-size: 13px; background: rgba(251,146,60,.12); border: 1px solid rgba(251,146,60,.4); color: #fed7aa; }
+.burnbox[data-lv="3"] { background: rgba(248,113,113,.14); border-color: rgba(248,113,113,.5); color: #fecaca; }
+.infobox { padding: 9px 12px; border-radius: 12px; font-size: 13px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); }
+.infobox .row2 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.infobox .row2 .sp { flex: 1; }
+.satl { display: flex; flex-wrap: wrap; gap: 6px; }
+.satl span { font-size: 12px; border: 1px solid rgba(94,234,212,.35); color: #99f6e4; border-radius: 999px; padding: 1px 9px; }
+.satl span[data-on="1"] { background: rgba(94,234,212,.15); }
+.mbox select { width: 100%; margin-top: 8px; box-sizing: border-box; background: rgba(255,255,255,.06); color: #ececf1; border: 1px solid rgba(255,255,255,.14); padding: 10px 12px; border-radius: 12px; font: inherit; font-size: 14px; }
+.mbox select option, .dock select option { color: #111; }
+.mbox label.fl, .dock label.fl { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 -2px; }
+.mbox .crow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.mbox input[type="color"] { width: 46px; height: 34px; padding: 2px; margin: 0; border-radius: 8px; cursor: pointer; }
+.mbox input[type="range"] { padding: 0; margin: 0; flex: 1; accent-color: var(--accent); border: 0; background: none; }
+.mbox input[type="checkbox"] { width: auto; margin: 0; accent-color: var(--accent); }
+.mbox .swatch { width: 26px; height: 26px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); }
+.mbox .chk2 { display: inline-flex; gap: 6px; align-items: center; font-size: 13.5px; cursor: pointer; }
+.mbox .filters { margin: 8px 0 0; }
+.dock input, .dock textarea, .dock select { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.06); color: #ececf1; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 9px 11px; font: inherit; font-size: 13.5px; margin-top: 6px; }
+.dock textarea { resize: vertical; }
+.dock input:focus, .dock textarea:focus, .dock select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.pgout { font: 12.5px/1.5 ui-monospace, Menlo, monospace !important; min-height: 180px; }
+.prow { padding: 10px 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 8px; }
+.prow .pt { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+.prow .pm { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
+.prow .pb { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: rgba(233,233,243,.78); max-height: 4.4em; overflow: hidden; }
+.prow .pa { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .prow .pa .gbtn { padding: 3px 10px; font-size: 12px; }
+.prow .pa .danger { color: #f87171; border-color: rgba(248,113,113,.35); }
+.mcard { padding: 12px; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; background: rgba(255,255,255,.05); margin-bottom: 10px; }
+.mcard[data-live="1"] { border-color: rgba(94,234,212,.55); background: rgba(94,234,212,.08); }
+.mcard .mt { font-weight: 650; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.mcard .mt .lvb[hidden] { display: none; }
+.mcard .mt .lvb { font-size: 11px; color: #042f2e; background: #5eead4; border-radius: 999px; padding: 1px 8px; font-weight: 700; }
+.mcard .mw { font-size: 12.5px; color: var(--muted); margin: 3px 0 6px; }
+.mcard .ma { white-space: pre-wrap; font-size: 13px; color: rgba(233,233,243,.85); margin-bottom: 8px; }
+.mcard .who { display: flex; gap: 4px; margin-bottom: 8px; } .mcard .who .avatar { width: 22px; height: 22px; font-size: 11px; } .mcard .who .avatar .ring { display: none; }
+.mcard .posts { display: grid; gap: 6px; margin: 8px 0; }
+.mcard .post { font-size: 13px; } .mcard .post b { font-weight: 600; } .mcard .post small { color: var(--muted); margin-left: 6px; }
+.mcard .pin { display: flex; gap: 6px; } .mcard .pin input { margin-top: 0; }
+.mcard .pa { display: flex; gap: 6px; } .mcard .pa .gbtn { padding: 3px 10px; font-size: 12px; } .mcard .pa .danger { color: #f87171; border-color: rgba(248,113,113,.35); }
+.attl { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; }
+.prow .tsst { font-size: 11.5px; border-radius: 999px; padding: 1px 9px; border: 1px solid rgba(255,255,255,.18); color: rgba(233,233,243,.75); margin-left: 6px; font-weight: 600; }
+.prow[data-s="pass"] { border-color: rgba(74,222,128,.4); } .prow[data-s="pass"] .tsst { color: #4ade80; border-color: rgba(74,222,128,.5); }
+.prow[data-s="fail"] { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.07); } .prow[data-s="fail"] .tsst { color: #f87171; border-color: rgba(248,113,113,.55); }
+.prow .tnote { font-size: 13px; color: #fecaca; white-space: pre-wrap; margin-top: 4px; }
+.tsbar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.08); margin: 8px 0 4px; }
+.tsbar i { display: block; } .tsbar .p { background: #4ade80; } .tsbar .f { background: #f87171; }
+.tdue { font-size: 11.5px; border-radius: 999px; padding: 0 8px; border: 1px solid rgba(251,191,36,.45); color: #b45309; }
+.tdue[data-lv="1"], .tdue[data-lv="2"] { border-color: rgba(220,38,38,.5); color: #dc2626; font-weight: 600; }
+.dock .tdue { color: #fcd34d; } .dock .tdue[data-lv="1"], .dock .tdue[data-lv="2"] { color: #fca5a5; }
+@media (max-width: 520px) { .pgrid { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { .balloon[data-lv="2"], .glabel.ushipl[data-warn="2"] span { animation: none; } }
+
 /* Azaldılmış hərəkət: sonsuz fırlanma/sürüşmə/sıçrayış yox, yalnız yumşaq solma qalır */
 @media (prefers-reduced-motion: reduce) {
   body::before, .logo::after, .dot::after, .avatar .ring, .bar::after, .typing i, .proj::after { animation: none !important; }
@@ -621,6 +702,7 @@ body.v-space::before { display: none; }
   <div id="v-space" hidden>
     <div class="space" id="space">
       <div class="hud"><span id="hudA"></span><span id="hudB"></span></div>
+      <div class="stools"><button id="t-ship" title="Öz gəmini fərdiləşdir və deadline təyin et">🚀 Gəmim</button><button id="t-world" title="Özünə planet yarat">🪐 Yeni planet</button><button id="t-mcp" title="MCP inteqrasiyaları üçün peyklər">🛰 MCP peykləri</button></div>
       <button class="fsbtn" id="fs" title="Tam ekran" aria-label="Tam ekran">⛶</button>
       <div class="zbtns"><button id="zin" aria-label="Yaxınlaşdır">+</button><button id="zout" aria-label="Uzaqlaşdır">−</button><button id="sbtn" aria-label="Səs" title="Səs">🔊</button><button id="qbtn" aria-label="Təsvir keyfiyyəti" title="Təsvir keyfiyyəti: Avto / HD (həmişə tam kəskinlik)">HD</button></div>
       <div class="scene" id="scene">
@@ -637,6 +719,7 @@ body.v-space::before { display: none; }
           <div class="dnav"><button class="ibtn" id="pprev" hidden aria-label="Əvvəlki planet">‹</button><button class="ibtn" id="pnext" hidden aria-label="Növbəti planet">›</button></div>
         </div>
         <div class="dsub"><span class="dot" id="ddot"></span><span id="dlabel"></span><span class="dmeta" id="dmeta"></span></div>
+        <div class="dinfo" id="dinfo"></div>
         <div class="dtabs" role="tablist">
           <button class="on" id="dtab-send" role="tab">Göndər</button>
           <button id="dtab-live" role="tab">Canlı <span class="count" id="pscount">0</span></button>
@@ -679,6 +762,79 @@ body.v-space::before { display: none; }
         <div class="empty" id="plempty" hidden>Hələ proyekt yoxdur. Hook quraşdırılmış proyektdə Claude Code işlət və ya aşağıdan plan əlavə et.</div>
         <div id="pl-body"></div>
         <div class="cmdbar" style="margin-top:14px"><span class="cmdwho">Yeni proyekt üçün plan: adı özün yaz</span><button class="gbtn" id="pl-newproj">+ Başqa proyekt</button></div>
+      </aside>
+      <aside class="dock" id="xdock" aria-label="Xüsusi planet">
+        <div class="dtop">
+          <button class="ibtn" id="xback" title="Kainata qayıt" aria-label="Kainata qayıt">←</button>
+          <div class="dtitle" id="xtitle"></div>
+        </div>
+        <div class="dsub"><span class="dmeta" id="xmeta"></span></div>
+        <div id="x-prompt" hidden>
+          <div class="lbl">✨ Prompt generatoru</div>
+          <div class="pgrid">
+            <div><label class="fl" for="pg-role">Rol</label><select id="pg-role"></select></div>
+            <div><label class="fl" for="pg-lang">Dil</label><select id="pg-lang"><option value="az">Azərbaycan</option><option value="en">English</option><option value="ru">Русский</option></select></div>
+          </div>
+          <input id="pg-role-c" maxlength="120" placeholder="Öz rolunu yaz" hidden>
+          <label class="fl" for="pg-goal">Məqsəd / tapşırıq</label>
+          <textarea id="pg-goal" rows="3" maxlength="2000" placeholder="AI nə etməlidir? Məs: Neo üçün lead skorinq qaydalarını yoxla və təkmilləşdir"></textarea>
+          <label class="fl" for="pg-ctx">Kontekst (istəyə bağlı)</label>
+          <textarea id="pg-ctx" rows="2" maxlength="3000" placeholder="Layihə, auditoriya, mövcud vəziyyət, fayllar…"></textarea>
+          <label class="fl" for="pg-con">Məhdudiyyətlər (istəyə bağlı)</label>
+          <textarea id="pg-con" rows="2" maxlength="2000" placeholder="Hər sətirdə bir qayda: nə etməməli, uzunluq, stil…"></textarea>
+          <div class="pgrid">
+            <div><label class="fl" for="pg-fmt">Cavabın formatı</label><select id="pg-fmt"></select></div>
+            <div><label class="fl" for="pg-tone">Ton</label><select id="pg-tone"></select></div>
+          </div>
+          <label class="fl" for="pg-ex">Nümunə (istəyə bağlı)</label>
+          <textarea id="pg-ex" rows="2" maxlength="2000" placeholder="Gözlədiyin cavabın kiçik nümunəsi"></textarea>
+          <div class="attl"><label class="chk2"><input type="checkbox" id="pg-steps" checked> Addım-addım düşünsün</label><label class="chk2"><input type="checkbox" id="pg-ask"> Əvvəlcə aydınlaşdırıcı suallar versin</label></div>
+          <div class="cmdbar"><span class="cmdwho" id="pg-note"></span><button class="gbtn go" id="pg-gen">✨ Prompt yarat</button></div>
+          <textarea id="pg-out" class="pgout" rows="10" maxlength="8000" placeholder="Yaradılan prompt burada görünəcək. Əl ilə də dəyişə bilərsən."></textarea>
+          <div class="pgrid"><input id="pg-title" maxlength="200" placeholder="Başlıq (kitabxana üçün)"><input id="pg-tags" maxlength="200" placeholder="Teqlər: kod, marketinq…"></div>
+          <div class="cmderr" id="pg-err" hidden></div>
+          <div class="cmdbar"><span class="cmdwho" id="pg-edit"></span><span style="display:flex;gap:8px"><button class="gbtn" id="pg-new" hidden>Yeni</button><button class="gbtn" id="pg-copy">Kopyala</button><button class="gbtn go" id="pg-save">Kitabxanaya saxla</button></span></div>
+          <div class="lbl">📚 Prompt kitabxanası <span class="count" id="pg-cnt">0</span></div>
+          <input id="pg-q" placeholder="Axtar: başlıq, teq, mətn" autocomplete="off">
+          <div id="pg-list" style="margin-top:10px"></div>
+          <div class="empty" id="pg-empty" hidden>Hələ prompt yoxdur. Yuxarıda yarat və saxla.</div>
+        </div>
+        <div id="x-designer" hidden>
+          <div class="dinfo" id="ds-info"></div>
+          <div class="lbl" style="display:flex;align-items:center;gap:8px">🎨 Kreativ layihələr <span class="count" id="ds-pcnt">0</span><button class="gbtn" id="ds-addp" style="margin-left:auto;padding:2px 10px;font-size:12px;text-transform:none;letter-spacing:0">+ layihə</button></div>
+          <div id="ds-plans"></div>
+          <div class="empty" id="ds-pempty" hidden>Hələ layihə yoxdur.</div>
+          <div class="lbl" style="display:flex;align-items:center;gap:8px">✏️ Dizayn tapşırıqları <span class="count" id="ds-tcnt">0</span><button class="gbtn" id="ds-addt" style="margin-left:auto;padding:2px 10px;font-size:12px;text-transform:none;letter-spacing:0">+ tapşırıq</button></div>
+          <div id="ds-tasks"></div>
+          <div class="empty" id="ds-tempty" hidden>Dizayn tapşırığı yoxdur.</div>
+        </div>
+        <div id="x-test" hidden>
+          <div class="lbl">Hansı proyekti test edirik?</div>
+          <div class="filters" id="ts-prjs"></div>
+          <div class="empty" id="ts-noprj" hidden>Hələ proyekt yoxdur.</div>
+          <div id="ts-body" hidden>
+            <div class="infobox" id="ts-sum"></div>
+            <div class="lbl" style="display:flex;align-items:center;gap:8px">📋 Test ssenariləri <span class="count" id="ts-cnt">0</span></div>
+            <div id="ts-list"></div>
+            <div class="empty" id="ts-empty" hidden>Bu proyektdə hələ test ssenarisi yoxdur. Aşağıdan əlavə et.</div>
+            <input id="ts-ttl" maxlength="200" placeholder="Yeni ssenari: nəyi yoxlayırıq? (məs. Girişdə yanlış parol xəta göstərir)" autocomplete="off">
+            <textarea id="ts-steps" rows="2" maxlength="3000" placeholder="Addımlar və gözlənilən nəticə (istəyə bağlı)"></textarea>
+            <div class="cmderr" id="ts-err" hidden></div>
+            <div class="cmdbar"><span class="cmdwho" id="ts-hint"></span><span style="display:flex;gap:8px"><button class="gbtn" id="ts-cancel" hidden>Ləğv et</button><button class="gbtn go" id="ts-add">+ Ssenari</button></span></div>
+            <div class="lbl">🤖 Claude ilə test et</div>
+            <div class="mnote">Prompt sənin agentinə gedir və bu proyektin qovluğunda işləyir. Agent kodu oxuyur, test yazır və səhvləri bildirir; terminal əmrlərini (məs. <code>npm test</code>) işlətmir.</div>
+            <textarea id="ts-ai" rows="5" maxlength="4000"></textarea>
+            <div class="cmderr" id="ts-aierr" hidden></div>
+            <div class="cmdbar"><span class="cmdwho" id="ts-aiwho"></span><button class="gbtn go" id="ts-aisend">🧪 Agentə göndər</button></div>
+            <div id="ts-cmds"></div>
+          </div>
+        </div>
+        <div id="x-meeting" hidden>
+          <div class="cmdbar" style="margin-top:10px"><span class="cmdwho">Neytral ərazi: heç kimin proyekti deyil. Görüş vaxtı iştirakçıların gəmiləri bura uçur.</span><button class="gbtn go" id="mt-add">+ Görüş təyin et</button></div>
+          <div class="lbl">🔴 İndi gedir</div><div id="mt-live"></div><div class="empty" id="mt-live-e">Hazırda görüş yoxdur.</div>
+          <div class="lbl">📅 Növbəti görüşlər</div><div id="mt-next"></div><div class="empty" id="mt-next-e">Planlanmış görüş yoxdur.</div>
+          <div class="lbl">🕘 Keçmiş (14 gün)</div><div id="mt-past"></div><div class="empty" id="mt-past-e">Yoxdur.</div>
+        </div>
       </aside>
       <div class="sempty" id="sempty" hidden>Hələ heç bir dünya yoxdur. Hook quraşdırılmış proyektdə Claude Code işlət, ilk planet yaranacaq.</div>
     </div>
@@ -754,6 +910,8 @@ body.v-space::before { display: none; }
     <textarea id="tk-det" rows="4" maxlength="3000" placeholder="Ətraflı (istəyə bağlı). Claude bunu prompt kimi alacaq."></textarea>
     <input id="tk-prj" list="tk-prjs" maxlength="128" placeholder="Proyekt" autocomplete="off"><datalist id="tk-prjs"></datalist>
     <select id="tk-who" aria-label="Kimə"></select>
+    <label class="fl" for="tk-due">Son tarix (istəyə bağlı): yaxınlaşanda kainatda xatırlatma balonu çıxır</label>
+    <input id="tk-due" type="datetime-local">
     <div class="cmderr" id="tk-err" hidden></div>
     <div class="cmdbar"><span class="cmdwho" id="tk-hint"></span><button class="gbtn go" id="tk-save">Yarat</button></div>
   </div>
@@ -779,6 +937,70 @@ body.v-space::before { display: none; }
     <input id="snd-file" type="file" accept=".mp3,audio/mpeg">
     <div class="cmderr" id="snd-err" hidden></div>
     <div class="cmdbar"><span class="cmdwho" id="snd-state"></span><span style="display:flex;gap:8px"><button class="gbtn danger" id="snd-del" hidden>Standarta qayıt</button><button class="gbtn go" id="snd-up">Yüklə</button></span></div>
+  </div>
+</div>
+<div class="modal" id="shipm" hidden>
+  <div class="mbox small">
+    <div class="mhead"><b id="sh-title">🚀 Mənim gəmim</b><button class="ibtn" data-close="shipm" aria-label="Bağla">✕</button></div>
+    <div id="sh-view" class="mnote" hidden></div>
+    <div id="sh-edit">
+      <label class="fl" for="sh-name">Gəminin adı</label>
+      <input id="sh-name" maxlength="60" autocomplete="off">
+      <label class="fl">Model</label>
+      <div class="filters" id="sh-model"><button data-m="shuttle">🚀 Şatl</button><button data-m="saucer">🛸 Boşqab</button><button data-m="fighter">✈️ Qırıcı</button></div>
+      <div class="crow"><input type="color" id="sh-color" aria-label="Gövdə rəngi"><span class="mnote">Gövdə</span><input type="color" id="sh-accent" aria-label="Qanad və zolaq rəngi"><span class="mnote">Qanad/zolaq</span></div>
+      <div class="mnote" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px"><b>⏰ Deadline</b><br>24 saatdan az qalanda gəminin üstündə miqalka yanıb-sönür, vaxt keçəndə qırmızı çaxır.</div>
+      <input id="sh-dl" type="datetime-local">
+      <input id="sh-mission" maxlength="200" placeholder="Missiya: nəyə görə deadline? (məs. Neo v2 buraxılışı)" autocomplete="off">
+      <div class="cmderr" id="sh-err" hidden></div>
+      <div class="cmdbar"><span class="cmdwho" id="sh-ok"></span><span style="display:flex;gap:8px"><button class="gbtn danger" id="sh-dlclear">Deadline-ı sil</button><button class="gbtn go" id="sh-save">Saxla</button></span></div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="wm" hidden>
+  <div class="mbox small">
+    <div class="mhead"><b id="w-title">🪐 Yeni planet</b><button class="ibtn" data-close="wm" aria-label="Bağla">✕</button></div>
+    <input id="w-name" maxlength="60" placeholder="Planetin adı (tapşırıqlar bu ada yazılır)" autocomplete="off">
+    <textarea id="w-descr" rows="2" maxlength="1000" placeholder="Təsvir (istəyə bağlı)" style="font:inherit;font-size:14px"></textarea>
+    <label class="fl">Səth</label>
+    <div class="filters" id="w-surf"><button data-s="0">🌍 Yaşıl</button><button data-s="1">🪐 Qaz</button><button data-s="2">🌋 Lava</button><button data-s="3">🌑 Qaya</button><button data-s="4">🧊 Buz</button><button data-s="5">🏜 Səhra</button></div>
+    <label class="fl" for="w-hue">Rəng çaları</label>
+    <div class="crow"><input type="range" id="w-hue" min="0" max="359"><span class="swatch" id="w-sw"></span></div>
+    <label class="fl">Ölçü</label>
+    <div class="filters" id="w-size"><button data-z="1">Kiçik</button><button data-z="2">Orta</button><button data-z="3">Böyük</button></div>
+    <div class="crow"><label class="chk2"><input type="checkbox" id="w-ring"> Halqa</label></div>
+    <div class="cmderr" id="w-err" hidden></div>
+    <div class="cmdbar"><span class="cmdwho" id="w-hint">Dəyişikliklər kainatda dərhal görünür</span><span style="display:flex;gap:8px"><button class="gbtn danger" id="w-del" hidden>Sil</button><button class="gbtn go" id="w-save">Yarat</button></span></div>
+  </div>
+</div>
+<div class="modal" id="mcpm" hidden>
+  <div class="mbox">
+    <div class="mhead"><b>🛰 MCP peykləri</b><button class="ibtn" data-close="mcpm" aria-label="Bağla">✕</button></div>
+    <div class="mnote">Claude Code-da MCP alətləri (<code>mcp__server__tool</code>) işlədiləndə həmin proyektin planeti ətrafında peyk avtomatik yaranır; son 10 dəqiqədə işlədilibsə, yaşıl işığı yanır və planetə şüa göndərir. Burada peykləri əl ilə də qeyd edə bilərsən. Proyekt boş qalsa, peyk günəşin ətrafında fırlanır (hamı üçün).</div>
+    <div class="lbl">Avtomatik tapılanlar (30 gün)</div>
+    <div id="mcp-auto" class="ulist"></div>
+    <div class="lbl">Qeyd olunanlar</div>
+    <div id="mcp-list" class="ulist"></div>
+    <div class="lbl" id="mcp-ftitle">Yeni peyk</div>
+    <div class="pgrid"><input id="mcp-name" maxlength="64" placeholder="Server adı (məs. figma)" autocomplete="off"><input id="mcp-prj" list="mcp-prjs" maxlength="128" placeholder="Planet (boş = günəş)" autocomplete="off"></div><datalist id="mcp-prjs"></datalist>
+    <input id="mcp-descr" maxlength="500" placeholder="Nə üçündür? (istəyə bağlı)" autocomplete="off">
+    <div class="cmderr" id="mcp-err" hidden></div>
+    <div class="cmdbar"><span class="cmdwho"></span><span style="display:flex;gap:8px"><button class="gbtn" id="mcp-cancel" hidden>Ləğv et</button><button class="gbtn go" id="mcp-save">Əlavə et</button></span></div>
+  </div>
+</div>
+<div class="modal" id="mtm" hidden>
+  <div class="mbox small">
+    <div class="mhead"><b id="mt-title">🤝 Görüş təyin et</b><button class="ibtn" data-close="mtm" aria-label="Bağla">✕</button></div>
+    <input id="mt-ttl" maxlength="200" placeholder="Mövzu" autocomplete="off">
+    <textarea id="mt-agenda" rows="4" maxlength="3000" placeholder="Gündəm (istəyə bağlı)" style="font:inherit;font-size:14px"></textarea>
+    <div class="pgrid">
+      <div><label class="fl" for="mt-at">Başlayır</label><input id="mt-at" type="datetime-local"></div>
+      <div><label class="fl" for="mt-min">Müddət</label><select id="mt-min"><option value="15">15 dəq</option><option value="30" selected>30 dəq</option><option value="45">45 dəq</option><option value="60">1 saat</option><option value="90">1,5 saat</option><option value="120">2 saat</option></select></div>
+    </div>
+    <label class="fl">İştirakçılar</label>
+    <div class="attl" id="mt-att"></div>
+    <div class="cmderr" id="mt-err" hidden></div>
+    <div class="cmdbar"><span class="cmdwho"></span><button class="gbtn go" id="mt-save">Saxla</button></div>
   </div>
 </div>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
@@ -1044,16 +1266,20 @@ function makeOrbit(p) {
 }
 function renderSpace() {
   const all = buildProjects();
-  const list = all.slice(0, MAXP).sort((a, b) => a.name.localeCompare(b.name));
+  const list = spaceList(all);
+  const names = new Set(list.map(p => p.name));
   setText($('hudA'), all.length + ' proyekt');
   setText($('hudB'), all.filter(p => p.st === 'working').length + ' işləyir');
-  $('sempty').hidden = all.length > 0;
+  $('sempty').hidden = list.length > 0;
   if (K && glOn) {
-    K.setData(list.map(p => ({ name: p.name, st: p.st, edits: p.edits, tools: p.tools, sub: planetSub(p), alert: (data.alerts || []).some(a => a.project === p.name),
-      users: [...p.users].map(([u, v]) => ({ name: u, st: v.st, color: tint(u) })) })));
+    K.setData(list.map(p => ({ name: p.name, kind: p.kind, look: p.look || null, st: p.st, edits: p.edits, tools: p.tools, sub: p.sub, alert: (data.alerts || []).some(a => a.project === p.name),
+      burn: p.burn, sats: p.sats, fail: !!p.fail, users: [...p.users].map(([u, v]) => ({ name: u, st: v.st, color: tint(u) })) })));
     syncHits(); K.setAudio(data.sounds || {});
     const pl = data.plans || [], op = k => pl.filter(x => x.kind === k && x.status === 'open').length;
     K.setShip({ sub: op('plan') + ' plan · ' + op('scope') + ' scope' });
+    K.setShips(shipItems(names));
+    K.setBalloons(balloonItems(names));
+    K.setSunSats((data.mcp || []).filter(x => !x.project || !names.has(x.project)).map(x => ({ name: x.name, manual: true })));
   } else {
     const step = Math.min(9, 46 / Math.max(list.length, 1));
     prime('orbits', () => sync($('orbits'), list, p => p.name, makeOrbit, (o, p) => {
@@ -1061,7 +1287,7 @@ function renderSpace() {
       if (o._d !== d) { o._d = d; o.style.setProperty('--d', d); }
       const sz = (5 + Math.min(5, Math.log2(1 + p.edits + p.tools / 4) * .6)).toFixed(1);
       if (r.b._s !== sz) { r.b._s = sz; r.b.style.setProperty('--s', sz); }
-      setSt(r.b, p.st); setText(r.nm, p.name); setText(r.sub, planetSub(p));
+      setSt(r.b, p.st); setText(r.nm, p.name); setText(r.sub, p.sub);
       syncMoons(r.planet, p.users);
     }, { enter: false }));
   }
@@ -1069,7 +1295,7 @@ function renderSpace() {
     const b = el('button'), d = el('i', 'tdot'); d.style.setProperty('--h', hue(p.name)); b.append(d, el('span', null, p.label || p.name));
     b.onclick = () => go(p.name); return b;
   }, () => {}));
-  if (curPlanet) renderDock(all);
+  if (curPlanet) { if (specialOf(curPlanet)) renderX(curPlanet); else renderDock(all); }
   if (curShip) renderPlan();
 }
 /* ====== 3D kamera: sürüşdür = fırlat/əy, boş vaxtda yavaş dönür ====== */
@@ -1252,6 +1478,8 @@ function renderDock(all) {
   }));
   renderFeedInto($('pfeed'), $('pfempty'), data.events.filter(e => e.project === curPlanet), 'pfeed:' + curPlanet, 8);
   renderCmd();
+  renderDInfo(curPlanet);
+  $('dock').classList.toggle('noproj', !all.some(x => x.name === curPlanet));   // istifadəçi planetinin qovluğu yoxdur: agent bölməsi gizli
 }
 
 /* ====== Görünüşlər və naviqasiya ====== */
@@ -1265,6 +1493,8 @@ function initGL() {
   $('space').classList.add('gl');
   K.onPick = name => go(name);
   K.onShip = () => go(SHIPKEY);
+  K.onUserShip = u => openShip(u);
+  K.onBalloon = id => { const t = (data.tasks || []).find(x => +x.id === +id); if (t) go(t.project); };
   $('zin').onclick = () => K.zoom(.78); $('zout').onclick = () => K.zoom(1.28);
   let q = 'auto'; try { q = localStorage.getItem('tdq') === 'high' ? 'high' : 'auto'; } catch (e) {}
   const qb = $('qbtn'), showQ = () => { qb.classList.toggle('on', q === 'high'); qb.title = q === 'high' ? 'HD açıqdır: həmişə tam kəskinlik (yavaş kompüterdə donma ola bilər). Basanda Avto-ya qayıdır.' : 'Avto: kompüter çətinləşəndə kəskinliyi özü azaldır. Basanda HD (həmişə tam kəskin) açılır.'; };
@@ -1291,7 +1521,9 @@ function setView(v, name) {
   document.body.classList.toggle('v-space', v === 'space');
   $('v-panel').hidden = v !== 'panel'; $('v-space').hidden = v !== 'space'; $('v-board').hidden = v !== 'board';
   $('tab-panel').classList.toggle('on', v === 'panel'); $('tab-space').classList.toggle('on', v === 'space'); $('tab-board').classList.toggle('on', v === 'board');
-  $('dock').classList.toggle('open', !!curPlanet);
+  const spc = !!(curPlanet && specialOf(curPlanet));
+  $('dock').classList.toggle('open', !!curPlanet && !spc);
+  $('xdock').classList.toggle('open', spc);
   $('plandock').classList.toggle('open', curShip);
   $('space').classList.toggle('docked', !!curPlanet || curShip);
   $('space').classList.remove('warping'); $('scene').style.transformOrigin = '';
@@ -1358,7 +1590,11 @@ function setMe(me) {
   ME = me; setText($('who'), me.name); $('b-adm').hidden = me.role !== 'admin'; $('b-prj').hidden = me.role !== 'admin'; $('b-ntf').hidden = me.role !== 'admin';
 }
 const openM = id => { $(id).hidden = false; };
-const closeM = id => { $(id).hidden = true; };
+const closeM = id => {
+  $(id).hidden = true;
+  if (id === 'shipm' && shipDraft) { shipDraft = null; render(); }
+  if (id === 'wm' && wDraft) { wDraft = null; render(); }
+};
 function admErr(t) { const e = $('adm-err'); e.hidden = !t; e.textContent = t || ''; }
 function welcomeText(name, token, password) {
   const url = location.origin + location.pathname.replace(/[^/]*$/, '');
@@ -1459,7 +1695,7 @@ function initAdmin() {
   $('b-prj').onclick = () => { prjErr(''); openM('prj'); prjRefresh(); };
   document.querySelectorAll('[data-close]').forEach(b => { b.onclick = () => closeM(b.dataset.close); });
   for (const id of ['adm', 'acc', 'prj']) $(id).addEventListener('pointerdown', e => { if (e.target === $(id)) closeM(id); });
-  addEventListener('keydown', e => { if (e.key === 'Escape') { for (const m of ['adm', 'acc', 'prj', 'rep', 'ntf', 'tk', 'msg', 'pl']) closeM(m); } });
+  addEventListener('keydown', e => { if (e.key === 'Escape') { for (const m of ['adm', 'acc', 'prj', 'rep', 'ntf', 'tk', 'msg', 'pl', 'shipm', 'wm', 'mcpm', 'mtm']) if (!$(m).hidden) closeM(m); } });
   $('b-adm').onclick = () => { $('adm-res').hidden = true; admErr(''); openM('adm'); admRefresh(); };
   $('adm-add').onclick = async () => {
     const name = $('adm-name').value.trim(); if (!name) return;
@@ -1559,7 +1795,8 @@ function renderPlan() {
       setText(q.pt, x.title); setText(q.pd, x.details || ''); q.pd.hidden = !x.details;
       if (kind === 'task') {
         setText(q.st, TST[x.status] || x.status); q.st.dataset.s = x.status;
-        setText(q.pm, x.assignee + (x.creator !== x.assignee ? ' · təyin edən ' + x.creator : '') + ' · ' + ago(x.updated_at));
+        const dl = dueInfo(x);
+        setText(q.pm, x.assignee + (x.creator !== x.assignee ? ' · təyin edən ' + x.creator : '') + ' · ' + ago(x.updated_at) + (dl ? ' · ' + dl.text : ''));
       } else {
         setCls(it, 'pli' + (x.status === 'done' ? ' done' : ''));
         setText(q.pm, x.creator + ' · ' + ago(x.created_at)); q.pa.hidden = !canEditPlan(x);
@@ -1786,13 +2023,32 @@ function updateTaskBadge() {
 }
 function makeTask() {
   const n = el('div', 'tcard');
-  const tt = el('div', 'tt'), tm = el('div', 'tm'), tp = el('span', 'tp'), who = el('span'), age = el('span');
-  tm.append(tp, who, age);
+  const tt = el('div', 'tt'), tm = el('div', 'tm'), tp = el('span', 'tp'), who = el('span'), age = el('span'), due = el('span', 'tdue');
+  tm.append(tp, who, age, due);
   const desc = el('div', 'tdesc'), cmd = el('details', 'tcmd'), sm = el('summary'), pre = el('pre'); cmd.append(sm, pre);
   const act = el('div', 'tact');
   n.append(tt, tm, desc, cmd, act);
-  n._r = { tt, tp, who, age, desc, cmd, sm, pre, act, sig: '' };
+  n._r = { tt, tp, who, age, due, desc, cmd, sm, pre, act, sig: '' };
   return n;
+}
+/** Tapşırıq kartını yeniləyir (lövhədə və Designer planetində) */
+function updTask(n, t) {
+  const r = n._r;
+  setText(r.tt, t.title); setText(r.tp, t.project); r.tp.onclick = () => go(t.project);
+  setText(r.who, t.assignee + (t.creator !== t.assignee ? ' · ' + t.creator + ' təyin etdi' : '')); setText(r.age, ago(t.updated_at));
+  const dl = dueInfo(t); r.due.hidden = !dl; if (dl) { setText(r.due, dl.text); r.due.dataset.lv = String(dl.level); }
+  setText(r.desc, t.details || ''); r.desc.hidden = !t.details;
+  const cm = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
+  r.cmd.hidden = !cm;
+  if (cm) {
+    const [lbl] = CMD_ST[cm.status] || [cm.status];
+    setText(r.sm, 'Claude: ' + lbl); setText(r.pre, cm.result || (cm.status === 'queued' ? 'Agent götürənə qədər növbədə gözləyir…' : cm.status === 'running' ? 'İşləyir…' : ''));
+    if ((cm.status === 'done' || cm.status === 'failed') && !r.cmd._o) { r.cmd._o = true; r.cmd.open = cm.status === 'failed'; }
+  }
+  const btns = taskButtons(t), sig = t.status + '|' + btns.map(b => b[0]).join(',') + '|' + (ME ? ME.name : '');
+  if (r.sig !== sig) {
+    r.sig = sig; r.act.replaceChildren(...btns.map(([label, cls, fn]) => { const b = el('button', 'gbtn ' + cls, label); b.onclick = fn; return b; }));
+  } else { [...r.act.children].forEach((b, i) => { b.onclick = btns[i][2]; }); }
 }
 function taskButtons(t) {
   const mine = ME && t.assignee === ME.name, admin = ME && ME.role === 'admin', creator = ME && t.creator === ME.name;
@@ -1840,27 +2096,11 @@ function renderBoard() {
   for (const c of box.children) {
     const s = c.dataset.s, col = list.filter(t => t.status === s);
     setText(c.querySelector('.count'), String(col.length));
-    sync(c.querySelector('.blist'), col, t => t.id, makeTask, (n, t) => {
-      const r = n._r;
-      setText(r.tt, t.title); setText(r.tp, t.project); r.tp.onclick = () => go(t.project);
-      setText(r.who, t.assignee + (t.creator !== t.assignee ? ' · ' + t.creator + ' təyin etdi' : '')); setText(r.age, ago(t.updated_at));
-      setText(r.desc, t.details || ''); r.desc.hidden = !t.details;
-      const cm = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
-      r.cmd.hidden = !cm;
-      if (cm) {
-        const [lbl] = CMD_ST[cm.status] || [cm.status];
-        setText(r.sm, 'Claude: ' + lbl); setText(r.pre, cm.result || (cm.status === 'queued' ? 'Agent götürənə qədər növbədə gözləyir…' : cm.status === 'running' ? 'İşləyir…' : ''));
-        if ((cm.status === 'done' || cm.status === 'failed') && !r.cmd._o) { r.cmd._o = true; r.cmd.open = cm.status === 'failed'; }
-      }
-      const btns = taskButtons(t), sig = t.status + '|' + btns.map(b => b[0]).join(',') + '|' + (ME ? ME.name : '');
-      if (r.sig !== sig) {
-        r.sig = sig; r.act.replaceChildren(...btns.map(([label, cls, fn]) => { const b = el('button', 'gbtn ' + cls, label); b.onclick = fn; return b; }));
-      } else { [...r.act.children].forEach((b, i) => { b.onclick = btns[i][2]; }); }
-    });
+    sync(c.querySelector('.blist'), col, t => t.id, makeTask, updTask);
   }
 }
 function openTaskModal(prj) {
-  const known = [...new Set((data.projects || []).map(p => p.project))].sort();
+  const known = [...new Set([...(data.projects || []).map(p => p.project), ...(data.worlds || []).map(w => w.name), ...SPECIALS.map(x => x.name)])].sort();
   $('tk-prjs').replaceChildren(...known.map(p => Object.assign(document.createElement('option'), { value: p })));
   const who = $('tk-who'); who.replaceChildren();
   const isAdmin = ME && ME.role === 'admin';
@@ -1877,9 +2117,9 @@ function initBoard() {
   $('tk').addEventListener('pointerdown', e => { if (e.target === $('tk')) closeM('tk'); });
   $('tk-save').onclick = async () => {
     const e = $('tk-err'); e.hidden = true; $('tk-save').disabled = true;
-    const { status, d } = await TSK('create', { title: $('tk-title').value, details: $('tk-det').value, project: $('tk-prj').value, assignee: $('tk-who').value });
+    const { status, d } = await TSK('create', { title: $('tk-title').value, details: $('tk-det').value, project: $('tk-prj').value, assignee: $('tk-who').value, due_at: fromLocal($('tk-due').value) });
     $('tk-save').disabled = false;
-    if (status === 200) { $('tk-title').value = ''; $('tk-det').value = ''; closeM('tk'); load(); }
+    if (status === 200) { $('tk-title').value = ''; $('tk-det').value = ''; $('tk-due').value = ''; closeM('tk'); load(); }
     else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
   };
   $('btok-save').onclick = async () => {
@@ -1953,6 +2193,591 @@ function initReport() {
   };
   $('ntf-clear').onclick = async () => { if (!confirm('Telegram ayarları silinsin? Bildirişlər dayanacaq.')) return; await ADM('settings_clear'); $('ntf-tok').value = ''; $('ntf-chat').value = ''; setText($('ntf-ok'), 'Silindi'); ntfLoad(); };
 }
+/* ====== Kainatın yeni hissələri: fərdi və xüsusi planetlər, gəmilər, deadline-lar, MCP peykləri ====== */
+const DAY = 86400;
+const SPECIALS = [{ name: 'Prompt Generator', kind: 'prompt', icon: '✨' }, { name: 'Designer', kind: 'designer', icon: '🎨' }, { name: 'Meeting Planet', kind: 'meeting', icon: '🤝' }, { name: 'Test Planet', kind: 'test', icon: '🧪' }];
+const specialOf = n => SPECIALS.find(x => x.name === n) || null;
+let shipDraft = null, wDraft = null;
+async function WLD(action, extra) {
+  const r = await fetch('world.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action, ...extra }) });
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) location.reload();
+  return { status: r.status, d };
+}
+const z2 = n => String(n).padStart(2, '0');
+const toLocal = ts => { if (!+ts) return ''; const d = new Date(ts * 1000); return `${d.getFullYear()}-${z2(d.getMonth() + 1)}-${z2(d.getDate())}T${z2(d.getHours())}:${z2(d.getMinutes())}`; };
+const fromLocal = v => v ? Math.floor(new Date(v).getTime() / 1000) : 0;
+const AZ_MON = ['yan', 'fev', 'mar', 'apr', 'may', 'iyn', 'iyl', 'avq', 'sen', 'okt', 'noy', 'dek'];
+function when(ts) {
+  const d = new Date(ts * 1000), t = new Date(now() * 1000), hm = z2(d.getHours()) + ':' + z2(d.getMinutes());
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), diff = Math.round((day(d) - day(t)) / 864e5);
+  if (diff === 0) return 'bu gün ' + hm;
+  if (diff === 1) return 'sabah ' + hm;
+  if (diff === -1) return 'dünən ' + hm;
+  return d.getDate() + ' ' + AZ_MON[d.getMonth()] + ' ' + hm;
+}
+function fmtDur(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const d = Math.floor(sec / DAY), h = Math.floor(sec % DAY / 3600), m = Math.floor(sec % 3600 / 60);
+  if (d) return d + 'g ' + h + 's';
+  if (h) return h + 's ' + m + 'dəq';
+  return Math.max(1, m) + ' dəq';
+}
+/** Tapşırığın son tarixi: mətn və səviyyə (0 = bir gündən çox, 1 = 3 saatdan az, 2 = keçib) */
+function dueInfo(t) {
+  if (!+t.due_at || t.status === 'done') return null;
+  const left = t.due_at - now();
+  return { left, level: left < 0 ? 2 : left < 3 * 3600 ? 1 : 0, text: left < 0 ? '⏰ ' + fmtDur(-left) + ' gecikir' : '⏳ ' + fmtDur(left) + ' qalıb' };
+}
+
+/* 24 saat qaydası: açıq tapşırığı olan planetdə 24 saat ərzində heç nə bitməyibsə, planet tüstülənir → yanır → xaosa düşür */
+function idleOf(name) {
+  const a = (data.activity || []).find(r => r.project === name);
+  if (!a || !+a.open) return 0;
+  return Math.max(0, now() - Math.max(+a.last_done || 0, +a.oldest_open || 0));
+}
+function burnOf(name) { const s = idleOf(name); return s < DAY ? 0 : Math.min(1, .2 + (s - DAY) / (2 * DAY) * .8); }
+function satsOf(name) {
+  const m = new Map();
+  for (const u of data.mcp_use || []) if (u.project === name) m.set(u.name, { name: u.name, active: now() - u.last_at < 600, n: +u.n, last: +u.last_at });
+  for (const x of data.mcp || []) if (x.project === name && !m.has(x.name)) m.set(x.name, { name: x.name, manual: true });
+  return [...m.values()].slice(0, 8);
+}
+function liveMeetings() { const t = now(); return (data.meetings || []).filter(m => +m.starts_at <= t && t < +m.starts_at + m.minutes * 60); }
+const blankP = name => ({ name, users: new Map(), edits: 0, tools: 0, sessions: 0, last: 0, st: 'offline', summary: '', sumAt: 0 });
+
+/** Kainatdakı bütün planetlər: proyektlər + istifadəçi planetləri + xüsusi planetlər (xarici orbitlərdə) */
+function spaceList(all) {
+  const byName = new Map(all.map(p => [p.name, p]));
+  const out = all.slice(0, MAXP).sort((a, b) => a.name.localeCompare(b.name)).map(p => ({ ...p, kind: 'project' }));
+  const idx = new Map(out.map((p, i) => [p.name, i]));
+  const worlds = (data.worlds || []).map(w => ({ ...w }));
+  if (wDraft) {
+    const w = wDraft.id ? worlds.find(x => +x.id === +wDraft.id) : null;
+    if (w) Object.assign(w, wDraft); else if (!wDraft.id) worlds.push({ ...wDraft, owner: ME ? ME.name : '' });
+  }
+  for (const w of worlds) {
+    if (!w.name) continue;
+    let p = idx.has(w.name) ? out[idx.get(w.name)] : null;
+    if (!p) { p = byName.has(w.name) ? { ...byName.get(w.name) } : blankP(w.name); idx.set(w.name, out.length); out.push(p); }
+    p.kind = 'custom'; p.world = w; p.look = { surface: +w.surface, hue: +w.hue, ring: +w.ring ? 1 : 0, size: +w.size || 2 };
+  }
+  for (const sp of SPECIALS) {
+    if (idx.has(sp.name)) continue;
+    const p = byName.has(sp.name) ? { ...byName.get(sp.name) } : blankP(sp.name);
+    p.kind = sp.kind; p.label = sp.icon + ' ' + sp.name; out.push(p);
+  }
+  for (const p of out) {
+    p.burn = burnOf(p.name); p.sats = satsOf(p.name); p.sub = planetSub(p);
+    if (p.kind === 'custom') {
+      if (!p.last) { p.st = 'idle'; p.sub = (p.world.owner || '') + ' planeti'; }
+    } else if (p.kind === 'designer') {
+      const ts = (data.tasks || []).filter(t => t.project === p.name && t.status !== 'done');
+      p.st = ts.some(t => t.status === 'doing') ? 'working' : 'idle';
+      p.sub = ts.length ? ts.length + ' dizayn tapşırığı' : 'kreativ işlər';
+    } else if (p.kind === 'meeting') {
+      const live = liveMeetings(), next = (data.meetings || []).find(m => +m.starts_at > now());
+      p.st = live.length ? 'meet' : 'idle';
+      p.sub = live.length ? '🔴 indi: ' + live[0].title : next ? 'növbəti: ' + when(next.starts_at) : 'neytral ərazi';
+    } else if (p.kind === 'prompt') {
+      p.st = 'idle'; p.sub = (data.prompts || []).length + ' prompt';
+    } else if (p.kind === 'test') {
+      const ts = data.tests || [], f = ts.filter(t => t.status === 'fail').length;
+      p.fail = f > 0; p.st = f ? 'waiting' : 'idle';
+      p.sub = ts.length ? (f ? f + ' xəta · ' : '') + ts.filter(t => t.status === 'pass').length + '/' + ts.length + ' keçdi' : 'proyekt seç, test et';
+    }
+    if (p.kind !== 'test') { const f = (data.tests || []).filter(t => t.project === p.name && t.status === 'fail').length; if (f) p.sub += ' · 🧪 ' + f + ' xəta'; }
+    if (p.burn > 0) p.sub += ' · ' + Math.floor(idleOf(p.name) / 3600) + 's task bitməyib';
+  }
+  return out;
+}
+
+function shipOf(u) {
+  const s = (data.ships || []).find(x => x.user === u) || { user: u, name: u + ' gəmisi', model: 'shuttle', color: '#cfd6e6', accent: '#f59e0b', deadline: 0, mission: '' };
+  return shipDraft && ME && u === ME.name ? { ...s, ...shipDraft } : s;
+}
+function shipItems(names) {
+  const live = liveMeetings();
+  return (data.users || []).map(u => {
+    const s = shipOf(u);
+    const act = (data.sessions || []).filter(x => x.user === u).map(x => ({ ...x, st: eff(x) })).filter(x => RANK[x.st] > 0)
+      .sort((a, b) => RANK[b.st] - RANK[a.st] || b.updated_at - a.updated_at);
+    let planet = act.length ? act[0].project : null, st = act.length ? act[0].st : 'offline';
+    if (live.some(m => m.attendees.split(',').includes(u))) { planet = 'Meeting Planet'; st = 'working'; }
+    if (planet && !names.has(planet)) planet = null;
+    const dl = +s.deadline, left = dl - now();
+    const warn = !dl ? 0 : left < 0 ? 2 : left < DAY ? 1 : 0;
+    const sub = u + (dl ? ' · ⏰ ' + (left < 0 ? fmtDur(-left) + ' keçib' : fmtDur(left)) : '');
+    return { user: u, name: s.name, model: s.model, color: s.color, accent: s.accent, planet, st, warn, sub };
+  });
+}
+/** Deadline-ına bir gündən az qalmış (və ya keçmiş) tapşırıqlar: planetin üstündə, planet kainatda yoxdursa icraçının gəmisinin üstündə */
+function balloonItems(names) {
+  const out = [];
+  for (const t of data.tasks || []) {
+    const dl = dueInfo(t);
+    if (!dl || dl.left > DAY) continue;
+    const o = { key: 't' + t.id, id: t.id, title: t.title, left: dl.text, level: dl.level, due: +t.due_at };
+    if (names.has(t.project)) o.planet = t.project; else o.ship = t.assignee;
+    out.push(o);
+  }
+  return out.sort((a, b) => a.due - b.due);
+}
+
+/* ---- Planet panelində əlavə məlumat: 24 saat qaydası, istifadəçi planeti, MCP peykləri ---- */
+function renderDInfo(name) {
+  const box = $('dinfo');
+  const idle = idleOf(name), burn = burnOf(name);
+  const w = (data.worlds || []).find(x => x.name === name);
+  const sats = satsOf(name);
+  const open = (data.tasks || []).filter(t => t.project === name && t.status !== 'done');
+  const soon = open.map(t => ({ t, d: dueInfo(t) })).filter(x => x.d && x.d.left < 3 * DAY).sort((a, b) => a.d.left - b.d.left).slice(0, 4);
+  const sig = [Math.floor(idle / 600), burn > 0, w && w.updated_at, sats.map(s => s.name + s.active).join(), open.length, soon.map(x => x.t.id + x.d.text).join(), ME && ME.name].join('|');
+  if (box._sig === sig) return;
+  box._sig = sig; box.replaceChildren();
+  if (burn > 0) {
+    const lv = burn >= .6 ? 3 : burn >= .3 ? 2 : 1;
+    const b = el('div', 'burnbox'); b.dataset.lv = String(lv);
+    b.append(el('b', null, ['', '💨 Tüstülənir', '🔥 Yanır', '💥 Xaos'][lv]), document.createTextNode(` · son ${fmtDur(idle)} ərzində heç bir tapşırıq bitməyib (${open.length} açıq). Bir tapşırığı bitir, planet sakitləşsin.`));
+    box.append(b);
+  }
+  if (w) {
+    const b = el('div', 'infobox'), r = el('div', 'row2');
+    r.append(el('span', null, '🪐 ' + w.owner + ' planeti'), el('span', 'sp'));
+    if (ME && (ME.role === 'admin' || ME.name === w.owner)) { const e = el('button', 'gbtn', '✎ Dəyiş'); e.onclick = () => openWorld(w); r.append(e); }
+    b.append(r);
+    if (w.descr) b.append(el('div', 'mnote', w.descr));
+    box.append(b);
+  }
+  const tb = el('div', 'infobox'), tr = el('div', 'row2');
+  tr.append(el('span', null, '📌 ' + open.length + ' açıq tapşırıq'), el('span', 'sp'));
+  const add = el('button', 'gbtn', '+ tapşırıq'); add.onclick = () => openTaskModal(name); tr.append(add);
+  tb.append(tr);
+  for (const { t, d } of soon) { const l = el('div', 'mnote'), c = el('span', 'tdue', d.text); c.dataset.lv = String(d.level); l.append(document.createTextNode(t.title + ' · ' + t.assignee + ' '), c); tb.append(l); }
+  box.append(tb);
+  if (sats.length) {
+    const b = el('div', 'infobox'), l = el('div', 'satl');
+    b.append(el('div', 'mnote', '🛰 MCP peykləri'));
+    for (const s of sats) { const c = el('span', null, s.name + (s.n ? ' · ' + s.n : '')); c.dataset.on = s.active ? '1' : ''; c.title = s.active ? 'Son 10 dəqiqədə işlədilib' : s.last ? 'Son: ' + ago(s.last) : 'Əl ilə qeyd olunub'; l.append(c); }
+    b.append(l); box.append(b);
+  }
+}
+
+/* ---- Gəmi: öz gəmini fərdiləşdir, deadline təyin et; başqasının gəmisinə bax ---- */
+let shipModel = 'shuttle';
+function openShip(u) {
+  if (!data || !ME) return;
+  u = u || ME.name;
+  const s = shipOf(u), mine = u === ME.name;
+  $('sh-edit').hidden = !mine; $('sh-view').hidden = mine;
+  setText($('sh-title'), (mine ? '🚀 Mənim gəmim' : '🚀 ' + s.name));
+  if (!mine) {
+    const dl = +s.deadline, left = dl - now();
+    const it = shipItems(new Set(spaceList(buildProjects()).map(p => p.name))).find(x => x.user === u);
+    $('sh-view').replaceChildren(
+      el('div', null, 'Pilot: ' + u),
+      el('div', null, 'Model: ' + ({ shuttle: 'Şatl', saucer: 'Boşqab', fighter: 'Qırıcı' }[s.model] || s.model)),
+      el('div', null, it && it.planet ? 'İndi: ' + it.planet + ' ətrafında' : 'İndi: kainatın kənarında patrul'),
+      el('div', null, dl ? '⏰ Deadline: ' + when(dl) + (left < 0 ? ' (' + fmtDur(-left) + ' keçib)' : ' (' + fmtDur(left) + ' qalıb)') + (s.mission ? ' · ' + s.mission : '') : 'Deadline yoxdur'));
+    openM('shipm'); return;
+  }
+  $('sh-name').value = s.name; $('sh-color').value = s.color; $('sh-accent').value = s.accent;
+  $('sh-dl').value = toLocal(s.deadline); $('sh-mission').value = s.mission || '';
+  shipModel = s.model;
+  for (const b of $('sh-model').children) b.classList.toggle('on', b.dataset.m === shipModel);
+  $('sh-err').hidden = true; setText($('sh-ok'), '');
+  openM('shipm'); $('sh-name').focus();
+}
+function shipPreview() {
+  shipDraft = { name: $('sh-name').value || (ME ? ME.name : ''), model: shipModel, color: $('sh-color').value, accent: $('sh-accent').value, deadline: fromLocal($('sh-dl').value), mission: $('sh-mission').value };
+  render();
+}
+async function shipSave(clearDl) {
+  if (clearDl) { $('sh-dl').value = ''; $('sh-mission').value = ''; }
+  const e = $('sh-err'); e.hidden = true;
+  const { status, d } = await WLD('ship_save', { name: $('sh-name').value, model: shipModel, color: $('sh-color').value, accent: $('sh-accent').value, deadline: fromLocal($('sh-dl').value), mission: $('sh-mission').value });
+  if (status === 200) { setText($('sh-ok'), clearDl ? 'Deadline silindi ✓' : 'Saxlandı ✓'); await load(); shipDraft = null; render(); }
+  else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
+}
+
+/* ---- İstifadəçi planeti: yarat və redaktə et ---- */
+let wEdit = null;
+function openWorld(w) {
+  wEdit = w || null;
+  const v = w || { name: '', descr: '', surface: 0, hue: Math.floor(Math.random() * 360), ring: 0, size: 2 };
+  $('w-name').value = v.name; $('w-descr').value = v.descr || ''; $('w-hue').value = v.hue; $('w-ring').checked = !!+v.ring;
+  for (const b of $('w-surf').children) b.classList.toggle('on', +b.dataset.s === +v.surface);
+  for (const b of $('w-size').children) b.classList.toggle('on', +b.dataset.z === +v.size);
+  setText($('w-title'), w ? '🪐 ' + w.name : '🪐 Yeni planet'); setText($('w-save'), w ? 'Saxla' : 'Yarat');
+  $('w-del').hidden = !w; $('w-err').hidden = true;
+  openM('wm'); worldPreview(); $('w-name').focus();
+}
+function worldForm() {
+  const pick = (box, k) => { const b = [...box.children].find(x => x.classList.contains('on')); return b ? +b.dataset[k] : 0; };
+  return { name: $('w-name').value.trim(), descr: $('w-descr').value, surface: pick($('w-surf'), 's'), hue: +$('w-hue').value, ring: $('w-ring').checked ? 1 : 0, size: pick($('w-size'), 'z') || 2 };
+}
+function worldPreview() {
+  const f = worldForm();
+  $('w-sw').style.background = `hsl(${f.hue} 50% 56%)`;
+  wDraft = { ...f, id: wEdit ? wEdit.id : 0, name: f.name || (wEdit ? wEdit.name : 'Yeni planet') };
+  render();
+}
+
+/* ---- MCP peykləri ---- */
+let mcpEdit = 0;
+function renderMcp() {
+  const auto = $('mcp-auto'); auto.replaceChildren();
+  const use = (data.mcp_use || []).slice().sort((a, b) => b.last_at - a.last_at);
+  if (!use.length) auto.append(el('div', 'mnote', 'Hələ heç bir MCP aləti işlədilməyib.'));
+  for (const u of use) {
+    const r = el('div', 'urow'); r.append(el('span', 'un', '🛰 ' + u.name), el('span', 'ur', u.project));
+    r.append(el('span', 'us', u.n + ' çağırış · ' + ago(u.last_at) + (now() - u.last_at < 600 ? ' · ● aktiv' : ''))); auto.append(r);
+  }
+  const box = $('mcp-list'); box.replaceChildren();
+  const list = data.mcp || [];
+  if (!list.length) box.append(el('div', 'mnote', 'Hələ əl ilə qeyd olunan peyk yoxdur.'));
+  for (const m of list) {
+    const r = el('div', 'urow'); r.append(el('span', 'un', '🛰 ' + m.name), el('span', 'ur', m.project || '☀ günəş'));
+    r.append(el('span', 'us', (m.descr ? m.descr + ' · ' : '') + m.owner));
+    if (ME && (ME.role === 'admin' || ME.name === m.owner)) {
+      const e = el('button', 'gbtn', 'Dəyiş'), x = el('button', 'gbtn danger', 'Sil');
+      e.onclick = () => { mcpEdit = +m.id; $('mcp-name').value = m.name; $('mcp-prj').value = m.project; $('mcp-descr').value = m.descr; setText($('mcp-save'), 'Saxla'); setText($('mcp-ftitle'), 'Dəyiş: ' + m.name); $('mcp-cancel').hidden = false; };
+      x.onclick = async () => { if (!confirm('"' + m.name + '" peyki silinsin?')) return; await WLD('mcp_delete', { id: m.id }); await load(); renderMcp(); };
+      r.append(e, x);
+    }
+    box.append(r);
+  }
+  const prjs = [...new Set([...(data.projects || []).map(p => p.project), ...(data.worlds || []).map(w => w.name), ...SPECIALS.map(x => x.name)])].sort();
+  $('mcp-prjs').replaceChildren(...prjs.map(p => Object.assign(document.createElement('option'), { value: p })));
+}
+function mcpReset() { mcpEdit = 0; $('mcp-name').value = ''; $('mcp-descr').value = ''; setText($('mcp-save'), 'Əlavə et'); setText($('mcp-ftitle'), 'Yeni peyk'); $('mcp-cancel').hidden = true; $('mcp-err').hidden = true; }
+
+/* ---- Xüsusi planetlərin paneli ---- */
+function renderX(name) {
+  const sp = specialOf(name);
+  setText($('xtitle'), sp.icon + ' ' + sp.name);
+  for (const k of ['prompt', 'designer', 'meeting', 'test']) $('x-' + k).hidden = k !== sp.kind;
+  if (sp.kind === 'prompt') { setText($('xmeta'), 'AI promptlarını yarat, saxla və komanda ilə paylaş'); renderPrompts(); }
+  else if (sp.kind === 'designer') { setText($('xmeta'), 'Dizayn işləri, kreativ layihələr və dizayn tapşırıqları'); renderDesigner(); }
+  else if (sp.kind === 'test') { setText($('xmeta'), 'Proyekt seç və test et: ssenarilər, nəticələr, Claude ilə yoxlama'); renderTests(); }
+  else { setText($('xmeta'), 'Görüşlər və müzakirələr üçün neytral planet'); renderMeetings(); }
+}
+
+/* Prompt Generator */
+const PG_ROLES = [
+  ['dev', 'Təcrübəli proqramçı', 'an experienced senior software engineer', 'опытный senior-разработчик'],
+  ['design', 'UI/UX dizayner', 'a senior UI/UX designer', 'опытный UI/UX-дизайнер'],
+  ['mkt', 'Marketinq mütəxəssisi', 'a performance marketing expert', 'эксперт по маркетингу'],
+  ['analyst', 'Data analitik', 'a data analyst', 'аналитик данных'],
+  ['writer', 'Kopirayter', 'a professional copywriter', 'профессиональный копирайтер'],
+  ['pm', 'Məhsul meneceri', 'a product manager', 'продакт-менеджер'],
+  ['teacher', 'Müəllim', 'a patient teacher', 'терпеливый преподаватель'],
+  ['custom', 'Öz rolum…', '', ''],
+];
+const PG_FMT = [
+  ['md', 'Markdown, başlıqlarla', 'Markdown with headings', 'Markdown с заголовками'],
+  ['list', 'Qısa siyahı', 'a short bullet list', 'короткий маркированный список'],
+  ['table', 'Cədvəl', 'a table', 'таблица'],
+  ['json', 'JSON', 'valid JSON only, no extra text', 'только валидный JSON, без лишнего текста'],
+  ['code', 'Kod (izahla)', 'code with a brief explanation', 'код с кратким пояснением'],
+  ['steps', 'Addım-addım plan', 'a numbered step-by-step plan', 'пошаговый нумерованный план'],
+  ['free', 'Sərbəst mətn', 'free-form prose', 'свободный текст'],
+];
+const PG_TONE = [
+  ['pro', 'Peşəkar', 'professional', 'профессиональный'],
+  ['simple', 'Sadə, başa düşülən', 'simple and easy to understand', 'простой и понятный'],
+  ['short', 'Qısa və konkret', 'brief and to the point', 'кратко и по делу'],
+  ['deep', 'Ətraflı', 'thorough and detailed', 'подробный'],
+];
+const PG_T = {
+  az: { role: 'Rol', roleL: r => `Sən ${/^\p{Lu}\p{Ll}/u.test(r) ? r[0].toLocaleLowerCase('az') + r.slice(1) : r} kimi çıxış edirsən.`, task: 'Tapşırıq', ctx: 'Kontekst', con: 'Məhdudiyyətlər', fmt: 'Cavabın formatı', tone: 'Ton', ex: 'Nümunə', how: 'Necə işləməli',
+    steps: 'Cavab verməzdən əvvəl tapşırığı addım-addım düşün.', ask: 'Məlumat çatmırsa, əvvəlcə aydınlaşdırıcı suallar ver, sonra cavab yaz.', lang: 'Cavabı Azərbaycan dilində yaz.', col: 1 },
+  en: { role: 'Role', roleL: r => `You are ${r}.`, task: 'Task', ctx: 'Context', con: 'Constraints', fmt: 'Output format', tone: 'Tone', ex: 'Example', how: 'How to work',
+    steps: 'Think through the task step by step before answering.', ask: 'If information is missing, ask clarifying questions first, then answer.', lang: 'Answer in English.', col: 2 },
+  ru: { role: 'Роль', roleL: r => `Ты — ${r}.`, task: 'Задача', ctx: 'Контекст', con: 'Ограничения', fmt: 'Формат ответа', tone: 'Тон', ex: 'Пример', how: 'Как работать',
+    steps: 'Прежде чем отвечать, продумай задачу шаг за шагом.', ask: 'Если информации не хватает, сначала задай уточняющие вопросы, потом отвечай.', lang: 'Отвечай на русском языке.', col: 3 },
+};
+let pgEditId = 0;
+function buildPrompt() {
+  const L = PG_T[$('pg-lang').value] || PG_T.az, c = L.col;
+  const pick = (arr, id) => (arr.find(x => x[0] === $(id).value) || arr[0]);
+  const role = $('pg-role').value === 'custom' ? $('pg-role-c').value.trim() : pick(PG_ROLES, 'pg-role')[c] || pick(PG_ROLES, 'pg-role')[1];
+  const goal = $('pg-goal').value.trim(), ctx = $('pg-ctx').value.trim(), ex = $('pg-ex').value.trim();
+  const cons = $('pg-con').value.split('\n').map(x => x.trim().replace(/^[-•*]\s*/, '')).filter(Boolean);
+  if (!goal) return null;
+  const P = [];
+  if (role) P.push('# ' + L.role, L.roleL(role), '');
+  P.push('# ' + L.task, goal, '');
+  if (ctx) P.push('# ' + L.ctx, ctx, '');
+  if (cons.length) P.push('# ' + L.con, ...cons.map(x => '- ' + x), '');
+  P.push('# ' + L.fmt, pick(PG_FMT, 'pg-fmt')[c], '');
+  P.push('# ' + L.tone, pick(PG_TONE, 'pg-tone')[c], '');
+  if (ex) P.push('# ' + L.ex, ex, '');
+  const how = [];
+  if ($('pg-steps').checked) how.push(L.steps);
+  if ($('pg-ask').checked) how.push(L.ask);
+  how.push(L.lang);
+  P.push('# ' + L.how, ...how.map(x => '- ' + x));
+  return P.join('\n');
+}
+function makePromptRow() {
+  const n = el('div', 'prow'), pt = el('div', 'pt'), pm = el('div', 'pm'), pb = el('div', 'pb'), pa = el('div', 'pa');
+  const cp = el('button', 'gbtn', 'Kopyala'), ed = el('button', 'gbtn', 'Redaktə'), del = el('button', 'gbtn danger', 'Sil');
+  pa.append(cp, ed, del); n.append(pt, pm, pb, pa);
+  cp.onclick = async () => { try { await navigator.clipboard.writeText(n._it.body); setText(cp, 'Kopyalandı ✓'); } catch (e) { setText(cp, 'Alınmadı'); } setTimeout(() => setText(cp, 'Kopyala'), 1600); };
+  ed.onclick = () => { const x = n._it; pgEditId = +x.id; $('pg-out').value = x.body; $('pg-title').value = x.title; $('pg-tags').value = x.tags; setText($('pg-edit'), 'Redaktə: ' + x.title); setText($('pg-save'), 'Yadda saxla'); $('pg-new').hidden = false; $('pg-out').focus(); };
+  del.onclick = async () => { if (!confirm('"' + n._it.title + '" silinsin?')) return; const { status, d } = await WLD('prompt_delete', { id: n._it.id }); if (status !== 200) alert(d.error || 'Alınmadı'); if (+n._it.id === pgEditId) pgReset(); load(); };
+  n._r = { pt, pm, pb, ed, del };
+  return n;
+}
+function renderPrompts() {
+  const q = $('pg-q').value.trim().toLowerCase();
+  const all = data.prompts || [];
+  const list = all.filter(p => !q || (p.title + ' ' + p.tags + ' ' + p.body).toLowerCase().includes(q));
+  setText($('pg-cnt'), String(all.length)); $('pg-empty').hidden = list.length > 0;
+  sync($('pg-list'), list, p => p.id, makePromptRow, (n, p) => {
+    n._it = p; const r = n._r, own = ME && (ME.role === 'admin' || ME.name === p.owner);
+    setText(r.pt, p.title); setText(r.pm, p.owner + ' · ' + ago(p.updated_at) + (p.tags ? ' · #' + p.tags.split(',').map(x => x.trim()).filter(Boolean).join(' #') : ''));
+    setText(r.pb, p.body); r.ed.hidden = r.del.hidden = !own;
+  });
+}
+function pgReset() { pgEditId = 0; setText($('pg-edit'), ''); setText($('pg-save'), 'Kitabxanaya saxla'); $('pg-new').hidden = true; $('pg-err').hidden = true; }
+
+/* Designer */
+function renderDesigner() {
+  const P = 'Designer';
+  const plans = (data.plans || []).filter(x => x.project === P).sort((a, b) => (a.status === 'done') - (b.status === 'done') || a.id - b.id);
+  const tasks = (data.tasks || []).filter(t => t.project === P).sort((a, b) => TCOLS.findIndex(c => c[0] === a.status) - TCOLS.findIndex(c => c[0] === b.status) || (+a.due_at || 9e9) - (+b.due_at || 9e9));
+  setText($('ds-pcnt'), String(plans.length)); setText($('ds-tcnt'), String(tasks.length));
+  $('ds-pempty').hidden = plans.length > 0; $('ds-tempty').hidden = tasks.length > 0;
+  sync($('ds-plans'), plans, x => x.id, makePlItem, (it, x) => {
+    const q = it._r; it._it = x;
+    setText(q.pt, x.title); setText(q.pd, x.details || ''); q.pd.hidden = !x.details;
+    setCls(it, 'pli' + (x.status === 'done' ? ' done' : ''));
+    setText(q.pm, x.creator + ' · ' + ago(x.created_at)); q.pa.firstChild.hidden = q.pa.lastChild.hidden = !canEditPlan(x);
+  });
+  sync($('ds-tasks'), tasks, t => t.id, makeTask, updTask);
+  const box = $('ds-info'), burn = burnOf(P);
+  const sig = String(Math.floor(idleOf(P) / 600)) + burn;
+  if (box._sig !== sig) {
+    box._sig = sig; box.replaceChildren();
+    if (burn > 0) { const b = el('div', 'burnbox'); b.dataset.lv = burn >= .6 ? '3' : '2'; b.textContent = `🔥 Son ${fmtDur(idleOf(P))} ərzində heç bir dizayn tapşırığı bitməyib. Birini bitir, planet sakitləşsin.`; box.append(b); }
+  }
+}
+
+/* Meeting Planet */
+function makeMeeting() {
+  const n = el('div', 'mcard'), mt = el('div', 'mt'), ttl = el('span'), lv = el('span', 'lvb', 'CANLI'), mw = el('div', 'mw'), who = el('div', 'who'), ma = el('div', 'ma');
+  mt.append(ttl, lv);
+  const posts = el('div', 'posts'), pin = el('div', 'pin'), inp = el('input'), send = el('button', 'gbtn go', 'Yaz');
+  inp.maxLength = 2000; inp.placeholder = 'Müzakirəyə yaz…'; pin.append(inp, send);
+  const pa = el('div', 'pa'), ed = el('button', 'gbtn', 'Dəyiş'), del = el('button', 'gbtn danger', 'Sil'); pa.append(ed, del);
+  n.append(mt, mw, who, ma, posts, pin, pa);
+  const post = async () => {
+    const body = inp.value.trim(); if (!body) return;
+    send.disabled = true; const { status, d } = await WLD('meeting_post', { meeting_id: n._it.id, body }); send.disabled = false;
+    if (status === 200) { inp.value = ''; load(); } else alert(d.error || 'Alınmadı');
+  };
+  send.onclick = post; inp.addEventListener('keydown', e => { if (e.key === 'Enter') post(); });
+  ed.onclick = () => openMeeting(n._it);
+  del.onclick = async () => { if (!confirm('"' + n._it.title + '" görüşü silinsin?')) return; await WLD('meeting_delete', { id: n._it.id }); load(); };
+  n._r = { ttl, lv, mw, who, ma, posts, pa, sig: '', psig: '' };
+  return n;
+}
+function updMeeting(n, m) {
+  n._it = m; const r = n._r, t = now(), end = +m.starts_at + m.minutes * 60, live = +m.starts_at <= t && t < end;
+  n.dataset.live = live ? '1' : '';
+  r.lv.hidden = !live; setText(r.ttl, m.title);
+  setText(r.mw, when(m.starts_at) + ' · ' + m.minutes + ' dəq · ' + (live ? fmtDur(end - t) + ' qalıb' : t < +m.starts_at ? fmtDur(+m.starts_at - t) + ' sonra' : 'bitib') + ' · təşkil edən ' + m.creator);
+  const sig = m.attendees + '|' + m.agenda;
+  if (r.sig !== sig) { r.sig = sig; r.who.replaceChildren(...m.attendees.split(',').filter(Boolean).map(u => { const a = avatar(u); a.title = u; return a; })); setText(r.ma, m.agenda || ''); r.ma.hidden = !m.agenda; }
+  const ps = (data.meeting_posts || []).filter(p => +p.meeting_id === +m.id);
+  const psig = ps.map(p => p.id).join();
+  if (r.psig !== psig) {
+    r.psig = psig;
+    r.posts.replaceChildren(...ps.map(p => { const d = el('div', 'post'); const b = el('b', null, p.user + ': '); b.style.color = tint(p.user); d.append(b, document.createTextNode(p.body), el('small', null, clock(p.created_at).slice(0, 5))); return d; }));
+  }
+  r.pa.hidden = !(ME && (ME.role === 'admin' || ME.name === m.creator));
+}
+function renderMeetings() {
+  const t = now(), ms = data.meetings || [];
+  const live = ms.filter(m => +m.starts_at <= t && t < +m.starts_at + m.minutes * 60);
+  const next = ms.filter(m => +m.starts_at > t);
+  const past = ms.filter(m => +m.starts_at + m.minutes * 60 <= t).reverse();
+  for (const [id, list] of [['mt-live', live], ['mt-next', next], ['mt-past', past]]) {
+    $(id + '-e').hidden = list.length > 0;
+    sync($(id), list, m => m.id, makeMeeting, updMeeting);
+  }
+}
+let mtEdit = 0;
+function openMeeting(m) {
+  mtEdit = m ? +m.id : 0;
+  const start = m ? +m.starts_at : Math.ceil(now() / 1800) * 1800;
+  $('mt-ttl').value = m ? m.title : ''; $('mt-agenda').value = m ? m.agenda : ''; $('mt-at').value = toLocal(start); $('mt-min').value = String(m ? m.minutes : 30);
+  const att = m ? m.attendees.split(',') : (data.users || []);
+  $('mt-att').replaceChildren(...(data.users || []).map(u => { const l = el('label', 'chk2'), c = el('input'); c.type = 'checkbox'; c.value = u; c.checked = att.includes(u); l.append(c, document.createTextNode(u)); return l; }));
+  setText($('mt-title'), m ? '🤝 Görüşü dəyiş' : '🤝 Görüş təyin et'); $('mt-err').hidden = true;
+  openM('mtm'); $('mt-ttl').focus();
+}
+
+/* Test Planet: proyekt seç → ssenariləri yoxla (keçdi / xəta), yeni raund, Claude-a test promptu */
+let tsProject = (() => { try { return localStorage.getItem('tdtest') || null; } catch (e) { return null; } })(), tsEdit = 0;
+const TS_ST = { todo: 'yoxlanmayıb', pass: '✓ keçdi', fail: '✗ xəta' };
+async function tsSet(t, status) {
+  let note = '';
+  if (status === 'fail') { note = prompt('Nə səhv oldu? (istəyə bağlı)', t.note || ''); if (note === null) return; }
+  const { status: st, d } = await WLD('test_status', { id: t.id, status, note });
+  if (st !== 200) alert(d.error || 'Alınmadı'); load();
+}
+function makeTestRow() {
+  const n = el('div', 'prow'), pt = el('div', 'pt'), ttl = el('span'), sst = el('span', 'tsst'), pm = el('div', 'pm'), pb = el('div', 'pb'), note = el('div', 'tnote'), pa = el('div', 'pa');
+  pt.append(ttl, sst);
+  const ok = el('button', 'gbtn', '✓ Keçdi'), bad = el('button', 'gbtn danger', '✗ Xəta'), rs = el('button', 'gbtn', '↺'), ed = el('button', 'gbtn', '✎'), del = el('button', 'gbtn danger', '🗑');
+  rs.title = 'Yoxlanmayıb et'; ed.title = 'Dəyiş'; del.title = 'Sil';
+  pa.append(ok, bad, rs, ed, del); n.append(pt, pm, pb, note, pa);
+  ok.onclick = () => tsSet(n._it, 'pass'); bad.onclick = () => tsSet(n._it, 'fail'); rs.onclick = () => tsSet(n._it, 'todo');
+  ed.onclick = () => { const t = n._it; tsEdit = +t.id; $('ts-ttl').value = t.title; $('ts-steps').value = t.steps; setText($('ts-add'), 'Saxla'); $('ts-cancel').hidden = false; $('ts-ttl').focus(); };
+  del.onclick = async () => { if (!confirm('"' + n._it.title + '" silinsin?')) return; await WLD('test_delete', { id: n._it.id }); load(); };
+  n._r = { ttl, sst, pm, pb, note, ok, rs, ed, del };
+  return n;
+}
+function tsReset() { tsEdit = 0; $('ts-ttl').value = ''; $('ts-steps').value = ''; setText($('ts-add'), '+ Ssenari'); $('ts-cancel').hidden = true; $('ts-err').hidden = true; }
+function tsAiDefault(prj, list) {
+  const open = list.filter(t => t.status !== 'pass');
+  return `"${prj}" proyektini test et:\n1. Mövcud testləri tap və nəzərdən keçir.\n2. Əsas funksiyalar üçün çatışmayan testləri yaz.\n3. Kodda tapdığın səhvləri və riskləri qısa siyahı ilə bildir (fayl və sətir göstər).`
+    + (open.length ? '\n\nXüsusilə bu ssenariləri yoxla:\n' + open.slice(0, 12).map(t => '- ' + t.title + (t.status === 'fail' && t.note ? ' (xəta: ' + t.note + ')' : '')).join('\n') : '');
+}
+function renderTests() {
+  const names = [...new Set([...buildProjects().map(p => p.name), ...(data.worlds || []).map(w => w.name), ...(data.tests || []).map(t => t.project)])].filter(n => n !== 'Test Planet').sort((a, b) => a.localeCompare(b));
+  $('ts-noprj').hidden = names.length > 0;
+  if (tsProject && !names.includes(tsProject)) tsProject = null;
+  const cnt = n => { const l = (data.tests || []).filter(t => t.project === n); const f = l.filter(t => t.status === 'fail').length; return l.length ? ' · ' + (f ? f + '✗' : l.filter(t => t.status === 'pass').length + '/' + l.length) : ''; };
+  sync($('ts-prjs'), names, n => n, () => el('button'), (b, n) => {
+    setText(b, n + cnt(n)); setCls(b, n === tsProject ? 'on' : '');
+    b.onclick = () => { tsProject = n; try { localStorage.setItem('tdtest', n); } catch (e) {} tsReset(); $('ts-ai').value = ''; renderTests(); };
+  }, { enter: false });
+  $('ts-body').hidden = !tsProject;
+  if (!tsProject) return;
+  const list = (data.tests || []).filter(t => t.project === tsProject);
+  const pass = list.filter(t => t.status === 'pass').length, fail = list.filter(t => t.status === 'fail').length, todo = list.length - pass - fail;
+  const last = list.reduce((m, t) => Math.max(m, +t.tested_at || 0), 0);
+  const sum = $('ts-sum'), sig = [tsProject, pass, fail, todo, last].join('|');
+  if (sum._sig !== sig) {
+    sum._sig = sig; sum.replaceChildren();
+    const r = el('div', 'row2'); r.append(el('b', null, '🧪 ' + tsProject), el('span', 'sp'));
+    const goB = el('button', 'gbtn', 'Planetə get →'); goB.onclick = () => go(tsProject);
+    const rnd = el('button', 'gbtn', '↺ Yeni raund'); rnd.title = 'Bütün ssenariləri "yoxlanmayıb" et';
+    rnd.onclick = async () => { if (!confirm('Bütün nəticələr sıfırlansın və yeni test raundu başlasın?')) return; await WLD('test_reset', { project: tsProject }); load(); };
+    r.append(rnd, goB); sum.append(r);
+    if (list.length) {
+      const bar = el('div', 'tsbar'), P = el('i', 'p'), F = el('i', 'f'); P.style.width = (pass / list.length * 100) + '%'; F.style.width = (fail / list.length * 100) + '%'; bar.append(P, F); sum.append(bar);
+      sum.append(el('div', 'mnote', `${pass} keçdi · ${fail} xəta · ${todo} yoxlanmayıb` + (last ? ' · son yoxlama ' + ago(last) : '')));
+    } else sum.append(el('div', 'mnote', 'Ssenari əlavə et, sonra hər birini yoxlayıb nəticəni qeyd et.'));
+  }
+  const order = { fail: 0, todo: 1, pass: 2 };
+  const rows = list.slice().sort((a, b) => order[a.status] - order[b.status] || a.id - b.id);
+  setText($('ts-cnt'), String(list.length)); $('ts-empty').hidden = list.length > 0;
+  sync($('ts-list'), rows, t => t.id, makeTestRow, (n, t) => {
+    n._it = t; const r = n._r, own = ME && (ME.role === 'admin' || ME.name === t.creator);
+    n.dataset.s = t.status; setText(r.ttl, t.title); setText(r.sst, TS_ST[t.status] || t.status);
+    setText(r.pm, t.tested_at ? (t.status === 'pass' ? 'keçdi: ' : 'xəta: ') + t.tested_by + ', ' + ago(t.tested_at) : 'yaradan ' + t.creator);
+    setText(r.pb, t.steps || ''); r.pb.hidden = !t.steps;
+    setText(r.note, t.status === 'fail' && t.note ? '⚠ ' + t.note : ''); r.note.hidden = !(t.status === 'fail' && t.note);
+    r.ok.hidden = t.status === 'pass'; r.rs.hidden = t.status === 'todo'; r.ed.hidden = r.del.hidden = !own;
+  });
+  if (!$('ts-ai').value || $('ts-ai')._auto === $('ts-ai').value) { const v = tsAiDefault(tsProject, list); $('ts-ai').value = v; $('ts-ai')._auto = v; }
+  const myTok = !!(getTok() && myName);
+  setText($('ts-aiwho'), myTok ? 'Göndərən: ' + myName : 'Əvvəlcə tokenini daxil et (planetin panelində "Göndər" bölməsi)');
+  $('ts-aisend').disabled = !myTok;
+  const cmds = (data.commands || []).filter(c => c.project === tsProject).slice(0, 4);
+  sync($('ts-cmds'), cmds, c => c.id, () => { const n = el('div', 'prow'), pm = el('div', 'pm'), pb = el('div', 'pb'); n.append(pm, pb); n._r = { pm, pb }; return n; }, (n, c) => {
+    const [lbl] = CMD_ST[c.status] || [c.status];
+    setText(n._r.pm, '🤖 ' + c.user + ' · ' + lbl + ' · ' + ago(c.created_at)); setText(n._r.pb, c.result || c.prompt);
+  });
+}
+
+function initWorld() {
+  // Test Planet
+  $('ts-cancel').onclick = tsReset;
+  $('ts-add').onclick = async () => {
+    const e = $('ts-err'); e.hidden = true;
+    const { status, d } = await WLD('test_save', { id: tsEdit, project: tsProject, title: $('ts-ttl').value, steps: $('ts-steps').value });
+    if (status === 200) { tsReset(); load(); } else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
+  };
+  $('ts-ttl').addEventListener('keydown', e => { if (e.key === 'Enter') $('ts-add').click(); });
+  $('ts-aisend').onclick = async () => {
+    const e = $('ts-aierr'), text = $('ts-ai').value.trim(); e.hidden = true; if (!text || !tsProject) return;
+    $('ts-aisend').disabled = true;
+    const { status, d } = await cmdApi('send', { project: tsProject, prompt: text });
+    $('ts-aisend').disabled = false;
+    if (status === 200) { setText($('ts-aiwho'), 'Göndərildi ✓ agent götürəndə işləyəcək'); load(); }
+    else { e.hidden = false; e.textContent = status === 401 ? 'Token yanlışdır' : (d.error || 'Alınmadı'); }
+  };
+  // gəmi
+  $('t-ship').onclick = () => openShip();
+  for (const b of $('sh-model').children) b.onclick = () => { shipModel = b.dataset.m; for (const x of $('sh-model').children) x.classList.toggle('on', x === b); shipPreview(); };
+  for (const id of ['sh-name', 'sh-color', 'sh-accent', 'sh-dl', 'sh-mission']) $(id).addEventListener('input', shipPreview);
+  $('sh-save').onclick = () => shipSave(false);
+  $('sh-dlclear').onclick = () => shipSave(true);
+  // planet
+  $('t-world').onclick = () => openWorld(null);
+  for (const box of ['w-surf', 'w-size']) for (const b of $(box).children) b.onclick = () => { for (const x of $(box).children) x.classList.toggle('on', x === b); worldPreview(); };
+  for (const id of ['w-name', 'w-hue', 'w-ring']) $(id).addEventListener('input', worldPreview);
+  $('w-save').onclick = async () => {
+    const f = worldForm(), e = $('w-err'); e.hidden = true; $('w-save').disabled = true;
+    const { status, d } = await WLD('planet_save', { ...f, id: wEdit ? wEdit.id : 0 });
+    $('w-save').disabled = false;
+    if (status === 200) { wDraft = null; closeM('wm'); await load(); go(f.name); }
+    else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
+  };
+  $('w-del').onclick = async () => {
+    if (!wEdit || !confirm('"' + wEdit.name + '" planeti silinsin? Tapşırıqları lövhədə qalacaq.')) return;
+    const { status, d } = await WLD('planet_delete', { id: wEdit.id });
+    if (status === 200) { wDraft = null; closeM('wm'); await load(); go(); } else { $('w-err').hidden = false; $('w-err').textContent = d.error || 'Alınmadı'; }
+  };
+  // MCP
+  $('t-mcp').onclick = () => { mcpReset(); $('mcp-prj').value = curPlanet || ''; renderMcp(); openM('mcpm'); };
+  $('mcp-cancel').onclick = mcpReset;
+  $('mcp-save').onclick = async () => {
+    const e = $('mcp-err'); e.hidden = true;
+    const { status, d } = await WLD('mcp_save', { id: mcpEdit, name: $('mcp-name').value, project: $('mcp-prj').value, descr: $('mcp-descr').value });
+    if (status === 200) { mcpReset(); await load(); renderMcp(); } else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
+  };
+  // Prompt Generator
+  const opts = (id, arr) => $(id).replaceChildren(...arr.map(x => Object.assign(document.createElement('option'), { value: x[0], textContent: x[1] })));
+  opts('pg-role', PG_ROLES); opts('pg-fmt', PG_FMT); opts('pg-tone', PG_TONE);
+  $('pg-role').onchange = () => { $('pg-role-c').hidden = $('pg-role').value !== 'custom'; };
+  $('pg-gen').onclick = () => {
+    const out = buildPrompt();
+    if (!out) { setText($('pg-note'), 'Əvvəlcə məqsədi yaz'); $('pg-goal').focus(); return; }
+    $('pg-out').value = out; setText($('pg-note'), 'Hazırdır ✓ dəyişə, kopyalaya və ya saxlaya bilərsən');
+    if (!$('pg-title').value) $('pg-title').value = $('pg-goal').value.trim().split('\n')[0].slice(0, 80);
+  };
+  $('pg-copy').onclick = async () => { try { await navigator.clipboard.writeText($('pg-out').value); setText($('pg-copy'), 'Kopyalandı ✓'); } catch (e) { $('pg-out').select(); } setTimeout(() => setText($('pg-copy'), 'Kopyala'), 1600); };
+  $('pg-new').onclick = () => { pgReset(); $('pg-out').value = ''; $('pg-title').value = ''; $('pg-tags').value = ''; };
+  $('pg-save').onclick = async () => {
+    const e = $('pg-err'); e.hidden = true;
+    const { status, d } = await WLD('prompt_save', { id: pgEditId, title: $('pg-title').value, body: $('pg-out').value, tags: $('pg-tags').value });
+    if (status === 200) { pgEditId = +d.id; setText($('pg-edit'), 'Saxlandı ✓ ' + $('pg-title').value); setText($('pg-save'), 'Yadda saxla'); $('pg-new').hidden = false; load(); }
+    else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
+  };
+  $('pg-q').addEventListener('input', renderPrompts);
+  // Designer
+  $('ds-addt').onclick = () => openTaskModal('Designer');
+  $('ds-addp').onclick = () => { plProject = 'Designer'; openPlanModal('plan'); };
+  // Meeting
+  $('mt-add').onclick = () => openMeeting(null);
+  $('mt-save').onclick = async () => {
+    const e = $('mt-err'); e.hidden = true; $('mt-save').disabled = true;
+    const attendees = [...$('mt-att').querySelectorAll('input:checked')].map(c => c.value);
+    const { status, d } = await WLD('meeting_save', { id: mtEdit, title: $('mt-ttl').value, agenda: $('mt-agenda').value, starts_at: fromLocal($('mt-at').value), minutes: +$('mt-min').value, attendees });
+    $('mt-save').disabled = false;
+    if (status === 200) { closeM('mtm'); load(); } else { e.hidden = false; e.textContent = d.error || 'Alınmadı'; }
+  };
+  $('xback').onclick = () => go();
+  for (const id of ['shipm', 'wm', 'mcpm', 'mtm']) $(id).addEventListener('pointerdown', e => { if (e.target === $(id)) closeM(id); });
+}
+
 function pulse() {                                    // hər saniyə: vaxtlar və statuslar canlı yenilənir
   const ok = Date.now() - lastOk < 9000;
   const live = $('live');
@@ -1968,6 +2793,7 @@ initReport();
 initMsg();
 initSound();
 initPlan();
+initWorld();
 if (document.fullscreenEnabled) $('fs').onclick = () => document.fullscreenElement ? document.exitFullscreen() : $('space').requestFullscreen();
 else $('fs').hidden = true;
 initCam();
@@ -1976,7 +2802,7 @@ addEventListener('hashchange', route);
 addEventListener('keydown', e => {
   if (!(view === 'space' && (curPlanet || curShip)) || e.target.closest('input,textarea,select')) return;
   if (e.key === 'Escape') go();
-  else if (curShip) return;
+  else if (curShip || specialOf(curPlanet)) return;
   else if (e.key === 'ArrowLeft' && !$('pprev').hidden) $('pprev').click();
   else if (e.key === 'ArrowRight' && !$('pnext').hidden) $('pnext').click();
 });

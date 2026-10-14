@@ -133,6 +133,84 @@ function db(): PDO
         ip VARCHAR(64) NOT NULL,
         ts INT NOT NULL
     )");
+    try {
+        $pdo->exec('ALTER TABLE tasks ADD COLUMN due_at INT NOT NULL DEFAULT 0');   // tapşırığın son tarixi (0 = yoxdur)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    // İstifadəçilərin öz planetləri (proyekt adı kimi də işləyir: tapşırıq və plan bu ada yazıla bilər)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS worlds (
+        id $id,
+        name VARCHAR(128) NOT NULL,
+        owner VARCHAR(64) NOT NULL,
+        surface INT NOT NULL DEFAULT 0,
+        hue INT NOT NULL DEFAULT 200,
+        ring INT NOT NULL DEFAULT 0,
+        size INT NOT NULL DEFAULT 2,
+        descr TEXT NOT NULL,
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    // Hər istifadəçinin öz kosmik gəmisi: görünüş + deadline
+    $pdo->exec("CREATE TABLE IF NOT EXISTS ships (
+        user VARCHAR(64) NOT NULL PRIMARY KEY,
+        name VARCHAR(60) NOT NULL,
+        model VARCHAR(16) NOT NULL,
+        color VARCHAR(9) NOT NULL,
+        accent VARCHAR(9) NOT NULL,
+        deadline INT NOT NULL DEFAULT 0,
+        mission VARCHAR(200) NOT NULL DEFAULT '',
+        updated_at INT NOT NULL
+    )");
+    // MCP peykləri: əl ilə qeyd olunan inteqrasiyalar (proyekt boşdursa günəşin ətrafında fırlanır)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS mcp_sats (
+        id $id,
+        name VARCHAR(64) NOT NULL,
+        project VARCHAR(128) NOT NULL,
+        descr TEXT NOT NULL,
+        owner VARCHAR(64) NOT NULL,
+        created_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS prompts (
+        id $id,
+        owner VARCHAR(64) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        body TEXT NOT NULL,
+        tags VARCHAR(200) NOT NULL DEFAULT '',
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS meetings (
+        id $id,
+        title VARCHAR(200) NOT NULL,
+        agenda TEXT NOT NULL,
+        starts_at INT NOT NULL,
+        minutes INT NOT NULL,
+        attendees TEXT NOT NULL,
+        creator VARCHAR(64) NOT NULL,
+        created_at INT NOT NULL
+    )");
+    // Test Planet: proyekt üzrə test ssenariləri (keçdi / xəta / yoxlanmayıb)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS tests (
+        id $id,
+        project VARCHAR(128) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        steps TEXT NOT NULL,
+        status VARCHAR(8) NOT NULL,
+        note TEXT NOT NULL,
+        creator VARCHAR(64) NOT NULL,
+        tested_by VARCHAR(64) NOT NULL DEFAULT '',
+        tested_at INT NOT NULL DEFAULT 0,
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS meeting_posts (
+        id $id,
+        meeting_id INT NOT NULL,
+        user VARCHAR(64) NOT NULL,
+        body TEXT NOT NULL,
+        created_at INT NOT NULL
+    )");
     // İlk işə düşəndə config.php-dəki istifadəçiləri köçür (birinci admin olur, parolu köhnə ümumi paroldur)
     if ((int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() === 0 && !empty($config['users'])) {
         $first = true;

@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const STC = { working: '#fbbf24', waiting: '#f87171', idle: '#4ade80', offline: '#6f6f7c', ended: '#6f6f7c' };
+const STC = { working: '#fbbf24', waiting: '#f87171', idle: '#4ade80', offline: '#6f6f7c', ended: '#6f6f7c', meet: '#5eead4' };
+const KIND_TYPE = { prompt: 6, designer: 7, meeting: 8, test: 9 };
 const uT = { value: 0 };
 const uSun = { value: new THREE.Vector3(0, 0, 0) };
 
@@ -28,14 +29,14 @@ varying vec3 vObj; varying vec3 vNW; varying vec3 vWP;
 void main(){ vObj=position; vNW=normalize(mat3(modelMatrix)*normal); vec4 w=modelMatrix*vec4(position,1.); vWP=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`;
 
 const PLANET_FS = `
-uniform float uTime, uSeed, uType, uDim, uLights, uHot, uHurt; uniform vec3 uTint, uAtm, uLight;
+uniform float uTime, uSeed, uType, uDim, uLights, uHot, uHurt, uBurn; uniform vec3 uTint, uAtm, uLight;
 uniform vec4 uDmgA[6]; uniform vec4 uDmgB[6];
 varying vec3 vObj; varying vec3 vNW; varying vec3 vWP;
 ${NOISE}
 void main(){
   vec3 n=normalize(vObj);
   vec3 p=n*1.8+vec3(uSeed*37.,uSeed*11.,uSeed*23.);
-  vec3 col=vec3(.5); float spec=0., land=0., emis=0.;
+  vec3 col=vec3(.5); float spec=0., land=0., emis=0.; vec3 emc=vec3(1.,.5,.15);
   if(uType<.5){
     float h=fbm(p*1.15); float lnd=smoothstep(.0,.05,h);
     float ice=smoothstep(.74,.9,abs(n.y)+h*.35);
@@ -65,13 +66,55 @@ void main(){
     float h=fbm(p*1.6); float cr=smoothstep(.06,.0,abs(fbm(p*3.+5.)));
     col=mix(vec3(.72,.86,.98),vec3(.96,.99,1.),smoothstep(-.2,.3,h));
     col=mix(col,vec3(.3,.58,.85),cr*.85); spec=.6;
-  } else {
+  } else if(uType<5.5){
     float h=fbm(p*1.3); float d=fbm(vec3(p.x*3.,p.y*8.,p.z*3.)+h*2.);
     col=mix(vec3(.6,.36,.17),vec3(.88,.66,.4),smoothstep(-.3,.4,h));
     col=mix(col,vec3(.38,.19,.09),smoothstep(.2,.5,d)*.55);
     col*=1.-smoothstep(.1,.0,abs(fbm(p*5.+2.)))*.18;
+  } else if(uType<6.5){
+    // Prompt Generator: qaranlıq səthdə parlayan dövrə xətləri, üzərindən axan "mətn" impulsları
+    float h=fbm(p*1.2);
+    vec3 g=abs(fract(n*9.+.5)-.5);
+    float grid=smoothstep(.035,.0,min(min(g.x,g.y),g.z));
+    float circ=smoothstep(.045,.0,abs(fbm(p*2.6+4.)));
+    float flow=pow(.5+.5*sin(n.y*34.-uTime*2.6+h*9.),6.);
+    col=mix(vec3(.015,.03,.07),vec3(.05,.1,.2),smoothstep(-.3,.4,h));
+    col+=vec3(.15,.45,.7)*grid*.25;
+    emis=circ*(.45+.9*flow)+grid*flow*.35; emc=vec3(.25,.85,1.); spec=.4;
+  } else if(uType<7.5){
+    // Designer: mərmər kimi qarışan boyalar
+    vec3 q=p*.85; float w=fbm(q+2.2*vec3(fbm(q*1.6+vec3(uTime*.03,0.,0.)),fbm(q*1.6+5.2),fbm(q*1.6-3.1)));
+    col=.5+.36*cos(6.2832*(w*1.5+vec3(0.,.33,.67)+uSeed)); col=mix(vec3(dot(col,vec3(.33))),col,.85);
+    col=mix(col,vec3(.97,.95,.92),smoothstep(.07,.0,abs(w-.12))*.8);
+    spec=.35;
+  } else if(uType<8.5){
+    // Meeting Planet: neytral, sədəf kimi açıq boz
+    float h=fbm(p*1.1); float b=fbm(vec3(p.x*.6,p.y*3.2,p.z*.6)+h);
+    col=mix(vec3(.3,.32,.37),vec3(.5,.51,.54),smoothstep(-.2,.4,h));
+    col=mix(col,vec3(.22,.25,.32),smoothstep(.1,.5,b)*.5);
+    spec=.25; land=.6*smoothstep(.0,.2,h);
+  } else {
+    // Test Planet: laboratoriya, səthdə parlayan altıbucaqlı hüceyrələr; uTint = nəticənin rəngi (yaşıl / qırmızı)
+    vec2 uv=vec2(atan(n.z,n.x)*3.2,n.y*5.5);
+    vec2 r=vec2(1.,1.732), hA=mod(uv,r)-r*.5, hB=mod(uv-r*.5,r)-r*.5;
+    vec2 g=dot(hA,hA)<dot(hB,hB)?hA:hB;
+    vec2 a=abs(g); float hx=max(dot(a,normalize(vec2(1.,1.732))),a.x);
+    float edge=smoothstep(.43,.5,hx);
+    vec2 cid=uv-g; float blink=step(.82,fract(sin(dot(floor(cid*4.),vec2(12.9,78.2)))*43758.5+uTime*.15));
+    col=mix(vec3(.05,.07,.08),vec3(.1,.13,.14),fbm(p*2.));
+    emis=edge*.55+blink*(1.-edge)*.35; emc=uTint*1.4; spec=.5;
   }
   float g=dot(col,vec3(.299,.587,.114)); col=mix(vec3(g),col,uDim);
+  // 24 saat qaydası: kömürləşmə, səthdə gəzən alov ləkələri, közərən çatlar
+  vec3 burnE=vec3(0.);
+  if(uBurn>.001){
+    float f=fbm(p*2.1+vec3(0.,-uTime*.22,uTime*.07));
+    float fire=smoothstep(.62-uBurn*.5,.95,f+.3*gnoise(p*6.+vec3(uTime*.9)));
+    float ck=smoothstep(.06,.0,abs(fbm(p*3.4+11.)))*smoothstep(.25,.75,uBurn);
+    col=mix(col,col*.25+vec3(.045,.03,.025),smoothstep(0.,.6,uBurn)*.85);
+    land*=1.-uBurn; spec*=1.-uBurn;
+    burnE=(fire*uBurn*1.6+ck*(.55+.45*sin(uTime*6.+f*24.)))*mix(vec3(1.,.32,.04),vec3(1.,.8,.3),fire*.6);
+  }
   // raket zədəsi: krater, kömürləşmiş haşiyə, çatlar, ilk saniyələrdə közərmə
   for(int i=0;i<6;i++){
     float sc=uDmgA[i].w;
@@ -97,7 +140,7 @@ void main(){
   c+=sp*vec3(1.,.95,.85)*.75;
   float nightF=1.-smoothstep(-.1,.2,ndl);
   c+=land*nightF*smoothstep(.55,.8,fbm(p*9.))*uLights*vec3(1.,.78,.4)*.95;
-  c+=emis*vec3(1.,.5,.15)*1.5;
+  c+=emis*emc*1.5+burnE;
   c+=fres*uAtm*(day*.85+.06)*.65;
   c*=1.+uHot*.22;
   c=mix(c,c*vec3(1.5,.55,.4),uHurt*.5)+uHurt*vec3(.2,.035,0.)*(.6+.4*sin(uTime*14.));
@@ -250,19 +293,22 @@ const ndc = new THREE.Vector2(9, 9), ray = new THREE.Raycaster(), tmp = new THRE
 let downAt = null, moved = false, inset = 0, G = 0;
 let pr = 1, prMax = 1, ema = .016, prT = 0, zT = null, quality = 'auto', baseDt = .0167, frames = 0;
 
-const api = { onPick: null, onShip: null, mounted: false };
-const pickables = () => { const a = [...planets.values()].map(p => p.hit); if (ship) a.push(ship.hit); return a; };
+const api = { onPick: null, onShip: null, onUserShip: null, onBalloon: null, mounted: false };
+const pickables = () => { const a = [...planets.values()].map(p => p.hit); if (ship) a.push(ship.hit); for (const s of uships.values()) a.push(s.m.hit); return a; };
 const focusObj = () => focusName === SHIP ? ship : planets.get(focusName);
 
 function pu(extra) { return Object.assign({ uTime: uT, uLight: uSun }, extra); }
-const dmgU = () => ({ uHurt: { value: 0 }, uDmgA: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) }, uDmgB: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) } });
+const dmgU = () => ({ uBurn: { value: 0 }, uHurt: { value: 0 }, uDmgA: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) }, uDmgB: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) } });
 
+/** Planetin görünüşü: adından (hash) və ya istifadəçinin seçimindən (item.look) / xüsusi növündən (item.kind) */
+const lookSig = item => item.kind + '|' + (item.look ? [item.look.surface, item.look.hue, item.look.ring].join(',') : '');
 function createPlanet(item, i) {
-  const h = hash(item.name), rg = rnd(h), seed = rg();
-  const type = [0, 1, 5, 4, 2, 0, 1, 5][h % 8];
-  const tintC = new THREE.Color().setHSL((h % 360) / 360, .5, .56);
-  const baseAtm = [new THREE.Vector3(.3, .6, 1), tintC.clone().lerp(new THREE.Color(1, 1, 1), .4), new THREE.Vector3(1, .45, .15), null, new THREE.Vector3(.6, .85, 1), new THREE.Vector3(.95, .62, .35)];
-  const atm = type === 1 ? new THREE.Vector3(tintC.r, tintC.g, tintC.b).multiplyScalar(1.3) : baseAtm[type].clone ? baseAtm[type].clone() : new THREE.Vector3(.5, .7, 1);
+  const h = hash(item.name), rg = rnd(h), seed = rg(), look = item.look;
+  const type = KIND_TYPE[item.kind] ?? (look ? look.surface : [0, 1, 5, 4, 2, 0, 1, 5][h % 8]);
+  const tintC = new THREE.Color().setHSL(((look ? look.hue : h % 360)) / 360, .5, .56);
+  const baseAtm = [new THREE.Vector3(.3, .6, 1), tintC.clone().lerp(new THREE.Color(1, 1, 1), .4), new THREE.Vector3(1, .45, .15), null, new THREE.Vector3(.6, .85, 1), new THREE.Vector3(.95, .62, .35),
+    new THREE.Vector3(.3, .85, 1), new THREE.Vector3(1, .55, .9), new THREE.Vector3(.85, .9, 1)];
+  const atm = type === 1 ? new THREE.Vector3(tintC.r, tintC.g, tintC.b).multiplyScalar(1.3) : baseAtm[type] && baseAtm[type].clone ? baseAtm[type].clone() : new THREE.Vector3(.5, .7, 1);
 
   const pivot = new THREE.Group(); pivot.rotation.set((rg() - .5) * .5, 0, (rg() - .5) * .5); scene.add(pivot);
   const orbitLine = new THREE.LineLoop(
@@ -290,7 +336,7 @@ function createPlanet(item, i) {
   body.add(shell);
 
   let ring = null;
-  if (type === 1 ? (h % 4 !== 0) : (h % 7 === 0)) {
+  if (look ? look.ring : item.kind === 'meeting' || (type === 1 ? (h % 4 !== 0) : (h % 7 === 0))) {
     const rin = 1.4 + rg() * .12, rout = rin + .42 + rg() * .32;
     const ru = pu({ uIn: { value: rin }, uOut: { value: rout }, uSeed: { value: seed }, uR: { value: 1 }, uTint: { value: new THREE.Vector3(tintC.r * .9 + .15, tintC.g * .85 + .12, tintC.b * .8 + .1) }, uPC: { value: new THREE.Vector3() } });
     ring = new THREE.Mesh(new THREE.RingGeometry(rin, rout, 160, 1), new THREE.ShaderMaterial({ vertexShader: RING_VS, fragmentShader: RING_FS, uniforms: ru, side: THREE.DoubleSide, transparent: true, depthWrite: false }));
@@ -313,7 +359,7 @@ function createPlanet(item, i) {
   btn.onpointerleave = () => { const p = planets.get(item.name); if (p) p.hl = false; };
   lblBox.append(btn);
 
-  const p = { name: item.name, type, seed, pivot, orbitLine, holder, body, tilt, mesh, clouds, shell, ring, beacon, glow, hit, uni, atmU, btn, b, sp,
+  const p = { name: item.name, kind: item.kind || 'project', sig: lookSig(item), sats: new Map(), burn: 0, burnT: 0, smoke: null, nextQuake: 2, type, seed, pivot, orbitLine, holder, body, tilt, mesh, clouds, shell, ring, beacon, glow, hit, uni, atmU, btn, b, sp,
     a: i * 2.39996 + rg() * .5, r: 20, rT: 20, R: 1.6, RT: 1.6, spin: .05 + rg() * .09, col: new THREE.Color('#6f6f7c'), st: 'offline', hot: 0, hl: false, moons: new Map(), dim: 1, lights: 0, atm, bursts: [], nextBurst: rand(.2, 1.2), lastBurst: 0,
     scars: [], impacts: [], kick: new THREE.Vector3(), kickV: new THREE.Vector3(), hurt: 0, hitUntil: 0 };
   hit.userData.planet = p; mesh.userData.planet = p;
@@ -989,25 +1035,338 @@ function updatePerf(p, dt) {
   p.danceK = kmax;
 }
 
+/* ====== 24 saat qaydası: tüstü, alov qığılcımları, xaos ====== */
+const SMOKE_VS = `
+attribute float aAge; attribute float aLife; attribute float aSize; uniform float uPx; varying float vK;
+void main(){
+  float k=aAge/aLife; vK=k;
+  vec4 mv=modelViewMatrix*vec4(position,1.);
+  gl_Position=projectionMatrix*mv;
+  gl_PointSize=(aLife<=0.||k>1.)?0.:max(1.5,aSize*uPx/-mv.z*(.45+1.4*sqrt(k)));
+}`;
+const SMOKE_FS = `
+uniform float uEmber; varying float vK;
+void main(){
+  float d=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,d);
+  if(uEmber>.5){ vec3 c=mix(vec3(1.,.9,.55),vec3(1.,.3,.05),vK); gl_FragColor=vec4(c*1.6,a*a*(1.-vK)); return; }
+  vec3 c=mix(vec3(.3,.22,.16),vec3(.16,.155,.15),smoothstep(0.,.35,vK));
+  gl_FragColor=vec4(c,a*smoothstep(0.,.12,vK)*pow(1.-vK,1.3)*.6);
+}`;
+function makeEmitter(N, ember) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  g.setAttribute('aAge', new THREE.BufferAttribute(new Float32Array(N), 1));
+  g.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(N), 1));
+  g.setAttribute('aSize', new THREE.BufferAttribute(new Float32Array(N), 1));
+  const mat = new THREE.ShaderMaterial({ vertexShader: SMOKE_VS, fragmentShader: SMOKE_FS, transparent: true, depthWrite: false,
+    blending: ember ? THREE.AdditiveBlending : THREE.NormalBlending, uniforms: { uPx: { value: 1 }, uEmber: { value: ember ? 1 : 0 } } });
+  const pts = new THREE.Points(g, mat); pts.frustumCulled = false;
+  return { pts, g, mat, N, vel: new Float32Array(N * 3), acc: 0, i: 0, ember };
+}
+const sv = new THREE.Vector3();
+function emitterStep(e, dt, rate, opt) {
+  const a = e.g.attributes, P = a.position.array, A = a.aAge.array, L = a.aLife.array, S = a.aSize.array, V = e.vel;
+  for (let i = 0; i < e.N; i++) {
+    if (L[i] <= 0) continue;
+    A[i] += dt;
+    if (A[i] > L[i]) { L[i] = 0; continue; }
+    const j = i * 3;
+    V[j + 1] += opt.rise * dt;                       // tüstü yuxarı qalxır, közlər səthə yaxın qalır
+    V[j] *= 1 - dt * .4; V[j + 2] *= 1 - dt * .4;
+    P[j] += V[j] * dt; P[j + 1] += V[j + 1] * dt; P[j + 2] += V[j + 2] * dt;
+  }
+  e.acc += rate * dt;
+  while (e.acc >= 1) {
+    e.acc -= 1;
+    const i = e.i++ % e.N, j = i * 3;
+    const z = Math.random() * 2 - 1, t = Math.random() * 6.2832, r = Math.sqrt(1 - z * z);
+    sv.set(r * Math.cos(t), Math.abs(z) * .8 + .2 * z, r * Math.sin(t)).normalize();   // daha çox yuxarı yarımkürədən
+    P[j] = sv.x * 1.01; P[j + 1] = sv.y * 1.01; P[j + 2] = sv.z * 1.01;
+    const sp = rand(opt.v0, opt.v1);
+    V[j] = sv.x * sp + rand(-.08, .08); V[j + 1] = sv.y * sp; V[j + 2] = sv.z * sp + rand(-.08, .08);
+    A[i] = 0; L[i] = rand(opt.l0, opt.l1); S[i] = rand(opt.s0, opt.s1);
+  }
+  a.position.needsUpdate = a.aAge.needsUpdate = a.aLife.needsUpdate = a.aSize.needsUpdate = true;
+}
+function updateBurn(p, dt) {
+  p.burn += (p.burnT - p.burn) * Math.min(1, dt * 1.2);
+  p.uni.uBurn.value = p.burn;
+  if (p.burn < .01 && !p.smoke) return;
+  if (!p.smoke) {
+    p.smoke = { s: makeEmitter(220, false), e: makeEmitter(140, true) };
+    p.body.add(p.smoke.s.pts, p.smoke.e.pts);
+  }
+  const pxu = H * pr / (2 * Math.tan(camera.fov * Math.PI / 360)) * p.R, b = p.burn;
+  p.smoke.s.mat.uniforms.uPx.value = p.smoke.e.mat.uniforms.uPx.value = pxu;
+  const step = REDUCE ? 0 : dt;
+  emitterStep(p.smoke.s, step, b > .02 ? 14 + 50 * b : 0, { rise: .32, v0: .05, v1: .22, l0: 3, l1: 6.5, s0: .35, s1: .8 });
+  emitterStep(p.smoke.e, step, b > .3 ? 60 * (b - .25) : 0, { rise: -.05, v0: .2, v1: .9, l0: .5, l1: 1.4, s0: .04, s1: .1 });
+  // xaos: planet titrəyir, oxu yırğalanır, arabir partlayışlar
+  if (b > .6 && !REDUCE) {
+    const k = (b - .6) / .4;
+    p.kickV.add(sv.set(rand(-1, 1), rand(-1, 1), rand(-1, 1)).multiplyScalar(k * 6 * dt));
+    p.tilt.rotation.x = Math.sin(tScene * 1.7 + p.seed * 9) * .25 * k;
+    p.nextQuake -= dt;
+    if (p.nextQuake <= 0) { p.nextQuake = rand(1.2, 3.5) / (.5 + k); spawnBurst(p, Math.random() < .5); }
+  } else p.tilt.rotation.x *= 1 - Math.min(1, dt * 2);
+}
+
+/* ====== MCP peykləri: planet ətrafında (və ya günəşin ətrafında) fırlanan kiçik peyklər ====== */
+const sunSats = { body: null, sats: new Map() };
+function buildSat(hue) {
+  const g = new THREE.Group(), panel = new THREE.Color().setHSL(hue / 360, .55, .35).getHex();
+  g.add(fm(new THREE.BoxGeometry(.5, .5, .62), 0xd9a441, .12));
+  for (const sx of [-1, 1]) {
+    g.add(fm(new THREE.BoxGeometry(.9, .04, .42), panel, .25, sx * .78, 0, 0));
+    g.add(fm(new THREE.BoxGeometry(.16, .03, .05), 0x9aa3b8, 0, sx * .3, 0, 0));
+  }
+  const dish = fm(new THREE.ConeGeometry(.24, .14, 16, 1, true), 0xe9edf6, 0, 0, .38, 0); g.add(dish);
+  g.add(fm(cyl(.015, .015, .3, 6), 0xe9edf6, 0, 0, .5, 0));
+  const led = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x4ade80, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  led.position.set(0, .66, 0); led.scale.setScalar(.7); g.add(led);
+  return { g, led };
+}
+function syncSats(host, list, labelScale) {
+  const seen = new Set();
+  list.forEach((s, idx) => {
+    seen.add(s.name);
+    let m = host.sats.get(s.name);
+    if (!m) {
+      const h = hash(s.name), rg = rnd(h);
+      const piv = new THREE.Group(); piv.rotation.set((rg() - .5) * 1.6, rg() * 6.28, (rg() - .5) * 1.6); host.body.add(piv);
+      const { g, led } = buildSat(h % 360); piv.add(g);
+      const beam = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(1, 0, 0)]),
+        new THREE.LineBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+      piv.add(beam);
+      const lbl = document.createElement('div'); lbl.className = 'slabel'; lblBox.append(lbl);
+      m = { name: s.name, piv, g, led, beam, lbl, a: rg() * 6.28, r: 1.5, spd: .5 + rg() * .5 };
+      host.sats.set(s.name, m);
+    }
+    m.r = (labelScale ? 8.5 : 1.42) + idx * (labelScale ? 1.4 : .16);
+    m.g.scale.setScalar(labelScale ? .55 : .17);
+    m.active = !!s.active; m.manual = !!s.manual;
+    setText(m.lbl, '🛰 ' + s.name + (s.active ? ' ●' : ''));
+    m.lbl.dataset.on = s.active ? '1' : '';
+  });
+  for (const [k, m] of host.sats) if (!seen.has(k)) disposeSat(host, k, m);
+}
+function disposeSat(host, k, m) {
+  host.body.remove(m.piv); m.lbl.remove(); m.beam.geometry.dispose(); m.beam.material.dispose(); m.led.material.dispose();
+  m.g.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
+  host.sats.delete(k);
+}
+function updateSats(host, dt, showLbl, R) {
+  for (const m of host.sats.values()) {
+    if (!REDUCE) m.a += dt * m.spd * (m.active ? 1.6 : 1);
+    m.g.position.set(Math.cos(m.a) * m.r, 0, Math.sin(m.a) * m.r);
+    m.g.lookAt(m.piv.localToWorld(sv.set(0, 0, 0)));                 // antena planetə baxır
+    m.g.rotateX(Math.PI / 2);
+    const blink = m.active ? (Math.sin(tScene * 7 + m.a) > 0 ? 1 : .2) : 0;
+    m.led.material.opacity = blink * .9;
+    const pa = m.beam.geometry.attributes.position;
+    pa.setXYZ(0, m.g.position.x, 0, m.g.position.z);
+    pa.setXYZ(1, m.g.position.x / m.r, 0, m.g.position.z / m.r); pa.needsUpdate = true;
+    m.beam.material.opacity = m.active ? .35 + .3 * Math.sin(tScene * 10) : 0;
+    if (showLbl) { m.g.getWorldPosition(wp); applyLabel(m.lbl, labelPos(wp, (R || 1) * .15, true)); } else applyLabel(m.lbl, null);
+  }
+}
+
+/* ====== İstifadəçi gəmiləri: hər kəsin öz gəmisi, işlədiyi planetin ətrafında uçur; deadline yaxınlaşanda miqalka yanır ====== */
+const uships = new Map();
+const hexN = h => parseInt(String(h || '#cccccc').slice(1), 16) || 0xcccccc;
+function buildUShip(o) {
+  const g = new THREE.Group(), body = new THREE.Group(); g.add(body);
+  const C = hexN(o.color), A = hexN(o.accent), rx = geo => geo.rotateX(Math.PI / 2);
+  const flames = [], add = (...m) => body.add(...m);
+  const engine = (x, y, z, r) => {
+    const f = new THREE.Mesh(rx(new THREE.ConeGeometry(r, r * 5, 10)).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: 0x7fd8ff, transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending }));
+    f.position.set(x, y, z - r * 2.5); body.add(f); flames.push(f);
+  };
+  if (o.model === 'saucer') {
+    const disc = fm(new THREE.SphereGeometry(1, 32, 16), C, 0); disc.scale.set(1.5, .32, 1.5); add(disc);
+    const rim = fm(new THREE.TorusGeometry(1.48, .07, 8, 48), A, .4); rim.rotation.x = Math.PI / 2; add(rim);
+    add(fm(new THREE.SphereGeometry(.6, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0x9fe3ff, .5, 0, .18, 0));
+    for (let k = 0; k < 10; k++) { const a = k / 10 * 6.2832; add(fm(new THREE.SphereGeometry(.07, 6, 4), A, 1.4, Math.cos(a) * 1.3, -.08, Math.sin(a) * 1.3)); }
+    engine(0, -.3, -.2, .18);
+  } else if (o.model === 'fighter') {
+    const fu = fm(new THREE.SphereGeometry(1, 20, 12), C, 0); fu.scale.set(.32, .3, 1.5); add(fu);
+    add(fm(rx(new THREE.ConeGeometry(.3, .9, 14)), C, 0, 0, 0, 1.7));
+    add(fm(new THREE.SphereGeometry(.2, 12, 8), 0x9fe3ff, .5, 0, .2, .55));
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+      const w = fm(new THREE.BoxGeometry(1.5, .05, .55), A, .15, sx * .85, sy * .22, -.5); w.rotation.z = sx * sy * .28; add(w);
+      add(fm(cyl(.08, .08, .5, 8).rotateX(Math.PI / 2), C, 0, sx * 1.55, sy * .42, -.45));
+    }
+    for (const sx of [-1, 1]) { add(fm(rx(cyl(.16, .2, .7, 12)), 0x3a3f4d, 0, sx * .3, 0, -1.3)); engine(sx * .3, 0, -1.65, .13); }
+  } else {
+    const fu = fm(new THREE.SphereGeometry(1, 24, 14), C, 0); fu.scale.set(.55, .5, 1.6); add(fu);
+    add(fm(rx(new THREE.ConeGeometry(.45, 1.1, 18)), C, 0, 0, 0, 1.85));
+    add(fm(new THREE.BoxGeometry(.5, .1, .3), 0x9fe3ff, .7, 0, .38, .9));
+    const stripe = fm(rx(cyl(.56, .56, .18, 20)), A, .2, 0, 0, .3); stripe.scale.set(1, 1, .9); add(stripe);
+    for (const sx of [-1, 1]) { const w = fm(new THREE.BoxGeometry(1.3, .07, .8), A, .1, sx * .85, -.1, -.5); w.rotation.z = -sx * .12; add(w); }
+    const fin = fm(new THREE.BoxGeometry(.06, .6, .6), A, .1, 0, .5, -1.1); fin.rotation.x = -.35; add(fin);
+    add(fm(rx(cyl(.25, .3, .5, 12)), 0x3a3f4d, 0, 0, 0, -1.55)); engine(0, 0, -1.85, .2);
+  }
+  // miqalka: gəminin üstündə qırmızı və göy işıq
+  const mount = new THREE.Group(); mount.position.set(0, o.model === 'saucer' ? .8 : o.model === 'fighter' ? .42 : .6, o.model === 'saucer' ? 0 : .2); body.add(mount);
+  mount.add(fm(new THREE.BoxGeometry(.5, .08, .16), 0x2a2e3a, 0));
+  const lamp = (hex, x) => {
+    const bulb = fm(new THREE.SphereGeometry(.09, 10, 8), hex, 0, x, .08, 0);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: hex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+    s.position.set(x, .1, 0); s.scale.setScalar(2.2); mount.add(bulb, s); return { bulb, s };
+  };
+  const red = lamp(0xff2a2a, -.17), blue = lamp(0x2a6bff, .17);
+  mount.visible = false;
+  const warnHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff3030, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  warnHalo.scale.setScalar(7); body.add(warnHalo);
+  const hit = new THREE.Mesh(new THREE.SphereGeometry(2.2, 10, 8), new THREE.MeshBasicMaterial({ visible: false }));
+  g.add(hit); hit.userData.uship = o.user;
+  g.scale.setScalar(.62);
+  return { g, body, flames, mount, red, blue, warnHalo, hit };
+}
+function disposeUShip(s) {
+  scene.remove(s.m.g, s.trail.pts); s.btn.remove();
+  s.m.g.traverse(o => { if (o.isMesh || o.isSprite) { if (o.geometry && !o.isSprite) o.geometry.dispose(); if (o.material && !figMatsHas(o.material)) o.material.dispose(); } });
+  s.trail.g.dispose(); s.trail.mat.dispose();
+}
+const figMatsHas = m => { for (const v of figMats.values()) if (v === m) return true; return false; };
+api.setShips = list => {
+  if (!api.mounted) return;
+  const seen = new Set();
+  for (const o of list || []) {
+    seen.add(o.user);
+    let s = uships.get(o.user);
+    const sig = [o.model, o.color, o.accent].join('|');
+    if (s && s.sig !== sig) { disposeUShip(s); uships.delete(o.user); s = null; }
+    if (!s) {
+      const m = buildUShip(o); scene.add(m.g);
+      const trail = makeTrail(1, 1.6); scene.add(trail.pts);
+      const btn = document.createElement('button'); btn.className = 'glabel ushipl';
+      const b = document.createElement('b'), sp = document.createElement('span'); btn.append(b, sp);
+      btn.onclick = () => api.onUserShip && api.onUserShip(o.user);
+      lblBox.append(btn);
+      const h = hash(o.user);
+      s = { user: o.user, sig, m, trail, btn, b, sp, pos: new THREE.Vector3(Math.cos(h) * 60, 20, Math.sin(h) * 60), vel: new THREE.Vector3(), a: (h % 628) / 100, emit: 0, ph: (h % 100) / 16 };
+      uships.set(o.user, s);
+    }
+    s.target = o.planet || null; s.warn = o.warn || 0; s.st = o.st || 'offline';
+    setText(s.b, o.name); setText(s.sp, o.sub || '');
+    s.btn.dataset.warn = String(s.warn); s.btn.style.setProperty('--sc', o.accent || '#f59e0b');
+  }
+  for (const [k, s] of uships) if (!seen.has(k)) { disposeUShip(s); uships.delete(k); }
+};
+const usTmp = new THREE.Vector3(), usDes = new THREE.Vector3(), usLook = new THREE.Vector3();
+function updateUShips(dt) {
+  const pxT = H * pr / (2 * Math.tan(camera.fov * Math.PI / 360));
+  for (const s of uships.values()) {
+    const tp = s.target ? planets.get(s.target) : null;
+    const spd = s.st === 'working' ? .55 : .3;
+    if (!REDUCE) s.a += dt * spd;
+    if (tp) {                                                    // işlədiyi planetin ətrafında əyik orbit
+      tp.holder.getWorldPosition(usTmp);
+      const rr = tp.R * 3.1 + 3;
+      usDes.set(Math.cos(s.a) * rr, Math.sin(s.a * 1.3 + s.ph) * tp.R * .6 + tp.R * 1.1, Math.sin(s.a) * rr).add(usTmp);
+    } else {                                                     // boşdursa, kainatın kənarında patrul
+      const rr = Math.max(40, maxR + 16) + (s.ph % 3) * 4;
+      usDes.set(Math.cos(s.a * .35 + s.ph) * rr, 8 + 5 * Math.sin(s.a * .6 + s.ph), Math.sin(s.a * .35 + s.ph) * rr * .85);
+    }
+    usLook.copy(s.pos);
+    const far = s.pos.distanceTo(usDes);
+    s.pos.lerp(usDes, Math.min(1, dt * (far > 20 ? .9 : 2.2)));
+    s.vel.copy(s.pos).sub(usLook);
+    const g = s.m.g; g.position.copy(s.pos);
+    if (s.vel.lengthSq() > 1e-6) { usLook.copy(s.pos).add(s.vel); g.lookAt(usLook); }
+    s.m.body.rotation.z = Math.sin(tScene * 1.3 + s.ph) * .12;
+    const k = 1 + Math.sin(tScene * 40 + s.ph) * .15;
+    for (const f of s.m.flames) f.scale.set(1, 1, k * (.6 + Math.min(1, s.vel.length() / Math.max(dt, .001) / 12)));
+    // miqalka: 1 = deadline 24 saatdan az qalıb (qırmızı-göy növbə ilə), 2 = keçib (sürətli qırmızı)
+    const w = s.warn, mt = s.m;
+    mt.mount.visible = w > 0;
+    if (w > 0) {
+      const ph = REDUCE ? 0 : tScene * (w === 2 ? 7 : 3.2), on = Math.sin(ph * Math.PI) > 0;
+      const rOn = w === 2 ? (Math.sin(ph * Math.PI * 2) > -.2) : on, bOn = w === 2 ? false : !on;
+      mt.red.s.material.opacity = rOn ? 1 : .05; mt.blue.s.material.opacity = bOn ? 1 : .05;
+      mt.red.s.scale.setScalar(rOn ? 2.6 : 1.4); mt.blue.s.scale.setScalar(bOn ? 2.6 : 1.4);
+      mt.warnHalo.material.opacity = w === 2 ? (rOn ? .32 : .08) : .06 + .06 * Math.abs(Math.sin(ph * Math.PI));
+      mt.warnHalo.material.color.setHex(w === 2 || on ? 0xff3030 : 0x3060ff);
+    } else mt.warnHalo.material.opacity = 0;
+    s.emit -= dt;
+    if (s.emit <= 0 && !REDUCE) { s.emit = .05; g.updateMatrixWorld(true); trailAdd(s.trail, g.localToWorld(usTmp.set(0, 0, -2.3)), .8); }
+    s.trail.mat.uniforms.uPx.value = pxT;
+  }
+}
+
+/* ====== Xatırlatma balonları: deadline-ı yaxın tapşırıqlar gəminin və ya planetin üstündə ====== */
+const balloons = new Map();
+api.setBalloons = list => {
+  if (!api.mounted) return;
+  const seen = new Set(), per = new Map();
+  for (const o of list || []) {
+    const anchor = o.ship ? 's:' + o.ship : 'p:' + o.planet;
+    const i = per.get(anchor) || 0; per.set(anchor, i + 1);
+    if (i >= 3) continue;
+    seen.add(o.key);
+    let b = balloons.get(o.key);
+    if (!b) {
+      const el = document.createElement('div'); el.className = 'balloon';
+      const t = document.createElement('b'), s = document.createElement('span'); el.append(t, s);
+      el.onclick = () => api.onBalloon && api.onBalloon(o.id);
+      lblBox.append(el); b = { el, t, s }; balloons.set(o.key, b);
+    }
+    b.anchor = anchor; b.i = i; b.ship = o.ship; b.planet = o.planet;
+    setText(b.t, o.title); setText(b.s, o.left);
+    b.el.dataset.lv = String(o.level || 0);
+  }
+  for (const [k, b] of balloons) if (!seen.has(k)) { b.el.remove(); balloons.delete(k); }
+};
+function placeBalloons() {
+  const vis = [];
+  for (const b of balloons.values()) {
+    let R = 1, show = true;
+    if (b.ship) { const s = uships.get(b.ship); if (!s) { applyLabel(b.el, null); continue; } wp.copy(s.pos); R = 2; show = !focusName || focusName === s.target; }
+    else { const p = planets.get(b.planet); if (!p) { applyLabel(b.el, null); continue; } p.holder.getWorldPosition(wp); R = p.R; show = !focusName || focusName === b.planet; }
+    if (!focusName && W < 600 && b.el.dataset.lv === '0') show = false;      // dar ekranda ümumi görünüşdə yalnız təcili olanlar
+    tmp.copy(wp).project(camera);
+    if (!show || tmp.z > 1 || tmp.z < -1) { applyLabel(b.el, null); continue; }
+    const pxu = H / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.position.distanceTo(wp));
+    vis.push({ b, x: (tmp.x * .5 + .5) * W, y: (-tmp.y * .5 + .5) * H - R * pxu * 1.2 - 14 - b.i * 46 });
+  }
+  vis.sort((p, q) => q.y - p.y);                                   // aşağıdan yuxarı: üst-üstə düşəni yuxarı it
+  for (let i = 0; i < vis.length; i++) for (let j = 0; j < i; j++) {
+    const A = vis[j], B = vis[i];
+    if (Math.abs(A.x - B.x) < 190 && B.y > A.y - 46) B.y = A.y - 46;
+  }
+  for (const v of vis) {
+    v.b.el.style.visibility = 'visible';
+    v.b.el.style.transform = `translate(${v.x.toFixed(1)}px,${v.y.toFixed(1)}px) translate(-50%,-100%)`;
+  }
+}
+
 function setData(items) {
-  items = items.slice(0, 8);
+  items = items.slice(0, 16);
   const keep = new Set(items.map(x => x.name));
-  for (const [k, p] of planets) if (!keep.has(k)) { scene.remove(p.pivot); p.btn.remove(); planets.delete(k); }
+  const drop = (k, p) => { scene.remove(p.pivot); p.btn.remove(); for (const [n, m] of p.sats) disposeSat(p, n, m); planets.delete(k); };
+  for (const [k, p] of planets) if (!keep.has(k)) drop(k, p);
   items.forEach((it, i) => {
     let p = planets.get(it.name);
+    if (p && p.sig !== lookSig(it)) { const keepPos = { r: p.r, off: p.off, R: p.R }; drop(it.name, p); p = createPlanet(it, i); planets.set(it.name, p); Object.assign(p, keepPos); p.rT = p.r; p.RT = p.R; }
+    const RT = it.kind === 'project' || !it.kind ? 2.5 + Math.min(2, Math.log2(1 + it.edits + it.tools / 4) * .34) : it.look ? 2 + it.look.size * .75 : 3.4;
     if (!p) {
       p = createPlanet(it, i); planets.set(it.name, p);
-      p.r = p.rT = slotR(i); p.R = p.RT = 2.5 + Math.min(2, Math.log2(1 + it.edits + it.tools / 4) * .34);
+      p.r = p.rT = slotR(i); p.R = p.RT = RT;
       if (pendingFocus === it.name) { const n = pendingFocus; pendingFocus = null; setTimeout(() => api.focus(n, true), 0); }
     }
     p.rT = slotR(i);
     p.offT = 2 * Math.PI * i / Math.max(items.length, 1);
     if (p.off === undefined) p.off = p.offT;
-    p.RT = 2.5 + Math.min(2, Math.log2(1 + it.edits + it.tools / 4) * .34);
-    p.st = it.st;
+    p.RT = RT;
+    p.st = it.st; p.burnT = Math.max(0, Math.min(1, +it.burn || 0));
     setText(p.b, it.name); setText(p.sp, it.sub);
     p.btn.dataset.st = it.st; p.btn.dataset.alert = it.alert ? '1' : '';
+    p.btn.dataset.burn = it.burn >= .6 ? '3' : it.burn >= .3 ? '2' : it.burn > 0 ? '1' : '';
+    p.btn.dataset.kind = p.kind;
+    if (p.kind === 'test') p.uni.uTint.value.set(...(it.fail ? [1, .28, .22] : [.3, 1, .55]));   // xəta varsa hüceyrələr qırmızı
     syncMoons(p, it.users);
+    syncSats(p, it.sats || []);
   });
   const nm = Math.max(0, items.length - 1);
   const newMax = slotR(nm);
@@ -1139,6 +1498,7 @@ addEventListener('visibilitychange', () => { if (document.hidden) stopSound(); }
 api.zoom = f => { const cur = camera.position.distanceTo(controls.target); zT = Math.min(controls.maxDistance, Math.max(controls.minDistance, (zT === null ? cur : zT) * f)); };
 api.setData = items => { if (api.mounted) setData(items); };
 api.setShip = o => { if (ship && o) setText(ship.sp2, o.sub || ''); };
+api.setSunSats = list => { if (api.mounted) syncSats(sunSats, list || [], true); };
 api.setActive = a => { active = a; if (!a) stopSound(); if (a) { last = performance.now(); resize(); } };
 
 function resize() {
@@ -1186,14 +1546,15 @@ function frame(now) {
   }
 
   // hover (raycast)
-  hovered = null; hoveredShip = false;
+  hovered = null; hoveredShip = false; let hoveredU = null;
   if (!focusName && ndc.x < 2 && !fly) {
     ray.setFromCamera(ndc, camera);
     const hits = ray.intersectObjects(pickables(), false);
-    if (hits.length) { const u = hits[0].object.userData; if (u.ship) hoveredShip = true; else hovered = u.planet; }
+    if (hits.length) { const u = hits[0].object.userData; if (u.ship) hoveredShip = true; else if (u.uship) hoveredU = u.uship; else hovered = u.planet; }
   }
-  const anyHover = hovered || hoveredShip || (ship && ship.hl) || [...planets.values()].some(p => p.hl);
-  canvas.style.cursor = hovered || hoveredShip ? 'pointer' : 'grab';
+  const anyHover = hovered || hoveredShip || hoveredU || (ship && ship.hl) || [...planets.values()].some(p => p.hl);
+  canvas.style.cursor = hovered || hoveredShip || hoveredU ? 'pointer' : 'grab';
+  for (const s of uships.values()) s.btn.classList.toggle('hov', hoveredU === s.user);
   speed += ((anyHover && !focusName ? 0 : 1) - speed) * Math.min(1, dt * 6);
   const k = REDUCE ? 0 : dt * speed * (focusName ? .35 : 1);
 
@@ -1211,16 +1572,23 @@ function frame(now) {
 
     const tc = new THREE.Color(STC[p.st] || STC.offline);
     p.col.lerp(tc, Math.min(1, dt * 4));
-    const live = p.st === 'working' || p.st === 'waiting';
+    const live = p.st === 'working' || p.st === 'waiting' || p.st === 'meet';
     const off = p.st === 'offline' || p.st === 'ended';
     p.dim += ((off ? .35 : 1) - p.dim) * Math.min(1, dt * 3); p.uni.uDim.value = p.dim;
     p.lights += ((live ? 1 : off ? 0 : .5) - p.lights) * Math.min(1, dt * 3); p.uni.uLights.value = p.lights;
     p.hot += (((hovered === p || p.hl) ? 1 : 0) - p.hot) * Math.min(1, dt * 8); p.uni.uHot.value = p.hot;
-    const pulse = p.st === 'waiting' ? .78 + .22 * Math.sin(tScene * 5) : p.st === 'working' ? .8 + .2 * Math.sin(tScene * 2.6) : 1;
+    const pulse = p.st === 'waiting' ? .78 + .22 * Math.sin(tScene * 5) : p.st === 'working' || p.st === 'meet' ? .8 + .2 * Math.sin(tScene * 2.6) : 1;
     p.atmU.uCol.value.copy(p.col); p.atmU.uCol.value.lerp(new THREE.Color(p.atm.x, p.atm.y, p.atm.z), off ? .2 : .25);
     p.atmU.uAmt.value = (live ? 1.15 : off ? .25 : .65) * pulse;
     updateScars(p, dt);
     if (p.hurt > .01) { p.atmU.uCol.value.lerp(new THREE.Color(1, .28, .08), Math.min(1, p.hurt * .7)); p.atmU.uAmt.value += p.hurt * (.5 + .25 * Math.sin(tScene * 12)); }
+    updateBurn(p, dt);
+    if (p.burn > .05) {                                     // yanan planetin atmosferi qırmızı-narıncı titrəyir
+      const fl = .75 + .25 * Math.sin(tScene * 9 + p.seed * 20) * Math.sin(tScene * 3.7);
+      p.atmU.uCol.value.lerp(new THREE.Color(1, .3, .05), Math.min(1, p.burn * .85));
+      p.atmU.uAmt.value = Math.max(p.atmU.uAmt.value, .5 + p.burn * .9 * fl);
+    }
+    updateSats(p, dt, focusName === p.name, p.R);
     // işarə halqası
     const ph = (tScene * (p.st === 'waiting' ? .9 : .5)) % 1;
     p.beacon.material.color.copy(p.col);
@@ -1231,7 +1599,7 @@ function frame(now) {
     if (p.ring) { p.ring.material.uniforms.uR.value = p.R; }
 
     if (!REDUCE) {
-      if (p.st === 'working') { p.nextBurst -= dt; if (p.nextBurst <= 0) { spawnBurst(p, Math.random() < .25); p.nextBurst = rand(.5, 1.6); } }
+      if (p.st === 'working' && p.kind !== 'meeting') { p.nextBurst -= dt; if (p.nextBurst <= 0) { spawnBurst(p, Math.random() < .25); p.nextBurst = rand(.5, 1.6); } }
       updateBursts(p);
       updateImpacts(p);
       updatePerf(p, dt);
@@ -1249,6 +1617,8 @@ function frame(now) {
   }
 
   updateShip(dt);
+  updateUShips(dt);
+  updateSats(sunSats, dt, !focusName, 1);
   if (!REDUCE) updateRockets(dt);
 
   // sürüş / izləmə
@@ -1305,12 +1675,14 @@ function frame(now) {
     p.btn.classList.toggle('hov', hovered === p || p.hl);
   }
   if (ship) { ship.holder.getWorldPosition(shipWP); items.push({ p: ship, q: labelPos(shipWP, ship.R, !focusName), ship: true }); ship.btn.classList.toggle('hov', hoveredShip || ship.hl); }
+  for (const s of uships.values()) items.push({ p: s, q: labelPos(s.pos, 1.6, !focusName || focusName === s.target) });
   items.sort((a, b) => (a.q ? a.q.y : 1e9 - 0) - (b.q ? b.q.y : 1e9));
   for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
     const A = items[i].q, B = items[j].q;
     if (A && B && Math.abs(A.x - B.x) < 110 && Math.abs(A.y - B.y) < 38) B.y = A.y + 38;
   }
   for (const it of items) applyLabel(it.p.btn, it.q);
+  placeBalloons();
   renderer.render(scene, camera);
 }
 
@@ -1363,6 +1735,7 @@ api.mount = function (el) {
   sunGlow2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0xff7a30, transparent: true, opacity: .28, depthWrite: false, blending: THREE.AdditiveBlending }));
   scene.add(sunGlow1, sunGlow2);
   buildShip();
+  sunSats.body = new THREE.Group(); scene.add(sunSats.body);
 
   controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true; controls.dampingFactor = .06; controls.enablePan = false;
@@ -1381,7 +1754,7 @@ api.mount = function (el) {
       const r = canvas.getBoundingClientRect(); ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       const hits = ray.intersectObjects(pickables(), false);
-      if (hits.length) { const u = hits[0].object.userData; if (u.ship) api.onShip && api.onShip(); else if (api.onPick) api.onPick(u.planet.name); }
+      if (hits.length) { const u = hits[0].object.userData; if (u.ship) api.onShip && api.onShip(); else if (u.uship) api.onUserShip && api.onUserShip(u.uship); else if (api.onPick) api.onPick(u.planet.name); }
     }
     downAt = null;
   });
