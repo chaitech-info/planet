@@ -38,13 +38,27 @@
         o.items = A(it, 16).filter(x => x && typeof x === 'object').map(x => ({ key: S(x.key, 40), value: S(x.value, 200) })); break;
       }
       case 'buttons': o.items = its(4).filter(x => x && typeof x === 'object' && (x.label || x.say)).map(x => ({ label: S(x.label || x.say, 30), say: S(x.say || x.label, 300), onClick: typeof x.onClick === 'function' ? x.onClick : null })); break;
+      case 'timeline': o.items = its(20).map(x => x && typeof x === 'object' ? { time: S(x.time || x.date, 24), text: S(x.text || x.label, 200), status: ST(x.status) } : { time: '', text: S(x, 200), status: '' }).filter(x => x.text); break;
+      case 'checklist': o.items = its(20).map(x => x && typeof x === 'object' ? { text: S(x.text || x.label, 200), done: yes(x.done) } : { text: S(x, 200), done: false }).filter(x => x.text); break;
+      case 'gauge': { const v = N(b.value != null ? b.value : b.pct); if (v === null) return null; o.value = clamp(v, 0, 100); o.label = S(b.label, 40); o.sub = S(b.sub, 80); return o; }
+      case 'people': o.items = its(12).map(x => x && typeof x === 'object' ? { name: S(x.name || x.label, 40).trim(), status: S(x.status, 24).trim(), text: S(x.text || x.sub, 120) } : { name: S(x, 40).trim(), status: '', text: '' }).filter(x => x.name); break;
+      case 'image': o.src = src(b.src); o.alt = S(b.alt || b.title, 120); return o.src ? o : null;
+      case 'link': o.items = its(6).filter(x => x && typeof x === 'object').map(x => ({ label: S(x.label || x.href, 40), href: S(x.href, 160).trim() })).filter(x => x.label && /^#[\w\-\/.~%:=&?+]{0,150}$/.test(x.href)); break;
       default: return null;
     }
     return o.items.length ? o : null;
   }
+  const yes = v => v === true || v === 1 || /^(1|true|yes|y|done|ok|bəli|hə|\+|✓|x)$/i.test(String(v == null ? '' : v).trim());
+  /** Şəkil: yalnız eyni mənbə (nisbi/eyni origin http(s)) və ya data:image base64; qalan hər şey (xarici, javascript:, //) rədd */
+  function src(v) {
+    const s = S(v, 400000).trim(); if (!s) return '';
+    if (/^data:/i.test(s)) return /^data:image\/(png|jpe?g|gif|webp|avif|svg\+xml);base64,[a-z0-9+/=\s]+$/i.test(s) ? s : '';
+    try { const u = new URL(s, location.href); return u.origin === location.origin && /^https?:$/.test(u.protocol) ? u.href : ''; } catch (e) { return ''; }
+  }
+  const LAY = ['normal', 'wide', 'compact'];
   function clean(spec) {
     spec = parse(spec); if (!spec || typeof spec !== 'object') throw new Error('panel spesifikasiyası obyekt olmalıdır');
-    const out = { title: S(spec.title, 80).trim() || 'Panel', icon: Array.from(S(spec.icon, 16).trim()).slice(0, 2).join(''), accent: ACC.includes(spec.accent) ? spec.accent : 'cyan', blocks: [] }, skipped = [];
+    const out = { title: S(spec.title, 80).trim() || 'Panel', icon: Array.from(S(spec.icon, 16).trim()).slice(0, 2).join(''), accent: ACC.includes(spec.accent) ? spec.accent : 'cyan', layout: LAY.includes(spec.layout) ? spec.layout : 'normal', blocks: [] }, skipped = [];
     for (const b of A(parse(spec.blocks), 12)) { const c = block(b); if (c) out.blocks.push(c); else skipped.push(S(b && b.type, 16) || '?'); }
     return { spec: out, skipped };
   }
@@ -52,9 +66,25 @@
 
   /* ---------- Stil ---------- */
   const css = `
-.jvh { position: fixed; inset: 0; z-index: 55; pointer-events: none; font-size: 13px; color: #e6f6ff; --jv-a: 56,189,248; }
-.jvh-stack { position: absolute; left: 18px; top: var(--jvh-top, 76px); width: min(400px, calc(100vw - 36px)); display: flex; flex-direction: column; gap: 10px; overflow: auto; scrollbar-width: none; max-height: calc(100vh - var(--jvh-top, 76px) - 20px); }
-.jvh-stack::-webkit-scrollbar { display: none; }
+.jvh { position: fixed; inset: 0; z-index: 55; pointer-events: none; font-size: 13px; color: #e6f6ff; --jv-a: 56,189,248; transition: opacity .25s ease, filter .25s ease; }
+.jvh.dim { opacity: .14; filter: saturate(.5); } .jvh.dim * { pointer-events: none !important; }
+.jvh-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.jvh-p.hp { position: absolute; left: 0; top: 0; width: 380px; max-height: var(--jvh-mh, 80vh); display: flex; flex-direction: column; transform-origin: 0 0; will-change: transform; box-sizing: border-box;
+  transition: transform .3s cubic-bezier(.2,.85,.25,1), opacity .24s ease, translate .18s ease, border-color .18s ease; }
+.jvh-p.hp[hidden] { display: none; } .jvh-p.hp.nt, .jvh-p.hp.drag { transition: none; } .jvh-p.hp.gone { pointer-events: none; }
+.jvh-p.hp:hover:not(.drag):not(.gone) { translate: 0 -2px; border-color: rgba(var(--a),.62); }
+.jvh-p.hp.drag { translate: 0 -3px; box-shadow: 0 22px 50px rgba(0,0,0,.55), 0 0 26px rgba(var(--a),.35); }
+.jvh-p.hp .jvh-h { flex: none; } .jvh-p.hp .jvh-b { flex: 0 1 auto; min-height: 0; max-height: var(--bh, min(56vh, 480px)); }
+.jvh-p.hp.in .jvh-h, .jvh-p.hp.in .jvh-b { animation: jvh-mat .26s .06s ease-out both; }
+@keyframes jvh-mat { from { opacity: .2; clip-path: inset(0 0 100% 0); } to { opacity: 1; clip-path: inset(0 0 0 0); } }
+.jvh-pn { opacity: .5; } .jvh-p.pin .jvh-pn { opacity: 1; background: rgba(var(--a),.32); }
+.jvh-h:focus-visible { outline: 2px solid rgba(var(--a),.95); outline-offset: -2px; } .jvh button:focus-visible, .jvh a:focus-visible { outline: 2px solid #7dd3fc; outline-offset: 2px; }
+.jvh-dk { position: absolute; left: 18px; bottom: 18px; z-index: 100000; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: min(620px, calc(100vw - 36px)); pointer-events: auto; animation: jvh-bin .25s ease both; }
+.jvh-dk[hidden] { display: none; } .jvh-dk > div { display: contents; }
+.jvh-chip, .jvh-dk .all { --a: 56,189,248; display: inline-flex; align-items: center; gap: 6px; max-width: 210px; border: 1px solid rgba(var(--a),.45); background: rgba(6,10,20,.8); color: #e6f6ff; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 11.5px; cursor: pointer;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 0 10px rgba(var(--a),.2); transition: background-color .15s ease, transform .15s ease; }
+.jvh-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .jvh-chip:hover, .jvh-dk .all:hover { background: rgba(var(--a),.22); transform: translateY(-1px); }
+.jvh-chip.ping { animation: jvh-ping .5s ease; } .jvh-dk .all { --a: 248,113,113; color: #fecaca; } .jvh-dk .all[hidden] { display: none; }
 .jvh-ag { position: absolute; right: 18px; top: var(--jvh-top, 76px); width: min(290px, calc(100vw - 36px)); display: flex; flex-direction: column; gap: 8px; overflow: auto; scrollbar-width: none; max-height: calc(100vh - var(--jvh-top, 76px) - 20px); }
 .jvh-ag[hidden] { display: none; }
 .jvh-p { --a: var(--jv-a); position: relative; pointer-events: auto; border-radius: 6px 14px 6px 14px; color: #e6f6ff;
@@ -64,9 +94,8 @@
 .jvh-p::before, .jvh-p::after { content: ""; position: absolute; width: 14px; height: 14px; pointer-events: none; border: 2px solid rgba(var(--a),.9); filter: drop-shadow(0 0 4px rgba(var(--a),.8)); }
 .jvh-p::before { left: -3px; top: -3px; border-right: 0; border-bottom: 0; } .jvh-p::after { right: -3px; bottom: -3px; border-left: 0; border-top: 0; }
 .jvh-p.cyan { --a: 56,189,248; } .jvh-p.amber { --a: 251,191,36; } .jvh-p.red { --a: 248,113,113; } .jvh-p.green { --a: 74,222,128; } .jvh-p.violet { --a: 192,132,252; }
-.jvh-p.in { animation: jvh-in .42s cubic-bezier(.2,.9,.25,1) both; } .jvh-p.out { animation: jvh-out .28s ease forwards; } .jvh-p.ping { animation: jvh-ping .5s ease; }
+.jvh-c.in { animation: jvh-in .42s cubic-bezier(.2,.9,.25,1) both; } .jvh-p.ping { animation: jvh-ping .5s ease; }
 @keyframes jvh-in { from { opacity: 0; transform: translateX(-14px) scale(.97); clip-path: inset(0 0 100% 0); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0); } }
-@keyframes jvh-out { to { opacity: 0; transform: scale(.96); } }
 @keyframes jvh-ping { 40% { box-shadow: 0 0 0 1px rgba(var(--a),.9), 0 0 30px rgba(var(--a),.6); } }
 .jvh-scan { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; }
 .jvh-scan::after { content: ""; position: absolute; left: 0; right: 0; height: 40%; top: -40%; background: linear-gradient(180deg, transparent, rgba(var(--a),.09), transparent); animation: jvh-sweep 5.5s linear infinite; }
@@ -111,6 +140,26 @@
 .jvh-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 12.5px; } .jvh-kv dt { color: rgba(203,225,240,.65); } .jvh-kv dd { margin: 0; overflow-wrap: anywhere; }
 .jvh-bn { display: flex; flex-wrap: wrap; gap: 6px; }
 .jvh-bn button, .jvh-c .act button { border: 1px solid rgba(var(--a),.45); background: rgba(var(--a),.1); color: #e6f6ff; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer; transition: background-color .15s ease, transform .15s ease; }
+.jvh-bn a { display: inline-block; text-decoration: none; border: 1px solid rgba(var(--a),.45); background: rgba(var(--a),.1); color: #e6f6ff; border-radius: 999px; padding: 5px 12px; font-size: 12px; transition: background-color .15s ease; }
+.jvh-bn a::after { content: " →"; opacity: .6; } .jvh-bn a:hover { background: rgba(var(--a),.24); }
+.jvh-tl { list-style: none; margin: 0; padding: 0; }
+.jvh-tl li { position: relative; display: flex; gap: 10px; padding: 0 0 9px 17px; line-height: 1.35; overflow-wrap: anywhere; }
+.jvh-tl li::before { content: ""; position: absolute; left: 0; top: .32em; width: 7px; height: 7px; border-radius: 50%; background: rgb(var(--a)); box-shadow: 0 0 6px rgba(var(--a),.8); }
+.jvh-tl li::after { content: ""; position: absolute; left: 3px; top: 1.1em; bottom: -.15em; width: 1px; background: rgba(var(--a),.3); } .jvh-tl li:last-child::after { display: none; }
+.jvh-tl time { flex: none; font-size: 11px; color: rgba(var(--a),.95); font-variant-numeric: tabular-nums; white-space: nowrap; padding-top: 1px; } .jvh-tl time:empty { display: none; } .jvh-tl div { flex: 1; min-width: 0; }
+.jvh-ck { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.jvh-ck li { display: flex; gap: 8px; align-items: baseline; line-height: 1.35; overflow-wrap: anywhere; }
+.jvh-ck i { flex: none; width: 14px; height: 14px; box-sizing: border-box; border-radius: 4px; border: 1px solid rgba(var(--a),.6); display: inline-grid; place-items: center; font-style: normal; font-size: 10px; transform: translateY(2px); }
+.jvh-ck li.on i { background: rgba(74,222,128,.22); border-color: #4ade80; color: #4ade80; } .jvh-ck li.on span { color: rgba(203,225,240,.6); text-decoration: line-through; }
+.jvh-gw { display: grid; justify-items: center; gap: 2px; } .jvh-gw .jvh-svg { width: 150px; } .jvh-gw small { color: rgba(203,225,240,.7); font-size: 11.5px; text-align: center; }
+.jvh-pp { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.jvh-pp > div { display: flex; gap: 8px; align-items: center; min-width: 0; } .jvh-pp > div > div { min-width: 0; }
+.jvh-pp .av { position: relative; flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.4); box-shadow: 0 0 0 1px rgba(var(--a),.4), 0 0 10px rgba(var(--a),.25); }
+.jvh-pp .av i { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid #07101e; background: #64748b; }
+.jvh-pp .av i[data-p="on"] { background: #4ade80; } .jvh-pp .av i[data-p="busy"] { background: #fbbf24; } .jvh-pp .av i[data-p="bad"] { background: #f87171; } .jvh-pp .av i[data-p=""] { display: none; }
+.jvh-pp b { display: block; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jvh-pp small { display: block; font-size: 11px; color: rgba(203,225,240,.65); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jvh-img { display: block; max-width: 100%; max-height: 280px; margin: 0 auto; border-radius: 8px; border: 1px solid rgba(var(--a),.25); object-fit: contain; background: rgba(0,0,0,.3); }
 .jvh-bn button:hover, .jvh-c .act button:hover { background: rgba(var(--a),.24); } .jvh-bn button:active, .jvh-c .act button:active { transform: scale(.96); }
 .jvh-agh { pointer-events: auto; display: flex; align-items: center; gap: 8px; align-self: flex-end; border: 1px solid rgba(56,189,248,.3); background: rgba(6,10,20,.7); color: #7dd3fc; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 10.5px; letter-spacing: .14em; cursor: pointer; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
 .jvh-ag.min .jvh-c { display: none; }
@@ -141,23 +190,22 @@
 .jvh-boot h2 span { color: #fbbf24; text-shadow: 0 0 14px rgba(251,191,36,.8); }
 .jvh-boot pre { margin: 0; min-height: 7.5em; width: 100%; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: #7dd3fc; white-space: pre-wrap; }
 .jvh-boot pre .w { color: #fbbf24; } .jvh-boot pre .b { color: #f87171; } .jvh-boot small { font-size: 10.5px; letter-spacing: .2em; color: rgba(125,211,252,.5); }
-@media (max-width: 420px) {
-  .jvh { bottom: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; }
-  .jvh-stack, .jvh-ag { position: static; width: auto; pointer-events: auto; overflow: auto; }
-  .jvh-stack { max-height: 48vh !important; } .jvh-ag { max-height: 24vh !important; }
-  .jvh-p.free { position: static !important; }
-  .jvh-b { max-height: 40vh; }
+@media (max-width: 600px) {
+  .jvh-ag { left: 8px; right: 8px; width: auto; max-height: 24vh !important; }
+  .jvh-dk { left: 8px; bottom: auto; top: var(--jvh-top, 76px); } .jvh-p.hp:hover { translate: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .jvh-p.in, .jvh-p.out, .jvh-p.ping, .jvh-c.fl-ok, .jvh-c.fl-bad, .jvh-scan::after, .jvh-c .pb.ind u, .jvh-boot, .jvh-boot * { animation: none !important; }
+  .jvh-c.in, .jvh-p.hp.in .jvh-h, .jvh-p.hp.in .jvh-b, .jvh-p.ping, .jvh-chip.ping, .jvh-dk, .jvh-c.fl-ok, .jvh-c.fl-bad, .jvh-scan::after, .jvh-c .pb.ind u, .jvh-boot, .jvh-boot * { animation: none !important; }
   .jvh-c.fade, .jvh-pr i u, .jvh-c .pb u { transition: none; }
+  .jvh-p.hp { transition: opacity .15s ease !important; } .jvh-p.hp:hover { translate: none !important; }
 }`;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
   const RM = matchMedia('(prefers-reduced-motion: reduce)');
   const E = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   const SV = (tag, at) => { const n = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in at) n.setAttribute(k, at[k]); return n; };
-  const root = E('div', 'jvh'), stack = E('div', 'jvh-stack'), ag = E('div', 'jvh-ag'); ag.hidden = true;
-  root.append(stack, ag); document.body.append(root);
+  const root = E('div', 'jvh'), ag = E('div', 'jvh-ag'), dk = E('div', 'jvh-dk'), dkc = E('div'), dka = E('button', 'all', '✕ Hamısını bağla'), sr = E('div', 'jvh-sr');
+  ag.hidden = true; dk.hidden = true; dka.type = 'button'; dk.setAttribute('aria-label', 'Kiçildilmiş panellər'); sr.setAttribute('aria-live', 'polite');
+  dk.append(dkc, dka); root.append(ag, dk, sr); document.body.append(root);
   const st = () => typeof JV.state === 'function' ? JV.state() : curSt;          // jarvis.js-də state/level ixrac olunmaya bilər (bax: hesabat)
   let curSt = 'off'; JV.on('state', s => { curSt = s; glow(); cost(); });
 
@@ -195,6 +243,27 @@
     code: b => { const p = E('pre', 'jvh-code', b.text); if (b.lang) p.dataset.lang = b.lang; return p; },
     diff: b => { const p = E('pre', 'jvh-code'); for (const l of b.text.split('\n')) p.append(E('span', /^\+(?!\+\+)/.test(l) ? 'add' : /^-(?!--)/.test(l) ? 'del' : /^@@/.test(l) ? 'hk' : null, l)); return p; },
     kv: b => { const d = E('dl', 'jvh-kv'); for (const x of b.items) d.append(E('dt', null, x.key), E('dd', null, x.value)); return d; },
+    timeline: b => { const o = E('ol', 'jvh-tl'); for (const x of b.items) { const li = E('li'); if (x.status) li.dataset.s = x.status; li.append(E('time', null, x.time), E('div', null, x.text)); o.append(li); } return o; },
+    checklist: b => { const u = E('ul', 'jvh-ck'); for (const x of b.items) { const li = E('li', x.done ? 'on' : null), i = E('i', null, x.done ? '✓' : ''); i.setAttribute('aria-hidden', 'true'); li.setAttribute('aria-label', (x.done ? 'edilib: ' : 'gözləyir: ') + x.text); li.append(i, E('span', null, x.text)); u.append(li); } return u; },
+    gauge: b => {
+      const r = 42, C = 2 * Math.PI * r, L = C * .75, v = Math.round(b.value), s = SV('svg', { class: 'jvh-svg', viewBox: '0 0 120 ' + (b.label ? 104 : 94), role: 'img', 'aria-label': (b.label ? b.label + ': ' : '') + v + '%' });
+      const arc = (len, st) => SV('circle', { cx: 60, cy: 56, r, transform: 'rotate(135 60 56)', style: `fill:none;stroke-linecap:round;stroke-width:9;stroke-dasharray:${len.toFixed(1)} ${C.toFixed(1)};${st}` });
+      s.append(arc(L, 'stroke:rgba(255,255,255,.09)'), arc(Math.max(.01, L * b.value / 100), 'stroke:rgb(var(--a));filter:drop-shadow(0 0 4px rgba(var(--a),.8))'));
+      const t = SV('text', { x: 60, y: 63, 'text-anchor': 'middle', class: 'v', style: 'font-size:22px;font-weight:600' }); t.textContent = v + '%'; s.append(t);
+      if (b.label) { const l = SV('text', { x: 60, y: 100, 'text-anchor': 'middle', style: 'font-size:11px' }); l.textContent = b.label; s.append(l); }
+      const w = E('div', 'jvh-gw'); w.append(s); if (b.sub) w.append(E('small', null, b.sub)); return w;
+    },
+    people: b => {
+      const g = E('div', 'jvh-pp');
+      for (const x of b.items) {
+        const d = E('div'), av = E('span', 'av', ini(x.name)), dot = E('i'), t = E('div'); av.style.background = ucol(x.name); dot.dataset.p = pst(x.status); av.append(dot);
+        t.append(E('b', null, x.name)); const sub = [x.status, x.text].filter(Boolean).join(' · '); if (sub) t.append(E('small', null, sub)); t.title = x.name + (sub ? ' — ' + sub : '');
+        d.append(av, t); g.append(d);
+      }
+      return g;
+    },
+    image: b => { const i = E('img', 'jvh-img'); i.alt = b.alt; i.decoding = 'async'; i.referrerPolicy = 'same-origin'; i.src = b.src; return i; },
+    link: b => { const g = E('div', 'jvh-bn'); for (const x of b.items) { const a = E('a', null, x.label); a.href = x.href; g.append(a); } return g; },
     buttons: b => {
       const g = E('div', 'jvh-bn');
       for (const x of b.items) {
@@ -206,107 +275,319 @@
       return g;
     },
   };
+  const ini = n => n.split(/[\s._-]+/).filter(Boolean).slice(0, 2).map(w => Array.from(w)[0].toUpperCase()).join('') || '?';
+  const ucol = n => { try { if (typeof tint === 'function') return tint(n); } catch (e) {} let h = 0; for (const c of n) h = (h * 31 + c.codePointAt(0)) % 360; return `hsl(${h} 58% 50%)`; };   // index.php-nin istifadəçi rəngi
+  const pst = s => { s = s.toLowerCase(); return !s ? '' : /^(online|onlayn|active|aktiv|ok|free|available|hazır)/.test(s) ? 'on' : /^(work|busy|running|doing|işləyir|məşğul)/.test(s) ? 'busy' : /^(wait|block|error|fail|gözlə|xəta)/.test(s) ? 'bad' : 'off'; };
   const accent = (n, a) => { for (const x of ACC) n.classList.toggle(x, x === a); };
   const once = n => n.addEventListener('animationend', e => { if (e.target === n && e.animationName === 'jvh-in') n.classList.remove('in'); });
   function body(n, spec) {
-    const b = n._r.b; b.textContent = '';
+    const b = n._r.b, sc = b.scrollTop; b.textContent = '';
     for (const x of spec.blocks) { const w = E('div'); if (x.title) w.append(E('div', 'jvh-bt', x.title)); try { w.append(R[x.type](x)); } catch (e) { console.error('JarvisHUD ' + x.type, e); continue; } b.append(w); }
-    accent(n, spec.accent);
-    n._r.ic.textContent = spec.icon; n._r.ic.hidden = !spec.icon; n._r.t.textContent = spec.title;
+    accent(n, spec.accent); b.scrollTop = sc;
+    n._r.ic.textContent = spec.icon; n._r.ic.hidden = !spec.icon; n._r.t.textContent = spec.title; n.setAttribute('aria-label', spec.title);
+    if (n._chip) chipPaint(n);
   }
-
-  /* ---------- Panellər: yığın (ən yenisi yuxarıda, maks 3 açıq, köhnələr yığılır) + sürüklənən sərbəst panellər ---------- */
-  const P = new Map(); let seq = 0, z = 1;
-  const MAXOPEN = 3, MAXALL = 10;
   /** Uşaqları lazım olan sıraya qoy; yalnız yeri dəyişənləri köçür (köçürmə CSS animasiyasını yenidən başladır) */
   function order(par, ns, off) { ns.forEach((n, i) => { const at = par.children[i + off]; if (at !== n) par.insertBefore(n, at || null); }); }
-  // Kartlar başlığın (header) altından başlasın: onun düymələrini örtməsin
+  const say = t => { sr.textContent = ''; setTimeout(() => { sr.textContent = t; }, 40); };   // ekran oxuyucusu üçün
+
+  /* ---------- Panellər: boş yer mühərriki ----------
+     Maneələr: başlıq, Jarvis paneli, agent kartları, kiçildilmiş panellər sırası, saytın planet paneli/düymələri, [data-jv-obstacle], digər HUD panelləri.
+     Yeni panel → sol sütun → aşağı → mərkəz-sol ardıcıllığı ilə ilk boş düzbucaqlı (GAP aralıqla); yoxdursa dar en, sonra qısa gövdə,
+     sonra ən köhnə bərkidilməmiş panel çipə yığılır. Mövcud panellər yalnız nəyəsə dəyəndə yerini yaxınlıqda dəyişir. */
+  const P = new Map(); let seq = 0, z = 1, age = 0;
+  const MAXALL = 12, GAP = 12, MG = 12, WD = { compact: 300, normal: 380, wide: 560 };
+  const mob = () => innerWidth <= 600;
   const hdr = document.querySelector('header');
-  const setTop = () => root.style.setProperty('--jvh-top', Math.max(12, Math.round((hdr ? hdr.getBoundingClientRect().bottom : 64) + 10)) + 'px');
-  addEventListener('resize', setTop); addEventListener('scroll', setTop, { passive: true }); setTop();
-  function layout() {
-    const inStack = [...P.values()].filter(n => !n._free).sort((a, b) => b._t - a._t);
-    inStack.forEach((n, i) => { n._col = !!n._uc || i >= MAXOPEN; n.classList.toggle('col', n._col); });
-    order(stack, inStack, 0); fit();
+  let topY = 76, FC = null;
+  function setTop() {
+    topY = Math.max(MG, Math.round((hdr ? hdr.getBoundingClientRect().bottom : 64) + 10));
+    root.style.setProperty('--jvh-top', topY + 'px'); root.style.setProperty('--jvh-mh', Math.max(160, innerHeight - topY - MG) + 'px');
   }
+  addEventListener('scroll', setTop, { passive: true }); setTop();
+  const area = () => ({ l: MG, t: topY, r: innerWidth - MG, b: innerHeight - MG });
+  const hit = (a, b, g) => a.l < b.r + g && a.r + g > b.l && a.t < b.b + g && a.b + g > b.t;
+  const inA = (c, A) => c.l >= A.l - 1 && c.t >= A.t - 1 && c.r <= A.r + 1 && c.b <= A.b + 1;
+  const rc = n => ({ l: n._x, t: n._y, r: n._x + n._w, b: n._y + n._h });
+  /** Görünən elementin düzbucaqlısı (gizli/şəffaf/ekrandan kənar → null) */
+  function visEl(el, anyOp) {
+    if (!el || !el.isConnected || el.closest('[hidden]')) return null;
+    const cs = getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden' || (!anyOp && +cs.opacity < .05)) return null;
+    const r = el.getBoundingClientRect(); if (r.width < 2 || r.height < 2 || r.bottom <= 0 || r.right <= 0 || r.top >= innerHeight || r.left >= innerWidth) return null;
+    return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+  }
+  /** Konteynerin görünən uşaqlarının birləşməsi (məs. mərkəzlənmiş düymə sırası: boş kənarlar maneə sayılmasın) */
+  function uni(el) {
+    if (!el || el.closest('[hidden]')) return null; let u = null;
+    for (const c of el.children) { const r = visEl(c); if (r) u = u ? { l: Math.min(u.l, r.l), t: Math.min(u.t, r.t), r: Math.max(u.r, r.r), b: Math.max(u.b, r.b) } : r; }
+    return u;
+  }
+  const OBS1 = ['#space .fsbtn', '.jui-tour', '.jvl-cap', '[data-jv-obstacle]'], OBSU = ['#space .zbtns', '#space .stools', '#space .travel', '#space .hud'];
+  function obstacles(noAg) {
+    const o = [], add = r => { if (r) o.push(r); };
+    add(visEl(hdr)); if (JV.panel && !JV.panel.hidden) add(visEl(JV.panel));
+    if (!ag.hidden && !noAg) add(uni(ag)); if (!dk.hidden && !mob()) add(visEl(dk));
+    add(visEl(document.querySelector('#dock.open'), true));                     // planet paneli (açılarkən hələ şəffafdır)
+    for (const s of OBS1) for (const e of document.querySelectorAll(s)) add(visEl(e));
+    for (const s of OBSU) for (const e of document.querySelectorAll(s)) add(uni(e));
+    return o;
+  }
+  /** 3D səhnənin fokus mərkəzi: mümkünsə örtmə (cəza balı) */
+  function focus() {
+    const sp = document.getElementById('space'), r = sp && !sp.closest('[hidden]') ? sp.getBoundingClientRect() : null;
+    return r && r.width > 200 ? { x: r.left + r.width / 2, y: r.top + r.height * .45, r: Math.min(r.width, r.height) * .17 } : null;
+  }
+  const hitC = (c, f) => { const dx = Math.max(c.l - f.x, 0, f.x - c.r), dy = Math.max(c.t - f.y, 0, f.y - c.b); return dx * dx + dy * dy < f.r * f.r; };
+  /** w×h üçün ən yaxşı boş yer: namizəd x/y = kənar + maneə kənarları + 40px tor; bal = sol sütun üstünlüyü (və ya köhnə yerə yaxınlıq) */
+  function spot(w, h, obs, near) {
+    const A = area(); if (w > A.r - A.l || h > A.b - A.t) return null;
+    const xs = new Set([A.l, A.r - w]), ys = new Set([A.t, A.b - h]);
+    for (const r of obs) { xs.add(r.r + GAP); xs.add(r.l - GAP - w); ys.add(r.b + GAP); ys.add(r.t - GAP - h); }
+    for (let x = A.l; x <= A.r - w; x += 40) xs.add(x);
+    for (let y = A.t; y <= A.b - h; y += 40) ys.add(y);
+    let best = null, bs = Infinity;
+    for (const x of xs) {
+      if (x < A.l || x + w > A.r) continue;
+      for (const y of ys) {
+        if (y < A.t || y + h > A.b) continue;
+        let s = near ? Math.abs(x - near.x) + Math.abs(y - near.y) : x * 3 + y; if (s >= bs) continue;
+        const c = { l: x, t: y, r: x + w, b: y + h };
+        if (FC && hitC(c, FC)) { s += 4000; if (s >= bs) continue; }
+        if (obs.some(r => hit(c, r, GAP))) continue;
+        bs = s; best = c;
+      }
+    }
+    return best;
+  }
+  const setW = (n, w) => { w = Math.round(w); if (n._w !== w) { n._w = w; n.style.width = w + 'px'; } };
+  const wants = n => { const A = area(), pw = Math.min(WD[n._spec.layout] || WD.normal, A.r - A.l); return [pw, Math.min(WD.compact, pw)]; };
+  /** Paneli yerləşdirməyə çalış: əsas en → dar en → qısa gövdə (daxili scroll) */
+  function fitIn(n, obs, near) {
+    const [pw, cw] = wants(n); n.style.removeProperty('--bh');
+    for (const w of pw > cw ? [pw, cw] : [pw]) { setW(n, w); const c = spot(w, n.offsetHeight, obs, near); if (c) return c; }
+    if (!n._uc) { n.style.setProperty('--bh', '170px'); const c = spot(cw, n.offsetHeight, obs, near); if (c) return c; n.style.removeProperty('--bh'); }
+    return null;
+  }
+  function origin() {
+    const o = JV.panel && !JV.panel.hidden && JV.panel.querySelector('.jv-orb') || JV.button, r = o && o.getBoundingClientRect();
+    return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : { x: innerWidth - 60, y: innerHeight - 60 };
+  }
+  const tf = (x, y, s) => `translate3d(${Math.round(x)}px,${Math.round(y)}px,0)` + (s ? ` scale(${s})` : '');
+  /** Hədəfə hamar keçid; ilk dəfə isə Jarvis kürəsindən (və ya çipdən) "uçub" gəlir */
+  function move(n, c) {
+    const first = !n._placed; n._x = Math.round(c.l); n._y = Math.round(c.t); n._h = Math.round(c.b - c.t); n._rc = rc(n);
+    clearTimeout(n._ht); n.hidden = false; n.classList.remove('gone');
+    if (first && !RM.matches) {
+      const o = n._from || origin();
+      n.classList.add('nt'); n.style.opacity = '0'; n.style.transform = tf(o.x - n._w * .09, o.y - n._h * .09, .18);
+      void n.offsetWidth; n.classList.remove('nt'); n.classList.add('in'); clearTimeout(n._it); n._it = setTimeout(() => n.classList.remove('in'), 400);
+    } else n.classList.remove('nt');
+    n._from = null; n._placed = true; n.style.transform = tf(n._x, n._y); n.style.opacity = '1';
+  }
+  /** Vizual: panel kiçildilmiş sıraya uçur və gizlənir */
+  function toDock(n) {
+    const r = !dk.hidden && dk.getBoundingClientRect(), x = r && r.width ? r.right : MG + 20, y = r && r.width ? r.top : innerHeight - 40;
+    n._pend = false; n.classList.remove('drag', 'nt', 'in'); n.classList.add('gone');
+    n.style.transform = tf(x, y, .12); n.style.opacity = '0';
+    clearTimeout(n._ht); n._ht = setTimeout(() => { if (n._min) n.hidden = true; }, RM.matches ? 0 : 300);
+  }
+  const cc = n => { const r = n._chip && n._chip.isConnected ? n._chip.getBoundingClientRect() : null; return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; };
+  const RGB = { cyan: '56,189,248', amber: '251,191,36', red: '248,113,113', green: '74,222,128', violet: '192,132,252' };
+  function chipPaint(n) {
+    const k = n._chip, sp = n._spec; k.style.setProperty('--a', RGB[sp.accent] || RGB.cyan);
+    k.firstChild.textContent = (sp.icon || '▣') + ' '; k.lastChild.textContent = sp.title; k.title = 'Aç: ' + sp.title; k.setAttribute('aria-label', 'Paneli aç: ' + sp.title);
+  }
+  function dockPaint() {
+    const ms = [...P.values()].filter(n => n._min && !n._pend).sort((a, b) => a._pa - b._pa), keep = new Set(ms.map(n => n._chip));
+    for (const c of [...dkc.children]) if (!keep.has(c)) c.remove();
+    for (const n of ms) {
+      if (!n._chip) { const k = n._chip = E('button', 'jvh-chip'); k.type = 'button'; k.append(E('i'), E('span')); k.onclick = () => restore(n); }
+      chipPaint(n); if (n._chip.parentNode !== dkc) dkc.append(n._chip);
+    }
+    dka.hidden = P.size < 2; dk.hidden = !ms.length && P.size < 2;
+  }
+  dka.onclick = () => close('all');
+
+  let rlT = 0, sig = '';
+  const kick = d => { clearTimeout(rlT); rlT = setTimeout(relayout, d == null ? 60 : d); };
+  const sigOf = o => innerWidth + 'x' + innerHeight + '|' + o.map(r => Math.round(r.l) + ',' + Math.round(r.t) + ',' + Math.round(r.r) + ',' + Math.round(r.b)).join(';');
+  function relayout() {
+    clearTimeout(rlT); setTop();
+    const site = obstacles(); sig = sigOf(site);
+    if (mob()) { mobLayout(); fit(); return; }
+    if (dk.style.top) dk.style.top = '';
+    FC = focus();
+    const A = area(), live = [...P.values()].filter(n => !n._min).sort((a, b) => (b._pin ? 1 : 0) - (a._pin ? 1 : 0) || a._pa - b._pa);
+    const acc = [], todo = [], obs = () => site.concat(acc.map(n => n._rc));
+    for (const n of live) {
+      if (n._placed && n._pin) {                                                   // bərkidilmiş: yerində qalır (yalnız ekrana sığdırılır)
+        n._h = n.offsetHeight; const x = clamp(n._x, 0, Math.max(0, innerWidth - n._w)), y = clamp(n._y, 0, Math.max(0, innerHeight - n._h));
+        if (x !== n._x || y !== n._y) move(n, { l: x, t: y, r: x + n._w, b: y + n._h }); n._rc = rc(n); acc.push(n); continue;
+      }
+      if (n._placed && wants(n).includes(n._w)) {
+        n._h = n.offsetHeight; const c = rc(n);
+        if (inA(c, A) && !site.some(r => hit(c, r, GAP - 2)) && !acc.some(m => hit(c, m._rc, GAP - 2))) { n._rc = c; acc.push(n); continue; }
+      }
+      todo.push(n);
+    }
+    todo.sort((a, b) => (a._placed ? 0 : 1) - (b._placed ? 0 : 1) || a._pa - b._pa);   // əvvəl yerindən çıxanlar (yaxında), sonra yenilər
+    const vics = [];
+    for (const n of todo) {
+      let c;
+      for (;;) {
+        c = fitIn(n, obs(), n._placed ? { x: n._x, y: n._y } : null); if (c) break;
+        const v = acc.concat(n).filter(m => !m._pin).sort((a, b) => a._pa - b._pa)[0];   // ən köhnə bərkidilməmiş → çip
+        if (!v || v === n) break;
+        acc.splice(acc.indexOf(v), 1); v._min = 'auto'; v._pend = true; vics.push(v);
+      }
+      if (c) { move(n, c); acc.push(n); } else { n._min = 'auto'; n._pend = true; vics.push(n); }
+    }
+    // İndi çipə düşənlər başqa yerə sığırsa — çip etmə, sadəcə köçür; köhnə avtomatik çipləri də yer varsa geri qaytar
+    for (const n of vics) {
+      const c = fitIn(n, obs(), { x: n._x, y: n._y });
+      if (c) { n._min = null; n._pend = false; move(n, c); acc.push(n); } else toDock(n);
+    }
+    for (const n of [...P.values()].filter(m => m._min === 'auto' && !m._pend && !vics.includes(m)).sort((a, b) => b._pa - a._pa)) {
+      const wasH = n.hidden; n.hidden = false; n.classList.add('nt');
+      const c = fitIn(n, obs(), null);
+      if (c) { n._from = cc(n); n._min = null; n._placed = false; move(n, c); acc.push(n); } else { n.hidden = wasH; n.classList.remove('nt'); }
+    }
+    dockPaint(); fit();
+  }
+  /** Mobil (≤600px): başlığın altında tək sütun, ən çox 2 açıq panel, qalanları çip */
+  function mobLayout() {
+    const A = area(); let y = A.t;
+    if (!ag.hidden) { const r = uni(ag); if (r) y = Math.max(y, r.b + 8); }
+    const ps = [...P.values()].sort((a, b) => b._pa - a._pa), cand = ps.filter(n => n._min !== 'user');
+    // Aşağıdan gələn maneələr (Jarvis paneli, planet paneli): yer azdırsa daha az panel açıq qalır
+    const yd = y + (P.size < 2 && !ps.some(n => n._min) ? 0 : 44);
+    let bot = A.b; for (const r of [JV.panel && !JV.panel.hidden ? visEl(JV.panel) : null, visEl(document.querySelector('#dock.open'), true)]) if (r && r.t > yd) bot = Math.min(bot, r.t - 8);
+    const room = bot - yd, max = room >= 320 ? 2 : room >= 140 ? 1 : cand.some(n => n._ur) ? 1 : 0;
+    if (room < 140) bot = A.b;                                                       // yer yoxdur: yalnız istifadəçinin özü açdığı panel (maneənin üstünə düşsə də)
+    const exp = (room < 140 ? cand.filter(n => n._ur) : cand).slice(0, max);
+    for (const n of ps) if (!exp.includes(n) && !n._min) { n._min = 'auto'; n._ur = false; toDock(n); }
+    for (const n of exp) n._pend = false;
+    dockPaint(); dk.style.top = y + 'px'; if (!dk.hidden) y += dk.offsetHeight + 8;
+    const w = innerWidth - 16, each = Math.max(140, (bot - y - 8 * (exp.length - 1)) / Math.max(1, exp.length));
+    for (const n of exp) {
+      if (n._min) { n._from = cc(n); n._min = null; n._placed = false; n.hidden = false; n.classList.add('nt'); }
+      setW(n, w); n.style.setProperty('--bh', Math.max(80, Math.round(each - 56)) + 'px');
+      const h = Math.min(n.offsetHeight, each); move(n, { l: 8, t: y, r: 8 + w, b: y + h }); y += h + 8;
+    }
+    dockPaint();
+  }
+  function restore(n) {
+    if (!P.has(n.dataset.id)) return;
+    n._from = cc(n); n._min = null; n._pend = false; n._ur = true; n._pa = ++age; n._placed = false; n._uc = false; n.classList.remove('col');
+    n.hidden = false; n.classList.add('nt'); n.style.opacity = '0'; n.style.zIndex = ++z;
+    relayout(); say('Panel açıldı: ' + n._spec.title);
+  }
+  function minimise(n) { n._min = 'user'; n._ur = false; toDock(n); dockPaint(); kick(); }
+  function setPin(n, v) { n._pin = !!v; n.classList.toggle('pin', n._pin); n._r.pn.setAttribute('aria-pressed', String(n._pin)); n._r.pn.title = n._pin ? 'Bərkidilib (burax)' : 'Bərkit'; if (!v) kick(); }
+  function toggleCol(n) { n._uc = !n._uc; n.classList.toggle('col', n._uc); n._r.h.setAttribute('aria-expanded', String(!n._uc)); relayout(); }
   function drag(n, h) {
     let s = null;
     h.addEventListener('pointerdown', e => {
-      if (e.button || e.target.closest('button')) return;
-      s = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false }; h.setPointerCapture(e.pointerId);
+      n.style.zIndex = ++z;
+      if (e.button || e.target.closest('button') || mob()) return;
+      s = { x: e.clientX, y: e.clientY, id: e.pointerId, moved: false, l: n._x, t: n._y }; try { h.setPointerCapture(e.pointerId); } catch (er) {}
     });
     h.addEventListener('pointermove', e => {
       if (!s || e.pointerId !== s.id) return;
-      if (!s.moved) {
-        if (Math.hypot(e.clientX - s.x, e.clientY - s.y) < 5 || innerWidth <= 420) return;
-        s.moved = true; const r = n.getBoundingClientRect(); s.l = r.left; s.t = r.top;
-        if (!n._free) { n._free = true; n.classList.add('free'); Object.assign(n.style, { position: 'fixed', width: r.width + 'px', left: r.left + 'px', top: r.top + 'px', margin: 0 }); root.append(n); n._col = n._uc = false; n.classList.remove('col'); layout(); }
-        n.classList.add('drag');
-      }
-      n.style.zIndex = ++z;
-      n.style.left = clamp(s.l + e.clientX - s.x, 40 - n.offsetWidth, innerWidth - 40) + 'px';
-      n.style.top = clamp(s.t + e.clientY - s.y, 0, innerHeight - 30) + 'px';
+      if (!s.moved) { if (Math.hypot(e.clientX - s.x, e.clientY - s.y) < 5) return; s.moved = true; n.classList.add('drag'); }
+      n._x = Math.round(clamp(s.l + e.clientX - s.x, 0, Math.max(0, innerWidth - n._w))); n._y = Math.round(clamp(s.t + e.clientY - s.y, 0, Math.max(0, innerHeight - n._h)));
+      n.style.transform = tf(n._x, n._y);
     });
     const up = e => {
-      if (!s || e.pointerId !== s.id) return;
-      if (!s.moved && e.type === 'pointerup') {                   // toxunuş: yığılmışı aç (ən yeni olur), açığı yığ
-        if (n.classList.contains('col')) { n._uc = false; n._t = Date.now(); } else n._uc = true;
-        if (n._free) n.classList.toggle('col', !!n._uc); else layout();
-      }
-      n.classList.remove('drag'); s = null;
+      if (!s || e.pointerId !== s.id) return; const m = s.moved; s = null; n.classList.remove('drag');
+      if (m) { n._rc = rc(n); setPin(n, true); relayout(); }                    // atıldığı yerdə bərkidilir, digərləri ondan qaçır
     };
     h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+    h.addEventListener('dblclick', e => { if (!e.target.closest('button')) toggleCol(n); });
+    h.addEventListener('keydown', e => {
+      if (e.target !== h) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCol(n); }
+      else if (e.key === 'Escape') { e.preventDefault(); close(n.dataset.id); }
+      else if (/^Arrow/.test(e.key) && !mob()) {
+        e.preventDefault(); const d = e.shiftKey ? 60 : 20, dx = e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, dy = e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0;
+        const x = clamp(n._x + dx, 0, Math.max(0, innerWidth - n._w)), y = clamp(n._y + dy, 0, Math.max(0, innerHeight - n._h));
+        move(n, { l: x, t: y, r: x + n._w, b: y + n._h }); setPin(n, true); kick(250);
+      }
+    });
   }
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { if (P.size) kick(90); }) : null;
+  const hbtn = (txt, cls, tl) => { const k = E('button', 'jvh-x' + (cls ? ' ' + cls : ''), txt); k.type = 'button'; k.title = tl; k.setAttribute('aria-label', tl); return k; };
   function show(spec, opt) {
     const { spec: sp, skipped } = clean(spec);
-    const id = 'p' + (++seq), n = E('section', 'jvh-p'), h = E('div', 'jvh-h'), ic = E('i'), t = E('b'), x = E('button', 'jvh-x', '✕'), b = E('div', 'jvh-b');
-    x.type = 'button'; x.title = 'Bağla'; x.setAttribute('aria-label', 'Bağla'); x.onclick = () => close(id);
-    h.append(ic, t, x); n.append(E('div', 'jvh-scan'), h, b); n.setAttribute('role', 'region'); n.dataset.id = id;
-    n._r = { ic, t, b }; n._spec = sp; n._t = Date.now(); n._on = opt && typeof opt.onClose === 'function' ? opt.onClose : null;
-    body(n, sp); drag(n, h); P.set(id, n);
-    if (!RM.matches) { n.classList.add('in'); once(n); }
-    if (P.size > MAXALL) { const old = [...P.values()].sort((a, b) => a._t - b._t)[0]; close(old.dataset.id); }
-    layout(); stack.scrollTop = 0;
+    const id = 'p' + (++seq), n = E('section', 'jvh-p hp'), h = E('div', 'jvh-h'), ic = E('i'), t = E('b'), b = E('div', 'jvh-b');
+    const pn = hbtn('📌', 'jvh-pn', 'Bərkit'), mn = hbtn('–', null, 'Kiçilt'), x = hbtn('✕', null, 'Bağla');
+    pn.setAttribute('aria-pressed', 'false'); pn.onclick = () => setPin(n, !n._pin); mn.onclick = () => minimise(n); x.onclick = () => close(id);
+    h.tabIndex = 0; h.setAttribute('aria-expanded', 'true'); h.title = 'Sürüklə: yerini dəyiş · iki klik: yığ/aç';
+    h.append(ic, t, pn, mn, x); n.append(E('div', 'jvh-scan'), h, b); n.setAttribute('role', 'region'); n.dataset.id = id;
+    n._r = { ic, t, b, h, pn }; n._spec = sp; n._pa = ++age; n._on = opt && typeof opt.onClose === 'function' ? opt.onClose : null;
+    n.classList.add('nt'); n.style.opacity = '0'; n.style.zIndex = ++z;
+    body(n, sp); drag(n, h); P.set(id, n); root.append(n);
+    if (P.size > MAXALL) { const old = [...P.values()].sort((a, b) => (b._min ? 1 : 0) - (a._min ? 1 : 0) || a._pa - b._pa)[0]; close(old.dataset.id); }
+    relayout(); if (ro) ro.observe(n); say('Panel açıldı: ' + sp.title);
     return skipped.length ? { id, skipped } : { id };
   }
   function update(id, spec) {
     const n = P.get(String(id)); if (!n) throw new Error('Panel tapılmadı: ' + id);
     spec = parse(spec) || {}; const m = { ...n._spec };
-    for (const k of ['title', 'icon', 'accent', 'blocks']) if (spec[k] !== undefined && spec[k] !== null) m[k] = spec[k];
+    for (const k of ['title', 'icon', 'accent', 'layout', 'blocks']) if (spec[k] !== undefined && spec[k] !== null) m[k] = spec[k];
     const { spec: sp, skipped } = clean(m);
-    n._spec = sp; n._t = Date.now(); n._uc = false; body(n, sp); layout();
-    if (!RM.matches) { n.classList.remove('in', 'ping'); void n.offsetWidth; n.classList.add('ping'); }
+    n._spec = sp; body(n, sp);
+    if (n._min) { if (n._chip && !RM.matches) { n._chip.classList.remove('ping'); void n._chip.offsetWidth; n._chip.classList.add('ping'); } }
+    else { n.style.removeProperty('--bh'); relayout(); if (!RM.matches) { n.classList.remove('ping'); void n.offsetWidth; n.classList.add('ping'); } }
+    say('Panel yeniləndi: ' + sp.title);
     return skipped.length ? { id: String(id), skipped } : { id: String(id) };
   }
   function close(id) {
     const ids = id == null || id === 'all' ? [...P.keys()] : [String(id)]; let k = 0;
     for (const i of ids) {
-      const n = P.get(i); if (!n) continue; P.delete(i); k++;
+      const n = P.get(i); if (!n) continue; P.delete(i); k++; if (ro) ro.unobserve(n);
       if (n._on) try { n._on(i); } catch (e) { console.error('JarvisHUD', e); }
-      if (RM.matches) n.remove(); else { n.classList.add('out'); setTimeout(() => n.remove(), 300); }
+      if (RM.matches || n.hidden) n.remove();
+      else { n.classList.add('gone'); n.style.transformOrigin = '50% 50%'; n.style.opacity = '0'; n.style.transform = tf(n._x, n._y + 6, .96); setTimeout(() => n.remove(), 300); }
     }
-    layout(); return k;
+    dockPaint(); if (k) kick(160);                                                 // qalanlar yerində qalır; yer boşaldısa çiplər geri qayıdır
+    return k;
   }
-  const list = () => [...P.entries()].map(([id, n]) => ({ id, title: n._spec.title, accent: n._spec.accent, collapsed: n.classList.contains('col'), blocks: n._spec.blocks.map(b => b.type) }));
+  const list = () => [...P.entries()].map(([id, n]) => ({ id, title: n._spec.title, accent: n._spec.accent, layout: n._spec.layout, collapsed: !!n._uc, pinned: !!n._pin, minimised: !!n._min, blocks: n._spec.blocks.map(b => b.type) }));
 
-  /* Yığınlar Jarvis panelinin (sağ-aşağı) üstünə düşməsin */
+  /* Dəyişiklik izləyicisi: ölçü dəyişəndə (ResizeObserver) + ucuz 500ms yoxlama (maneələrin imzası); sayt modalı açıqdırsa HUD geri çəkilir */
+  if (ro) { for (const e of [hdr, JV.panel, ag]) if (e) ro.observe(e); }
+  addEventListener('resize', () => { setTop(); kick(120); });
+  setInterval(() => {
+    if (document.hidden) return;
+    root.classList.toggle('dim', !!document.querySelector('.modal:not([hidden])'));
+    if (P.size && sigOf(obstacles()) !== sig) kick(40);
+  }, 500);
+
+  /* Agent kartları sütunu Jarvis panelinin (sağ-aşağı) üstünə düşməsin */
   function fit() {
-    if (innerWidth <= 420) return;
-    const jv = JV.panel && !JV.panel.hidden ? JV.panel.getBoundingClientRect() : null;
-    for (const s of [stack, ag]) {
-      const r = s.getBoundingClientRect(); let mh = innerHeight - r.top - 20;
-      if (jv && jv.width && r.right > jv.left - 8 && r.left < jv.right) mh = Math.min(mh, jv.top - r.top - 12);
-      s.style.maxHeight = Math.max(120, mh) + 'px';
-    }
+    if (mob()) { ag.style.maxHeight = ''; ag.style.left = ag.style.top = ag.style.right = ''; return; }
+    placeAg();
+    const jv = JV.panel && !JV.panel.hidden ? JV.panel.getBoundingClientRect() : null, r = ag.getBoundingClientRect(); let mh = innerHeight - r.top - 20;
+    if (jv && jv.width && r.right > jv.left - 8 && r.left < jv.right) mh = Math.min(mh, jv.top - r.top - 12);
+    ag.style.maxHeight = Math.max(120, mh) + 'px';
+  }
+  /* Agent kartları da boş yerə: sağ-yuxarıya ən yaxın, saytın panellərini (planet paneli, Jarvis) örtməyən yer */
+  function placeAg() {
+    if (ag.hidden) return;
+    const w = ag.offsetWidth, h = Math.min(ag.scrollHeight, 300), A = area(), c = spot(w, h, obstacles(true), { x: A.r - w, y: A.t });
+    if (!c) return;
+    const r = ag.getBoundingClientRect();
+    if (Math.abs(r.left - c.l) > 3 || Math.abs(r.top - c.t) > 3) Object.assign(ag.style, { left: c.l + 'px', top: c.t + 'px', right: 'auto' });
   }
   addEventListener('resize', fit);
 
   /* ---------- Alətlər (deklarasiya: jarvis_modules/hud.php) ---------- */
   const blocksArg = a => a.blocks !== undefined ? a.blocks : a.spec && a.spec.blocks;
-  JV.registerTool('show_panel', a => { const r = show({ title: a.title, icon: a.icon, accent: a.accent, blocks: blocksArg(a) }); return { ok: true, ...r }; });
+  JV.registerTool('show_panel', a => { const r = show({ title: a.title, icon: a.icon, accent: a.accent, layout: a.layout, blocks: blocksArg(a) }); return { ok: true, ...r }; });
   JV.registerTool('update_panel', a => {
     if (!a.id) throw new Error('"id" lazımdır');
-    const sp = a.spec && typeof a.spec === 'object' ? a.spec : a, r = update(a.id, { title: sp.title, icon: sp.icon, accent: sp.accent, blocks: sp.blocks });
+    const sp = a.spec && typeof a.spec === 'object' ? a.spec : a, r = update(a.id, { title: sp.title, icon: sp.icon, accent: sp.accent, layout: sp.layout, blocks: sp.blocks });
     return { ok: true, ...r };
   });
   JV.registerTool('close_panels', a => { const id = a && a.id ? String(a.id) : 'all'; const k = close(id); if (!k && id !== 'all') throw new Error('Panel tapılmadı: ' + id); return { ok: true, id, closed: k }; });
@@ -491,11 +772,11 @@
   });
   JV.on('stop', () => { glow(); cost(); });
 
-  /* Digər modullar üçün API: show(spec, {onClose}) → id, update(id, spec), close(id|'all'), list(), validate(spec) */
+  /* Digər modullar üçün API: show(spec, {onClose}) → id, update(id, spec), close(id|'all'), list(), validate(spec); əlavə: relayout() — maneələr dəyişəndə yerləşdirməni dərhal yenilə */
   window.JarvisHUD = {
     show: (spec, opt) => show(spec, opt).id,
     update: (id, spec) => { update(id, spec); return String(id); },
     close: id => close(id === undefined ? 'all' : id),
-    list, validate: spec => clean(spec),
+    list, validate: spec => clean(spec), relayout: () => relayout(),
   };
 })();

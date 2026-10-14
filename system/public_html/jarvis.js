@@ -561,7 +561,7 @@
       user(text, replace) {
         J.cur.jarvis = null;
         if (replace && J.cur.user) { J.cur.user._t = ''; }
-        stream('user', text); emit('user', text);
+        stream('user', text); emit('user', text, !!replace);   // replace: Grok tam transkripti göndərir (parça deyil)
       },
       bot: text => { stream('jarvis', text); emit('bot', text); },
       interrupted() { stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); emit('interrupted'); },
@@ -572,7 +572,7 @@
         if (J.state === 'off') return;
         const why = reason ? reason : code === 1006 ? 'bağlantı qırıldı' : 'kod ' + code;
         if (!J.ending && code !== 1000) line('e', (ad.label || 'Səs') + ' bağlantısı bağlandı: ' + why);
-        cleanup(); setState(J.ending || code === 1000 ? 'off' : 'error');
+        cleanup(); setState(J.ending || code === 1000 ? 'off' : 'error'); emit('stop');
       },
     });
   }
