@@ -729,7 +729,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
   <header>
     <div class="brand"><div class="logo">C</div><h1>Komanda Claude</h1></div>
     <nav class="tabs"><a id="tab-panel" href="#">Panel</a><a id="tab-space" href="#kainat">Kainat</a><a id="tab-board" href="#lovhe">Lövhə <span class="tbadge" id="tbadge" hidden></span></a></nav>
-    <div class="meta"><span class="live" id="live"><span class="dot"></span><span id="conn">qoşulur…</span></span><span class="who" id="who"></span><button class="gbtn" id="b-adm" hidden>İstifadəçilər</button><button class="gbtn" id="b-prj" hidden>Proyektlər</button><button class="gbtn" id="b-ntf" hidden>Bildirişlər</button><button class="gbtn" id="b-plan" title="Proyektlərin planları, scope-ları və tapşırıqları (kainatdakı uçan gəmi)">🛸 Plan</button><button class="gbtn" id="b-msg" title="Komanda yoldaşına və ya hamıya mesaj (raketlə çatır)">✉ Mesaj <span class="tbadge" id="mbadge" hidden></span></button><button class="gbtn" id="b-rep">📊 Hesabat</button><a class="gbtn" href="kit.php?doc=1" target="_blank" rel="noopener" title="Addım-addım başlanğıc təlimatı">📖 Təlimat</a><a class="gbtn" href="kit.php" title="Quraşdırma paketi (hook, agent, təlimat)">📦 Paket</a><button class="gbtn" id="b-acc">Hesab</button><a href="?logout=1">Çıxış</a></div>
+    <div class="meta"><span class="live" id="live"><span class="dot"></span><span id="conn">qoşulur…</span></span><span class="who" id="who"></span><button class="gbtn" id="b-adm" hidden>İstifadəçilər</button><button class="gbtn" id="b-prj" hidden>Proyektlər</button><button class="gbtn" id="b-ntf" hidden>Bildirişlər</button><button class="gbtn" id="b-plan" title="Proyektlərin planları, scope-ları və tapşırıqları (kainatdakı uçan gəmi)">🛸 Plan</button><button class="gbtn" id="b-msg" title="Komanda yoldaşına və ya hamıya mesaj (raketlə çatır)">💬 Mesaj <span class="tbadge" id="mbadge" hidden></span></button><button class="gbtn" id="b-rep">📊 Hesabat</button><a class="gbtn" href="kit.php?doc=1" target="_blank" rel="noopener" title="Addım-addım başlanğıc təlimatı">📖 Təlimat</a><a class="gbtn" href="kit.php" title="Quraşdırma paketi (hook, agent, təlimat)">📦 Paket</a><button class="gbtn" id="b-acc">Hesab</button><a href="?logout=1">Çıxış</a></div>
   </header>
 
   <div class="alerts" id="alerts" hidden></div>
@@ -940,7 +940,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
 </div>
 <div class="modal" id="msg" hidden>
   <div class="mbox">
-    <div class="mhead"><b>Mesaj</b><button class="ibtn" data-close="msg" aria-label="Bağla">✕</button></div>
+    <div class="mhead"><b>💬 Mesaj</b><button class="ibtn" data-close="msg" aria-label="Bağla">✕</button></div>
     <div class="filters" id="msg-tabs"><button id="mt-write" class="on">Yaz</button><button id="mt-inbox">Qutu <span class="count" id="mt-cnt">0</span></button></div>
     <div id="msg-write">
       <select id="msg-to" aria-label="Kimə"></select>
@@ -2723,7 +2723,7 @@ function renderDesktopPlanet(u) {
     } else if (!g) {
       const lock = el('div', 'xd-lock');
       lock.append(el('div', 'xd-lock-t', '🔒 ' + u + ' hələ sənə icazə verməyib'), el('div', 'mnote', 'Onun kompüterinə komanda göndərmək üçün ' + u + ' Desktop planetində sənə icazə verməlidir. Bir mesajla xatırlat:'));
-      const rq = el('button', 'gbtn go', '✉ İcazə istə');
+      const rq = el('button', 'gbtn go', '💬 İcazə istə');
       rq.onclick = () => { openMsg(u); $('msg-body').value = 'Salam! Desktop Universe-də mənə Claude Code-una komanda göndərməyə icazə verə bilərsən? (Desktop planetinə gir → "+ İcazə ver")'; };
       lock.append(rq); manage.append(lock);
     }

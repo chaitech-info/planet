@@ -687,7 +687,7 @@ function launchRocket(r) {
   }
   r.g = makeRocket(r.hue); r.trail = makeTrail();
   r.g.position.copy(r.S); scene.add(r.g, r.trail.pts);
-  r.lbl = document.createElement('div'); r.lbl.className = 'rkt'; r.lbl.textContent = (r.soft ? '🤖 ' : '✉ ') + r.who; lblBox.append(r.lbl);
+  r.lbl = document.createElement('div'); r.lbl.className = 'rkt'; r.lbl.textContent = (r.soft ? '🤖 ' : '💬 ') + r.who; lblBox.append(r.lbl);
   if (r.pf) {
     spawnBurst(r.pf, true);
     const cl = closeness(camera.position.distanceTo(C), r.pf.R), nd = C.clone().project(camera);
