@@ -707,7 +707,7 @@ body.v-space::before { display: none; }
   <div id="v-space" hidden>
     <div class="space" id="space">
       <div class="hud"><span id="hudA"></span><span id="hudB"></span></div>
-      <div class="maphint" id="maphint">🖱 Təkərlə yaxınlaş/uzaqlaş · sürüşdür · sağ düymə ilə fırlat · qalaktikaya klik et</div>
+      <div class="maphint" id="maphint">🖱 Sürüklə: 360° fırlat · sağ düymə: sürüşdür · təkər: yaxınlaş/uzaqlaş · qalaktikaya klik et</div>
       <div class="stools"><button id="t-ship" title="Öz gəmini fərdiləşdir və deadline təyin et">🚀 Gəmim</button><button id="t-world" title="Özünə planet yarat">🪐 Yeni planet</button><button id="t-mcp" title="MCP inteqrasiyaları üçün peyklər">🛰 MCP peykləri</button></div>
       <button class="fsbtn" id="fs" title="Tam ekran" aria-label="Tam ekran">⛶</button>
       <div class="zbtns"><button id="zin" aria-label="Yaxınlaşdır">+</button><button id="zout" aria-label="Uzaqlaşdır">−</button><button id="zmap" aria-label="Kosmik xəritə" title="Bütün universlərin xəritəsi">🗺</button><button id="sbtn" aria-label="Səs" title="Səs">🔊</button><button id="qbtn" aria-label="Təsvir keyfiyyəti" title="Təsvir keyfiyyəti: Avto / HD (həmişə tam kəskinlik)">HD</button></div>
