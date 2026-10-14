@@ -48,7 +48,7 @@ foreach ($cmds as &$c) {
 unset($c);
 $agents = $pdo->query('SELECT user, last_seen, claude_ok FROM agents')->fetchAll();
 
-$tk = $pdo->prepare("SELECT id, project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at
+$tk = $pdo->prepare("SELECT id, project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at, due_at
     FROM tasks WHERE status != 'done' OR updated_at > ? ORDER BY updated_at DESC LIMIT 300");
 $tk->execute([$now - 14 * 86400]);
 
@@ -84,8 +84,50 @@ foreach ($pdo->query('SELECT name FROM users')->fetchAll() as $u) {
     }
 }
 
+// 24 saat qaydası üçün: proyekt üzrə son bitmiş tapşırıq və ən köhnə açıq tapşırıq
+$activity = $pdo->query("SELECT project,
+        MAX(CASE WHEN status = 'done' THEN done_at ELSE 0 END) AS last_done,
+        MIN(CASE WHEN status != 'done' THEN created_at ELSE NULL END) AS oldest_open,
+        SUM(CASE WHEN status != 'done' THEN 1 ELSE 0 END) AS open
+    FROM tasks GROUP BY project")->fetchAll();
+
+// MCP peykləri: hook-dan gələn mcp__server__tool çağırışları (son 30 gün) + əl ilə qeyd olunanlar
+$mu = $pdo->prepare("SELECT project, tool, COUNT(*) AS n, MAX(created_at) AS last_at FROM events
+    WHERE tool LIKE 'mcp\\_\\_%' ESCAPE '\\' AND created_at > ? GROUP BY project, tool");
+$mu->execute([$now - 30 * 86400]);
+$mcpUse = [];
+foreach ($mu->fetchAll() as $r) {
+    $parts = explode('__', $r['tool']);
+    $srv = $parts[1] ?? '';
+    if ($srv === '') {
+        continue;
+    }
+    $k = $r['project'] . "\n" . $srv;
+    $prev = $mcpUse[$k] ?? ['project' => $r['project'], 'name' => $srv, 'n' => 0, 'last_at' => 0];
+    $mcpUse[$k] = ['project' => $r['project'], 'name' => $srv, 'n' => $prev['n'] + (int)$r['n'], 'last_at' => max($prev['last_at'], (int)$r['last_at'])];
+}
+
+$mt = $pdo->prepare('SELECT id, title, agenda, starts_at, minutes, attendees, creator, created_at FROM meetings
+    WHERE starts_at > ? ORDER BY starts_at ASC LIMIT 100');
+$mt->execute([$now - 14 * 86400 - 480 * 60]);   // ifadə yox, sütunun özü müqayisə olunur (SQLite parametri mətn kimi bağlayır)
+$meetings = $mt->fetchAll();
+$posts = [];
+if ($meetings) {
+    $ids = implode(',', array_map(fn($m) => (int)$m['id'], $meetings));
+    $posts = $pdo->query("SELECT id, meeting_id, user, body, created_at FROM meeting_posts WHERE meeting_id IN ($ids) ORDER BY id ASC LIMIT 1000")->fetchAll();
+}
+
 json_out([
     'now' => $now,
+    'worlds' => $pdo->query('SELECT id, name, owner, surface, hue, ring, size, descr, created_at, updated_at FROM worlds ORDER BY id ASC')->fetchAll(),
+    'ships' => $pdo->query('SELECT user, name, model, color, accent, deadline, mission, updated_at FROM ships')->fetchAll(),
+    'mcp' => $pdo->query('SELECT id, name, project, descr, owner, created_at FROM mcp_sats ORDER BY id ASC LIMIT 200')->fetchAll(),
+    'mcp_use' => array_values($mcpUse),
+    'activity' => $activity,
+    'prompts' => $pdo->query('SELECT id, owner, title, body, tags, created_at, updated_at FROM prompts ORDER BY updated_at DESC LIMIT 300')->fetchAll(),
+    'meetings' => $meetings,
+    'tests' => $pdo->query('SELECT id, project, title, steps, status, note, creator, tested_by, tested_at, created_at, updated_at FROM tests ORDER BY id ASC LIMIT 2000')->fetchAll(),
+    'meeting_posts' => $posts,
     'sounds' => (object)$sounds,
     'messages' => $msgs,
     'plans' => $pl->fetchAll(),

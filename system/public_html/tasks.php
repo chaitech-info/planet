@@ -26,6 +26,15 @@ function load_task(PDO $pdo, $id): ?array
     $r = $st->fetch();
     return $r ?: null;
 }
+/** Son tarix (unix saniyə, 0 = yoxdur). Keçmişə bir ildən çox və gələcəyə üç ildən çox olmaz. */
+function due_in(array $in): int
+{
+    $d = (int)($in['due_at'] ?? 0);
+    if ($d !== 0 && ($d < time() - 86400 * 365 || $d > time() + 86400 * 365 * 3)) {
+        json_out(['error' => 'Son tarix düzgün deyil'], 400);
+    }
+    return $d;
+}
 function user_exists(PDO $pdo, string $name): bool
 {
     $st = $pdo->prepare('SELECT 1 FROM users WHERE name = ?');
@@ -47,13 +56,14 @@ if ($act === 'create') {
     if ($project === '' || mb_strlen($project) > 128) {
         json_out(['error' => 'Proyekt seçilməlidir'], 400);
     }
+    $due = due_in($in);
     if (!$isAdmin) {
         $assignee = $me['name'];                       // üzv yalnız özünə yaza bilər
     } elseif (!user_exists($pdo, $assignee)) {
         json_out(['error' => 'istifadəçi tapılmadı'], 404);
     }
-    $pdo->prepare("INSERT INTO tasks (project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-        ->execute([$project, $title, $details, $assignee, $me['name'], 'todo', 0, $now, $now, 0]);
+    $pdo->prepare("INSERT INTO tasks (project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at, due_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$project, $title, $details, $assignee, $me['name'], 'todo', 0, $now, $now, 0, $due]);
     if ($assignee !== $me['name']) {
         notify_later("📌 Yeni tapşırıq → $assignee\n$title\nProyekt: $project · təyin edən: " . $me['name']);
     }
@@ -82,6 +92,14 @@ if ($act === 'move') {
     } elseif ($to === 'done' && $t['status'] !== 'done') {
         notify_later("✅ Bitdi: {$t['title']}\n{$t['assignee']} · {$t['project']}");
     }
+    json_out(['ok' => true]);
+}
+
+if ($act === 'due') {
+    if (!$canMove) {
+        json_out(['error' => 'icazə yoxdur'], 403);
+    }
+    $pdo->prepare('UPDATE tasks SET due_at = ?, updated_at = ? WHERE id = ?')->execute([due_in($in), $now, $t['id']]);
     json_out(['ok' => true]);
 }
 

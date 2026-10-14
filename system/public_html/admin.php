@@ -143,7 +143,7 @@ if ($act === 'delete') {
     if ($name === $me['name'] || $role === 'admin') {
         json_out(['error' => 'Admini silmək olmaz'], 400);
     }
-    foreach (['events', 'sessions', 'commands', 'agents'] as $t) {
+    foreach (['events', 'sessions', 'commands', 'agents', 'ships'] as $t) {
         $pdo->prepare("DELETE FROM $t WHERE user = ?")->execute([$name]);
     }
     $pdo->prepare('DELETE FROM messages WHERE from_user = ? OR to_user = ?')->execute([$name, $name]);
@@ -188,7 +188,7 @@ if ($act === 'rename_project') {
         json_out(['error' => 'Bu adda proyekt artıq var'], 409);
     }
     $pdo->beginTransaction();
-    foreach (['events', 'sessions', 'commands', 'tasks', 'plans'] as $t) {
+    foreach (['events', 'sessions', 'commands', 'tasks', 'plans', 'mcp_sats', 'tests'] as $t) {
         $pdo->prepare("UPDATE $t SET project = ? WHERE project = ?")->execute([$to, $from]);
     }
     $up = $pdo->prepare('UPDATE aliases SET dst = ? WHERE dst = ?');

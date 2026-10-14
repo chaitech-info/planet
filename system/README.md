@@ -17,3 +17,21 @@ Sonra Claude Code-u yenidən başlat.
 - Dashboard prompt mətnini və əmr/fayl adlarını göstərir. Bash əmrinə parol yazma.
 - MySQL istəsən `config.php`-də `db` hissəsini dəyiş.
 - Ləğv etmək: `~/.claude/settings.json`-dan `claude-team-hook.sh` sətirlərini sil.
+
+## Lokal işə salmaq (inkişaf üçün)
+```bash
+brew install php                      # bir dəfə
+php system/dev/seed.php               # lokal SQLite bazasını nümunə məlumatla doldurur (bazanı sıfırlayır!)
+php -S 127.0.0.1:8090 -t system/public_html
+```
+Sonra http://127.0.0.1:8090 aç. Giriş: `config.php`-dəki istifadəçilər (Askar admin, Dost) və Emil; parol `config.php`-dəki `dashboard_password`-dur.
+Lokal Emil tokeni ilə hook hadisəsini əl ilə yoxlamaq: `curl -X POST http://127.0.0.1:8090/ingest.php -H 'X-Team-Token: local-dev-emil-token' -d '{"hook_event_name":"PostToolUse","session_id":"s1","cwd":"/x/flowcut","tool_name":"mcp__linear__create_issue"}'`
+
+## Kainatın yeni imkanları
+- **24 saat qaydası**: açıq tapşırığı olan planetdə 24 saat heç bir tapşırıq bitməsə planet tüstülənir (24s), yanır (~30s) və xaosa düşür (~51s+: titrəyir, partlayır). Bir tapşırığı bitirmək kifayətdir.
+- **Fərdi planetlər** (🪐 Yeni planet): ad, səth, rəng, ölçü, halqa. Planetin adı proyekt kimi işləyir, tapşırıq və plan ona yazıla bilər.
+- **MCP peykləri** (🛰): Claude Code-da `mcp__server__tool` çağırışları peyk kimi avtomatik görünür, son 10 dəqiqədə işlədilibsə yaşıl yanır; əl ilə də əlavə olunur (proyekt boş = günəşin ətrafında).
+- **Fərdi gəmi və deadline** (🚀 Gəmim): model, rənglər, deadline + missiya. 24 saatdan az qalanda miqalka yanıb-sönür, keçəndə qırmızı çaxır. Gəmi sahibinin işlədiyi planetin ətrafında uçur.
+- **Xatırlatma balonları**: tapşırığa son tarix verilə bilər; bir gündən az qalanda planetin (planet yoxdursa icraçının gəmisinin) üstündə balon çıxır.
+- **Prompt Generator, Designer, Meeting Planet**: xüsusi planetlər. Prompt yaratma və kitabxana; dizayn layihələri və tapşırıqları; görüşlər, gündəm və müzakirə (görüş vaxtı iştirakçıların gəmiləri ora uçur).
+- **Test Planet** (🧪): planetə gir, test ediləcək proyekti seç. Proyekt üzrə test ssenariləri (keçdi / xəta + qeyd), "Yeni raund" ilə sıfırlama və Claude agentinə test promptu göndərmək. Xəta varsa Test Planet qırmızı yanır, proyektin planetində "🧪 N xəta" görünür.
