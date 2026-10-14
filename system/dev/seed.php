@@ -96,4 +96,15 @@ $ts->execute(['neo', 'Skorinq A/B/C düzgün bölür', 'Nümunə leadlərlə yox
 $ts->execute(['neo', 'Dublikatlar birləşir', '', 'todo', '', 'Askar', '', 0, $now - 30 * $H, $now - 30 * $H]);
 $ts->execute(['flowcut', 'Lambda render 60 saniyədən tez bitir', '', 'pass', '', 'Emil', 'Emil', $now - 5 * $H, $now - 50 * $H, $now - 5 * $H]);
 
+// Agent Universe: agentlər və onların tapşırıqları (Askar-ın tapşırığını Emil-in agenti icra edir)
+$ag = $pdo->prepare('INSERT INTO agents (user, last_seen, claude_ok) VALUES (?,?,?)');
+$ag->execute(['Askar', $now + 3600, 1]);          // lokal demo: bir saat "onlayn" görünsün
+$ag->execute(['Emil', $now + 3600, 1]);
+$ag->execute(['Dost', $now - 5 * $H, 1]);
+$cm = $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?)');
+$cm->execute(['Askar', 'neo', 'Scoring modelini yoxla və testləri yenilə', 'done', "3 test əlavə etdim, 1 səhv düzəltdim (scoring.py:88).", $now - 2 * $H, $now - 2 * $H, $now - 2 * $H + 400]);
+$cm->execute(['Emil', 'flowcut', 'Render vaxtını ölç', 'running', '', $now - 300, $now - 280, 0]);
+$pdo->prepare('UPDATE tasks SET command_id = ? WHERE title = ?')->execute([(int)$pdo->lastInsertId(), 'Render vaxtını ölç']);
+$cm->execute(['Dost', 'sushi-date', 'Telegram botunu bərpa et', 'queued', '', $now - 600, 0, 0]);
+
 echo "Hazırdır: $file\n";
