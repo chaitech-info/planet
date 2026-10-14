@@ -3,7 +3,12 @@
 
 Saytdakı növbədən YALNIZ SƏNİN tokenin üçün göndərilən promptları götürür və
 həmin proyektin qovluğunda `claude -p` ilə işlədir. Yalnız ~/.claude-team-projects
-siyahısındakı proyektlərə icazə verilir. Fayl redaktəsi və oxuma xarakterli git əmrləri (status, log, diff, show, branch) icazəlidir, qalan terminal əmrləri yox.
+siyahısındakı proyektlərə icazə verilir. Fayl redaktəsi və git əmrləri icazəlidir (səviyyəyə görə, aşağıya bax), qalan terminal əmrləri yox.
+
+Git səviyyəsi (kompüterin sahibi seçir; CLAUDE_TEAM_GIT mühit dəyişəni və ya ~/.claude-team-agent.env faylında):
+  read  : yalnız oxuma (status, log, diff, show, branch)
+  safe  : (standart) + fetch, pull (yalnız sürətli irəli, birləşmə commit-i yox), add, commit, switch, stash
+  full  : + push, merge, checkout. Zorla push (--force) və reset --hard, clean yenə də bloklanıb.
 
 İstifadə:  python3 claude-team-agent.py          (davamlı işləyir, Ctrl+C ilə dayandır)
            python3 claude-team-agent.py --once   (bir tapşırıq götürüb çıxır)
@@ -16,11 +21,31 @@ TIMEOUT = int(os.environ.get('CLAUDE_TEAM_TIMEOUT', '1200'))  # bir tapşırıq 
 POLL = 3
 PIDFILE = os.environ.get('CLAUDE_TEAM_PID', os.path.expanduser('~/.claude-team-agent.pid'))   # ikinci (məs. lokal test) agent üçün ayrıca
 ENVFILE = os.path.expanduser('~/.claude-team-agent.env')   # ehtiyat: CLAUDE_CODE_OAUTH_TOKEN=... (chmod 600)
-# Fayl redaktəsinə əlavə: yalnız OXUMA xarakterli git əmrləri. commit, push, pull, reset, checkout və s. bloklu qalır.
+# Fayl redaktəsinə əlavə: git əmrləri (səviyyəyə görə). Dağıdıcı əmrlər (reset --hard, clean, zorla push) heç vaxt icazəli deyil.
 READONLY_GIT = ','.join([
     'Bash(git status:*)', 'Bash(git log:*)', 'Bash(git diff:*)', 'Bash(git show:*)', 'Bash(git rev-list:*)',
     'Bash(git branch)', 'Bash(git branch -a)', 'Bash(git branch -vv)', 'Bash(git branch --show-current)', 'Bash(git remote -v)',
 ])
+GIT_SAFE = ['Bash(git fetch:*)', 'Bash(git pull:*)', 'Bash(git add:*)', 'Bash(git commit:*)', 'Bash(git switch:*)',
+            'Bash(git stash)', 'Bash(git stash push:*)', 'Bash(git stash pop)', 'Bash(git stash list)']
+GIT_FULL = ['Bash(git push:*)', 'Bash(git merge:*)', 'Bash(git checkout:*)']
+GIT_DENY = ','.join(['Bash(git push --force:*)', 'Bash(git push -f:*)', 'Bash(git push --force-with-lease:*)', 'Bash(git reset --hard:*)', 'Bash(git clean:*)',
+                     'Bash(git push --delete:*)', 'Bash(git branch -D:*)', 'Bash(git checkout -- :*)'])
+
+
+def git_level():
+    v = (os.environ.get('CLAUDE_TEAM_GIT') or load_env().get('CLAUDE_TEAM_GIT') or 'safe').strip().lower()
+    return v if v in ('read', 'safe', 'full') else 'safe'
+
+
+def allowed_tools():
+    lv = git_level()
+    return ','.join([READONLY_GIT] + (GIT_SAFE if lv in ('safe', 'full') else []) + (GIT_FULL if lv == 'full' else []))
+
+
+def git_env():
+    """git pull həmişə yalnız sürətli irəli (fast-forward) olsun: birləşmə commit-i və ya rebase yaranmasın."""
+    return {'GIT_CONFIG_COUNT': '2', 'GIT_CONFIG_KEY_0': 'pull.ff', 'GIT_CONFIG_VALUE_0': 'only', 'GIT_CONFIG_KEY_1': 'pull.rebase', 'GIT_CONFIG_VALUE_1': 'false'}
 
 
 def read_conf():
@@ -45,7 +70,7 @@ def load_env():
                 line = line.strip()
                 if '=' in line and not line.startswith('#'):
                     k, v = line.split('=', 1)
-                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY'):
+                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT'):
                         out[k.strip()] = v.strip().strip('"\'')
     except FileNotFoundError:
         pass
@@ -132,7 +157,7 @@ def sess_save(d):
 
 def exec_claude(base, token, args, cmd, path):
     """Bir claude prosesini işlədir; "Dayandır" və vaxt limiti izlənir. Qaytarır: (out, err, returncode) və ya (None, mesaj, 'end')."""
-    env = {**os.environ, **load_env(), 'CLAUDE_TEAM_RUN': str(cmd['id'])}
+    env = {**os.environ, **load_env(), **git_env(), 'CLAUDE_TEAM_RUN': str(cmd['id'])}
     try:
         proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=path, env=env,
                                 start_new_session=True)
@@ -183,7 +208,7 @@ def run_claude(base, token, claude, cmd, path):
     key = path + '|' + (cmd.get('creator') or '')
     store = sess_load()
     sid = None if cmd.get('fresh') else (store.get(key) or {}).get('sid')
-    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', READONLY_GIT]
+    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY]
     out, err, rc = exec_claude(base, token, base_args + (['--resume', sid] if sid else []), cmd, path)
     if rc == 'end':
         return err, 'failed'
