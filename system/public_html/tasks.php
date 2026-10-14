@@ -65,10 +65,13 @@ if ($act === 'create') {
     }
     $pdo->prepare("INSERT INTO tasks (project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at, due_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
         ->execute([$project, $title, $details, $assignee, $me['name'], 'todo', 0, $now, $now, 0, $due]);
+    $id = (int)$pdo->lastInsertId();
+    // agentlər lövhəni özləri işləsin: icraçının agenti varsa tapşırıq dərhal ona gedir
+    $cid = auto_run_task($pdo, ['id' => $id, 'project' => $project, 'title' => $title, 'details' => $details, 'assignee' => $assignee, 'status' => 'todo'], $now);
     if ($assignee !== $me['name']) {
-        notify_later("📌 Yeni tapşırıq → $assignee\n$title\nProyekt: $project · təyin edən: " . $me['name']);
+        notify_later("📌 Yeni tapşırıq → $assignee\n$title\nProyekt: $project · təyin edən: " . $me['name'] . ($cid ? "\n🤖 $assignee-in agentinə avtomatik göndərildi" : ''));
     }
-    json_out(['ok' => true, 'id' => (int)$pdo->lastInsertId()]);
+    json_out(['ok' => true, 'id' => $id, 'auto' => $cid !== null, 'command_id' => $cid]);
 }
 
 $t = load_task($pdo, $in['id'] ?? 0);
@@ -119,7 +122,9 @@ if ($act === 'update') {
     }
     $pdo->prepare('UPDATE tasks SET title = ?, details = ?, assignee = ?, updated_at = ? WHERE id = ?')
         ->execute([$title, $details, $assignee, $now, $t['id']]);
-    json_out(['ok' => true]);
+    // başqasına verildisə və hələ gözləyirsə: yeni icraçının agentinə avtomatik gedir
+    $cid = $assignee !== $t['assignee'] ? auto_run_task($pdo, array_merge($t, ['title' => $title, 'details' => $details, 'assignee' => $assignee]), $now) : null;
+    json_out(['ok' => true, 'auto' => $cid !== null]);
 }
 
 if ($act === 'delete') {

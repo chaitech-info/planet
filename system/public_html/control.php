@@ -49,4 +49,18 @@ if ($act === 'stop_command') {
     json_out(['ok' => true]);
 }
 
+if ($act === 'agent_auto') {               // mənim agentim lövhə tapşırıqlarını avtomatik götürsünmü?
+    $on = !empty($in['on']) && $in['on'] !== 'false' ? 1 : 0;
+    $st = $pdo->prepare('UPDATE agents SET auto_tasks = ? WHERE user = ?');
+    $st->execute([$on, $me['name']]);
+    if ($st->rowCount() === 0) {
+        $has = $pdo->prepare('SELECT 1 FROM agents WHERE user = ?');
+        $has->execute([$me['name']]);
+        if (!$has->fetchColumn()) {
+            json_out(['error' => 'Agentin hələ heç qoşulmayıb: kompüterində agenti bir dəfə işə sal, sonra bu ayarı dəyiş.'], 409);
+        }
+    }
+    json_out(['ok' => true, 'on' => $on === 1]);
+}
+
 json_out(['error' => 'naməlum əməliyyat'], 400);

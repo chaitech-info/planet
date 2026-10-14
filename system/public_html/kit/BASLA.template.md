@@ -68,7 +68,8 @@ Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ 
 
 Panelin **Lövhə** tabında komandanın tapşırıqları var (Gözləyir → İşləyir → Yoxlamada → Bitdi). Admin sənə tapşırıq təyin edəndə **Lövhə** tabının yanında rəqəm görünür. Sən özün də özünə tapşırıq yarada bilərsən.
 
-- Tapşırıq kartındakı **"▶ Claude ilə"** düyməsi tapşırığın mətnini avtomatik olaraq **öz agentinə** prompt kimi göndərir (agent onlayn olmalıdır, token bir dəfə daxil edilir).
+- **Avtomatik lövhə:** sənə təyin olunan tapşırıq (proyekt kompüterində qurulubsa) dərhal **öz agentinə** gedir, agent bitirəndə tapşırıq "Yoxlamada"ya düşür, alınmasa "Gözləyir"ə qayıdır. Agent oflayndırsa tapşırıq növbədə gözləyir. Söndürmək: Agent Universe-də öz agent planetin → "Lövhə avtomatikdir" → Söndür.
+- Tapşırıq kartındakı **"▶ Claude ilə"** düyməsi tapşırığı əl ilə **öz agentinə** göndərir (avtomatik getməyibsə və ya yenidən göndərmək üçün; token bir dəfə daxil edilir).
 - Claude işi bitirəndə tapşırıq özü **"Yoxlamada"** sütununa keçir və nəticə kartda görünür. Nəticəyə baxıb **"Bitdi"** düyməsini sən basırsan.
 - Başqasının tapşırığını görə bilərsən, amma onu yalnız tapşırığın sahibi, təyin edən və admin hərəkət etdirə bilər.
 
