@@ -541,7 +541,9 @@ body.v-space::before { display: none; }
 .tcard .tt { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
 .tcard .tm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
 .tcard .tp { background: var(--line); color: var(--text); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
-.tcard .tdesc { font-size: 13px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+.tcard .tdesc { font-size: 13px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; }
+.tcard .tdesc.open { -webkit-line-clamp: unset; display: block; }
+.tcard .tcmd summary .dot { width: 7px; height: 7px; }
 .tcard .tcmd { margin-top: 8px; font-size: 12.5px; } .tcard .tcmd summary { cursor: pointer; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .tcard .tcmd pre { margin: 6px 0 0; padding: 8px; border-radius: 8px; background: rgba(0,0,0,.25); font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; color: var(--text); }
 .tcard .tact { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; } .tcard .tact .gbtn { padding: 4px 10px; font-size: 12.5px; }
@@ -2193,10 +2195,12 @@ function makeTask() {
   const n = el('div', 'tcard');
   const tt = el('div', 'tt'), tm = el('div', 'tm'), tp = el('span', 'tp'), who = el('span'), age = el('span'), due = el('span', 'tdue');
   tm.append(tp, who, age, due);
-  const desc = el('div', 'tdesc'), cmd = el('details', 'tcmd'), sm = el('summary'), pre = el('pre'); cmd.append(sm, pre);
+  const desc = el('div', 'tdesc'), cmd = el('details', 'tcmd'), sm = el('summary'), dot = el('span', 'dot'), sl = el('span'), pre = el('pre');
+  sm.append(dot, sl); cmd.append(sm, pre);
+  desc.title = 'Tam mətn üçün klik et'; desc.onclick = () => desc.classList.toggle('open');   // 3 sətirdən uzun təsvir: klik ilə açılır
   const act = el('div', 'tact');
   n.append(tt, tm, desc, cmd, act);
-  n._r = { tt, tp, who, age, due, desc, cmd, sm, pre, act, sig: '' };
+  n._r = { tt, tp, who, age, due, desc, cmd, sm, dot, sl, pre, act, sig: '' };
   return n;
 }
 /** Tapşırıq kartını yeniləyir (lövhədə və Designer planetində) */
@@ -2208,9 +2212,15 @@ function updTask(n, t) {
   setText(r.desc, t.details || ''); r.desc.hidden = !t.details;
   const cm = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
   r.cmd.hidden = !cm;
-  if (cm) {
-    const [lbl] = CMD_ST[cm.status] || [cm.status];
-    setText(r.sm, 'Claude: ' + lbl); setText(r.pre, cm.result || (cm.status === 'queued' ? 'Agent götürənə qədər növbədə gözləyir…' : cm.status === 'running' ? 'İşləyir…' : ''));
+  if (cm) {                                                     // Claude Code-un bu tapşırıq üzrə vəziyyəti (agent onlayndırmı da görünür)
+    const [, dc] = CMD_ST[cm.status] || [cm.status, 'offline'], ag = agentInfo(t.assignee);
+    const txt = cm.status === 'queued' ? (ag.online ? 'Claude: növbədə, indi başlayır…' : 'Claude: növbədə · agent oflayndır') :
+      cm.status === 'running' ? 'Claude: işləyir · ' + ago(cm.started_at) :
+      cm.status === 'done' ? 'Claude: bitdi · ' + ago(cm.finished_at) :
+      cm.status === 'failed' ? 'Claude: xəta · ' + ago(cm.finished_at) :
+      cm.status === 'canceled' ? 'Claude: dayandırıldı' : 'Claude: ' + (CMD_ST[cm.status] || [cm.status])[0];
+    setCls(r.dot, 'dot ' + dc); setText(r.sl, txt);
+    setText(r.pre, cm.result || (cm.status === 'queued' ? (ag.online ? 'Agent indi götürür…' : t.assignee + '-in agenti oflayndır: kompüterində agent işə düşəndə başlayacaq.') : cm.status === 'running' ? 'İşləyir, nəticə bitəndə burada görünəcək…' : ''));
     if ((cm.status === 'done' || cm.status === 'failed') && !r.cmd._o) { r.cmd._o = true; r.cmd.open = cm.status === 'failed'; }
   }
   const btns = taskButtons(t), sig = t.status + '|' + btns.map(b => b[0]).join(',') + '|' + (ME ? ME.name : '');
@@ -2222,8 +2232,10 @@ function taskButtons(t) {
   const mine = ME && t.assignee === ME.name, admin = ME && ME.role === 'admin', creator = ME && t.creator === ME.name;
   const canMove = mine || admin || creator, canEdit = admin || creator, B = [];
   const mv = (label, to, cls) => B.push([label, cls || '', async () => { const { status, d } = await TSK('move', { id: t.id, status: to }); if (status !== 200) bmsg(d.error || 'Alınmadı'); load(); }]);
-  if (mine && (t.status === 'todo' || t.status === 'doing')) {
-    B.push(['▶ Claude ilə', 'go', async () => {
+  const cmNow = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
+  const busy = cmNow && ['pending', 'queued', 'running'].includes(cmNow.status);   // artıq göndərilib: ikinci dəfə göndərmə düyməsi lazım deyil
+  if (mine && (t.status === 'todo' || t.status === 'doing') && !busy) {
+    B.push([agentInfo(t.assignee).online ? '▶ Claude ilə' : '▶ Claude ilə (agent oflayn)', 'go', async () => {
       if (!getTok() || !myName) { $('btoken').hidden = false; $('btok-in').focus(); return; }
       const { status, d } = await cmdApi('run_task', { task_id: t.id });
       if (status !== 200) bmsg(d.error || 'Göndərmək alınmadı'); else bmsg('');
@@ -2232,9 +2244,9 @@ function taskButtons(t) {
   }
   if (canMove && t.status === 'todo') mv('Başla', 'doing');
   if (canMove && t.status === 'doing') mv('Yoxlamaya ver', 'review');
-  if (canMove && t.status === 'doing') B.push(['Dayandır', 'danger', async () => {
+  if (canMove && t.status === 'doing') B.push([busy ? (cmNow.status === 'running' ? '■ Claude-u dayandır' : '✕ Növbədən çıxar') : 'Dayandır', 'danger', async () => {
     const cm = (data.commands || []).find(x => +x.id === +t.command_id);
-    if (cm && (cm.status === 'running' || cm.status === 'queued')) await CTL('stop_command', { id: cm.id });
+    if (cm && ['pending', 'queued', 'running'].includes(cm.status)) await CTL('stop_command', { id: cm.id });
     else { const { status, d } = await TSK('move', { id: t.id, status: 'todo' }); if (status !== 200) bmsg(d.error || 'Alınmadı'); }
     load();
   }]);
