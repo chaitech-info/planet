@@ -631,7 +631,7 @@ body.v-space::before { display: none; }
 .dock.noproj .dtabs, .dock.noproj #pane-send, .dock.noproj #pane-live { display: none; }
 /* Student yalnız öz universini görür: komanda bölmələri gizlidir (server də bağlayır) */
 body.student #tab-panel, body.student #tab-board, body.student #b-plan, body.student #b-msg, body.student #b-rep,
-body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { display: none; }
+body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body.student #rd-btn { display: none; }
 .dinfo { display: grid; gap: 8px; margin: 10px 0 4px; }
 .dinfo:empty { display: none; }
 .burnbox { padding: 9px 12px; border-radius: 12px; font-size: 13px; background: rgba(251,146,60,.12); border: 1px solid rgba(251,146,60,.4); color: #fed7aa; }
@@ -3512,6 +3512,7 @@ route();
 if (window.Kainat) initGL();
 </script>
 <script src="jarvis.js?v=<?= (int)@filemtime(__DIR__ . '/jarvis.js') ?>"></script>
+<script src="radio.js?v=<?= (int)@filemtime(__DIR__ . '/radio.js') ?>"></script>
 <?php endif; ?>
 </div>
 </body>
