@@ -52,7 +52,7 @@ foreach ($cmds as &$c) {
     $c['result'] = mb_substr($c['result'], 0, 3000);
 }
 unset($c);
-$agents = $pdo->query('SELECT user, last_seen, claude_ok FROM agents')->fetchAll();
+$agents = $pdo->query('SELECT user, last_seen, claude_ok, projects FROM agents')->fetchAll();
 
 $tk = $pdo->prepare("SELECT id, project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at, due_at
     FROM tasks WHERE status != 'done' OR updated_at > ? ORDER BY updated_at DESC LIMIT 300");

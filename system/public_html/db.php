@@ -68,6 +68,11 @@ function db(): PDO
     } catch (Throwable $e) {
         // sütun artıq var
     }
+    try {
+        $pdo->exec("ALTER TABLE agents ADD COLUMN projects TEXT NOT NULL DEFAULT ''");   // agentin icazəli proyekt qovluqları (ping ilə gəlir)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS users (
         name VARCHAR(64) NOT NULL PRIMARY KEY,
         token_hash VARCHAR(64) NOT NULL,

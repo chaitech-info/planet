@@ -142,7 +142,7 @@
         my_open_tasks: (data.tasks || []).filter(x => x.assignee === ME.name && x.status !== 'done').map(x => ({ title: x.title, project: x.project, status: x.status, due: dueInfo(x) ? dueInfo(x).text : null })),
         overdue_tasks: (data.tasks || []).filter(x => dueInfo(x) && dueInfo(x).left < 0).map(x => ({ title: x.title, assignee: x.assignee, project: x.project })),
         meetings: (data.meetings || []).filter(m => +m.starts_at + m.minutes * 60 > t).slice(0, 5).map(m => ({ title: m.title, start: when(m.starts_at), minutes: +m.minutes, live: +m.starts_at <= t, attendees: m.attendees })),
-        agents: (data.users || []).map(u => { const a = agentInfo(u); return { user: u, online: a.online, running: a.run.length, queued: a.queued.length }; }),
+        agents: (data.users || []).map(u => { const a = agentInfo(u); return { user: u, online: a.online, running: a.run.length, queued: a.queued.length, projects: a.ag && a.ag.projects ? a.ag.projects.split('\n').filter(Boolean) : [] }; }),
         ship_deadlines: (data.ships || []).filter(s => +s.deadline).map(s => ({ user: s.user, mission: s.mission, due: when(s.deadline), overdue: s.deadline < t })),
       };
     },

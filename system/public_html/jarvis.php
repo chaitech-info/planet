@@ -62,6 +62,22 @@ if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude 
     if ($prompt === '' || mb_strlen($prompt) > 4000) {
         json_out(['error' => 'prompt 1-4000 simvol olmalıdır'], 400);
     }
+    $ag = $pdo->prepare('SELECT last_seen, claude_ok, projects FROM agents WHERE user = ?');
+    $ag->execute([$me['name']]);
+    $a = $ag->fetch();
+    if (!$a) {
+        json_out(['error' => 'Bu istifadəçinin Claude Code agenti hələ heç qoşulmayıb. Kompüterdə agenti işə sal (📦 Paket → BASLA.md).'], 409);
+    }
+    $allowed = array_values(array_filter(explode("\n", (string)$a['projects']), 'strlen'));
+    if ($allowed) {                       // agent qovluq siyahısını bildiribsə: yalnız onlarda işləyə bilər (qovluq adı → panel adı alias-ları da)
+        $names = [$project];
+        $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');
+        $al->execute([$project]);
+        $names = array_merge($names, $al->fetchAll(PDO::FETCH_COLUMN));
+        if (!array_intersect($names, $allowed)) {
+            json_out(['error' => "Claude Code-un bu kompüterdə \"$project\" üçün qovluğu yoxdur (bu planet kod proyekti deyil və ya agentə əlavə olunmayıb). İcazəli proyektlər: " . implode(', ', $allowed) . '.', 'allowed' => $allowed], 409);
+        }
+    }
     $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('queued','running')");
     $c->execute([$me['name']]);
     if ((int)$c->fetchColumn() >= 5) {
@@ -70,10 +86,7 @@ if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude 
     $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?)")
         ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0]);
     $id = (int)$pdo->lastInsertId();
-    $ag = $pdo->prepare('SELECT last_seen, claude_ok FROM agents WHERE user = ?');
-    $ag->execute([$me['name']]);
-    $a = $ag->fetch();
-    json_out(['ok' => true, 'id' => $id, 'agent_online' => $a && $now - (int)$a['last_seen'] < 20, 'claude_login' => $a ? (bool)$a['claude_ok'] : null]);
+    json_out(['ok' => true, 'id' => $id, 'agent_online' => $now - (int)$a['last_seen'] < 20, 'claude_login' => (bool)$a['claude_ok'], 'allowed' => $allowed]);
 }
 
 if ($act !== 'session') {
@@ -117,7 +130,7 @@ $tools = [
         'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('project name'), 'test' => $S('test case title'), 'result' => ['type' => 'STRING', 'enum' => ['pass', 'fail', 'todo']], 'note' => $S('what went wrong (for fail)'), 'confirmed' => $confirm], 'required' => ['project', 'test', 'result', 'confirmed']]],
     ['name' => 'send_message', 'description' => 'Send a short message to a teammate (or "all"); it flies as a rocket in the space view.',
         'parameters' => ['type' => 'OBJECT', 'properties' => ['to' => $S('user name or "all"'), 'text' => $S('message text, max 500 chars'), 'confirmed' => $confirm], 'required' => ['to', 'text', 'confirmed']]],
-    ['name' => 'run_claude_code', 'description' => "Give a work task to Claude Code, the AI coding agent connected to this dashboard, which runs on the user's computer inside the project folder. Use it for ANY real work: writing or changing code, fixing bugs, adding tests, reviewing code, analysing the repository, explaining how something works in the code, writing docs. It runs in the background; you will get a note when it finishes.",
+    ['name' => 'run_claude_code', 'description' => "Give a work task to Claude Code, the AI coding agent connected to this dashboard, which runs on the user's computer inside the project folder. Use it for ANY real work: writing or changing code, fixing bugs, adding tests, reviewing code, analysing the repository, explaining how something works in the code, writing docs. It runs in the background; you will get a note when it finishes. It can only work in projects that have a folder on the user's computer (see agents[].projects in get_overview); Studio planets such as Designer are not code folders.",
         'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('project name; omit to use the planet the user is looking at'), 'prompt' => $S('complete, self-contained instruction for Claude Code in English or Azerbaijani: goal, relevant details from the conversation, and what to report back'), 'confirmed' => $confirm], 'required' => ['prompt', 'confirmed']]],
     ['name' => 'get_claude_tasks', 'description' => 'Recent Claude Code tasks of the current user with status (queued/running/done/failed) and results.',
         'parameters' => ['type' => 'OBJECT', 'properties' => ['project' => $S('optional project filter')]]],

@@ -188,7 +188,7 @@ def main():
             if time.time() - last_auth > 20:
                 last_auth = time.time()
                 logged_in = auth_ok(claude)
-                call(base, token, 'ping', {'claude_ok': logged_in})
+                call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects())})
                 if not logged_in and not warned:
                     warned = True
                     print('Claude girişi yoxdur: tapşırıq götürülmür. Terminalda `~/.local/bin/claude` yaz və /login et.', flush=True)
