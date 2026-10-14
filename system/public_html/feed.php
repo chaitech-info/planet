@@ -21,6 +21,50 @@ if ($pr->rowCount() === 0) {
     }
 }
 
+// İstifadəçi musiqisi: öz yüklədiyi, yoxdursa köhnə standart media/<ad>.mp3
+function user_sound(string $n): ?string
+{
+    $cand = ['media/u/' . substr(hash('sha256', $n), 0, 16) . '.mp3', 'media/' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $n)) . '.mp3'];
+    foreach ($cand as $rel) {
+        if ($rel !== 'media/.mp3' && is_file(__DIR__ . '/' . $rel)) {
+            return $rel . '?v=' . (int)filemtime(__DIR__ . '/' . $rel);
+        }
+    }
+    return null;
+}
+
+$students = student_names($pdo);
+
+// Student yalnız Student universini görür: studentlərin planetləri, gəmiləri və onlayn olmaları; komandanın heç nəyi
+if (is_student($me)) {
+    ensure_student_planet($pdo, $me['name']);
+    $in =$students ? implode(',', array_fill(0, count($students), '?')) : "''";
+    $q = function (string $sql) use ($pdo, $students) {
+        $st = $pdo->prepare($sql);
+        $st->execute($students);
+        return $st->fetchAll();
+    };
+    $sounds = [];
+    foreach ($students as $n) {
+        if ($s = user_sound($n)) {
+            $sounds[$n] = $s;
+        }
+    }
+    json_out([
+        'now' => $now,
+        'me' => $me,
+        'users' => $students,
+        'students' => $students,
+        'worlds' => $q("SELECT id, name, owner, surface, hue, ring, size, descr, created_at, updated_at FROM worlds WHERE owner IN ($in) ORDER BY id ASC"),
+        'ships' => $q("SELECT user, name, model, color, accent, deadline, mission, updated_at FROM ships WHERE user IN ($in)"),
+        'presence' => $q("SELECT user, last_seen FROM presence WHERE user IN ($in)"),
+        'sounds' => (object)$sounds,
+        'mcp' => [], 'mcp_use' => [], 'activity' => [], 'prompts' => [], 'meetings' => [], 'tests' => [], 'meeting_posts' => [],
+        'messages' => [], 'plans' => [], 'alerts' => [], 'tasks' => [], 'commands' => [], 'agents' => [],
+        'sessions' => [], 'projects' => [], 'events' => [],
+    ]);
+}
+
 $sessions = $pdo->prepare('SELECT user, session_id, project, status, last_prompt, last_summary, edits, tool_count, started_at, updated_at
     FROM sessions WHERE updated_at > ? ORDER BY updated_at DESC LIMIT 100');
 $sessions->execute([$now - 86400]);
@@ -77,16 +121,10 @@ $pl = $pdo->prepare("SELECT id, project, kind, title, details, status, creator, 
     WHERE status != 'done' OR updated_at > ? ORDER BY id ASC LIMIT 600");
 $pl->execute([$now - 14 * 86400]);
 
-// İstifadəçi musiqiləri: öz yüklədiyi, yoxdursa köhnə standart media/<ad>.mp3
 $sounds = [];
-foreach ($pdo->query('SELECT name FROM users')->fetchAll() as $u) {
-    $n = $u['name'];
-    $cand = ['media/u/' . substr(hash('sha256', $n), 0, 16) . '.mp3', 'media/' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $n)) . '.mp3'];
-    foreach ($cand as $rel) {
-        if ($rel !== 'media/.mp3' && is_file(__DIR__ . '/' . $rel)) {
-            $sounds[$n] = $rel . '?v=' . (int)filemtime(__DIR__ . '/' . $rel);
-            break;
-        }
+foreach ($pdo->query('SELECT name FROM users')->fetchAll(PDO::FETCH_COLUMN) as $n) {
+    if ($s = user_sound($n)) {
+        $sounds[$n] = $s;
     }
 }
 
@@ -143,7 +181,9 @@ json_out([
     'commands' => $cmds,
     'agents' => $agents,
     'me' => $me,
-    'users' => array_column($pdo->query('SELECT name FROM users ORDER BY name')->fetchAll(), 'name'),
+    // users = komanda (tapşırıq, mesaj, agent siyahıları üçün); studentlər ayrıca
+    'users' => $pdo->query("SELECT name FROM users WHERE role != 'student' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN),
+    'students' => $students,
     'sessions' => $sessions->fetchAll(),
     'projects' => $projects->fetchAll(),
     'events' => $events,

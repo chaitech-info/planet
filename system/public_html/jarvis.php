@@ -9,6 +9,7 @@ $me = session_user();
 if ($me === null) {
     json_out(['error' => 'giriş lazımdır'], 401);
 }
+deny_student($me);
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'fetch') {
     json_out(['error' => 'yanlış sorğu'], 400);
 }

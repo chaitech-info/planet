@@ -247,10 +247,55 @@ function token_user(): ?string
     if ($t === '') {
         return null;
     }
-    $st = db()->prepare('SELECT name FROM users WHERE token_hash = ?');
+    // studentlər hook/agent işlətmir: onların hadisələri komanda kainatına düşməsin
+    $st = db()->prepare("SELECT name FROM users WHERE token_hash = ? AND role != 'student'");
     $st->execute([hash('sha256', $t)]);
     $n = $st->fetchColumn();
     return $n === false ? null : (string)$n;
+}
+
+/* ---------- Studentlər: ayrıca univers, yalnız öz universlərini görürlər ---------- */
+function is_student(?array $me): bool
+{
+    return $me !== null && $me['role'] === 'student';
+}
+
+/** Komanda hissələri (tapşırıq, plan, mesaj, agent və s.) studentlərə bağlıdır */
+function deny_student(?array $me): void
+{
+    if (is_student($me)) {
+        json_out(['error' => 'Bu bölmə studentlər üçün bağlıdır'], 403);
+    }
+}
+
+function student_names(PDO $pdo): array
+{
+    return $pdo->query("SELECT name FROM users WHERE role = 'student' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/** Hər studentin öz planeti olur (yoxdursa yaradılır, adı studentin adıdır). Planetin id-sini qaytarır. */
+function ensure_student_planet(PDO $pdo, string $name): int
+{
+    $st = $pdo->prepare('SELECT id FROM worlds WHERE owner = ? ORDER BY id ASC LIMIT 1');
+    $st->execute([$name]);
+    $id = $st->fetchColumn();
+    if ($id !== false) {
+        return (int)$id;
+    }
+    $dup = $pdo->prepare('SELECT 1 FROM worlds WHERE LOWER(name) = LOWER(?)');
+    $pname = $name;
+    for ($i = 2; ; $i++) {
+        $dup->execute([$pname]);
+        if (!$dup->fetchColumn()) {
+            break;
+        }
+        $pname = $name . ' ' . $i;
+    }
+    $h = hexdec(substr(hash('sha256', $name), 0, 6));
+    $now = time();
+    $pdo->prepare('INSERT INTO worlds (name, owner, surface, hue, ring, size, descr, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)')
+        ->execute([$pname, $name, $h % 6, $h % 360, ($h >> 8) % 2, 2, '', $now, $now]);
+    return (int)$pdo->lastInsertId();
 }
 
 function auth_boot(): void

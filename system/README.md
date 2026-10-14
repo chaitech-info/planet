@@ -43,6 +43,7 @@ Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun
 - **🎨 Studio**: Prompt Generator, Designer, Meeting Planet, Test Planet.
 - **🛰 MCP Universe**: hər MCP server bir planetdir (ayları onu işlədən proyektlərdir); paneldə proyektlər və son çağırışlar.
 - **🤖 Agent Universe**: hər istifadəçinin AI agenti bir planetdir (onlayn/işləyir/növbə); yeni tapşırıq agentə raketlə çatır (başqası təyin edibsə, onun agentindən), paneldə avtomatlaşdırma axını.
+- **🎓 Student Universe**: admin "İstifadəçilər" pəncərəsində yeni istifadəçi yaradanda tipi seçir (Üzv / Student). Hər studentə avtomatik öz planeti yaranır; "🪐 Planetim" ilə onu fərdiləşdirir (ad, səth, rəng, ölçü, halqa), silə və yeni planet yarada bilməz. Student yalnız Student universini görür: komanda universləri, panel, lövhə, tapşırıq, plan, mesaj, hesabat, agent və Jarvis ona həm interfeysdə, həm serverdə bağlıdır; studentin tokeni hook/agent üçün işləmir.
 Gəmilər hər biri öz trayektoriyası ilə uçur; sahibi işləyəndə öz proyektinin, boş vaxtda (agent onlayndırsa) öz agentinin ətrafında olur və arabir başqa universlərdəki planetlərə uçur.
 URL-lər: `#kainat` (xəritə), `#kainat/@mcp` (universin ümumi görünüşü), `#kainat/<planet>` (planet).
 
