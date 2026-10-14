@@ -306,7 +306,7 @@ def main():
     print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}', flush=True)
     while True:
         try:
-            if time.time() - last_auth > 20:
+            if time.time() - last_auth > 10:                   # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
                 last_auth = time.time()
                 logged_in = auth_ok(claude)
                 call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects())})

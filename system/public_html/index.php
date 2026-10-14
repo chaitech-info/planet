@@ -1452,6 +1452,7 @@ async function identify() {
   if (!getTok()) { myName = null; return; }
   try { const { status, d } = await cmdApi('whoami'); myName = status === 200 ? d.user : null; } catch (e) { myName = null; }
 }
+const AGENT_TTL = 30;   // agent bu qədər saniyə səs verməyibsə oflayn sayılır (agent 10 san-dan bir ping edir, tapşırıq icrasında 3 san-dan bir poll)
 const CMD_ST = { pending: ['təsdiq gözləyir', 'waiting'], queued: ['növbədə', 'offline'], running: ['işləyir', 'working'], done: ['bitdi', 'idle'], failed: ['xəta', 'waiting'], canceled: ['ləğv edildi', 'offline'] };
 function makeCmd() {
   const n = el('div', 'card cmdc');
@@ -1474,7 +1475,7 @@ function renderCmd() {
       w.dataset.n = myName; w.replaceChildren(document.createTextNode(myName + ' kompüterinə · '), Object.assign(el('a', null, 'tokeni sil'), { onclick: () => { setTok(''); myName = null; renderCmd(); } }));
     }
     const ag = (data.agents || []).find(a => a.user === myName);
-    const live = ag && now() - ag.last_seen < 20;
+    const live = ag && now() - ag.last_seen < AGENT_TTL;
     const s = $('agentst'); setCls(s, 'agentst' + (live ? ' on' : ''));
     s.replaceChildren(el('i'), document.createTextNode(live ? 'agent onlayn' : 'agent oflayn'));
     s.title = live ? '' : 'Kompüterində işlət: python3 agent/claude-team-agent.py';
@@ -1803,7 +1804,7 @@ async function admRefresh() {
   for (const u of d.users) {
     const row = el('div', 'urow');
     row.append(el('span', 'un', u.name), el('span', 'ur', u.role === 'admin' ? 'admin' : u.role === 'student' ? '🎓 student' : 'üzv'));
-    const live = u.agent_seen && d.now - u.agent_seen < 20;
+    const live = u.agent_seen && d.now - u.agent_seen < AGENT_TTL;
     const st = el('span', 'us'); st.append(el('span', 'dot ' + (live ? 'idle' : '')), document.createTextNode(live ? 'agent onlayn' : u.agent_seen ? 'agent oflayn' : 'agent heç qoşulmayıb'));
     row.append(st);
     const rs = el('button', 'gbtn', 'Token/parol yenilə');
@@ -2510,7 +2511,7 @@ function mcpList() {
 }
 function agentInfo(u) {
   const ag = (data.agents || []).find(a => a.user === u);
-  const online = !!(ag && now() - ag.last_seen < 20);
+  const online = !!(ag && now() - ag.last_seen < AGENT_TTL);
   const cm = (data.commands || []).filter(c => c.user === u);
   return { ag, online, cm, run: cm.filter(c => c.status === 'running'), queued: cm.filter(c => c.status === 'queued'), login: !ag || +ag.claude_ok === 1 };
 }
@@ -2843,7 +2844,8 @@ function renderAgentPlanet(u) {
     const [lbl] = CMD_ST[c.status] || [c.status];
     const row = el('div', 'prow'), t = (data.tasks || []).find(x => +x.command_id === +c.id);
     row.dataset.s = c.status === 'done' ? 'pass' : c.status === 'failed' ? 'fail' : '';
-    row.append(el('div', 'pt', c.prompt.split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + lbl + ' · ' + ago(c.created_at) + (t && t.creator !== u ? ' · ' + t.creator + ' → ' + u : '')));
+    const rem = c.creator && c.creator !== u;                      // Desktop Universe-dən uzaqdan göndərilib
+    row.append(el('div', 'pt', xdPrompt(c).split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + lbl + ' · ' + ago(c.created_at) + (rem ? ' · 🖥 ' + c.creator + ' → ' + u : t && t.creator !== u ? ' · ' + t.creator + ' → ' + u : '')));
     { const pbx = promptBox(c); if (pbx) row.append(pbx); const ib = imgStrip(c); if (ib) row.append(ib); }
     if (c.result) row.append(resultBox(c.result, c.id));
     if ((mine || admin) && (c.status === 'running' || c.status === 'queued')) { const pa = el('div', 'pa'), st = el('button', 'gbtn danger', 'Dayandır'); st.onclick = async () => { await CTL('stop_command', { id: c.id }); load(); }; pa.append(st); row.append(pa); }
