@@ -104,15 +104,40 @@ def kill_group(proc):
             time.sleep(.1)
 
 
-def run_claude(base, token, claude, cmd, path):
-    """claude -p işlədir; sayt "Dayandır" göndərsə (hər 3 san yoxlanır) prosesi öldürür."""
+SESSIONS = os.path.expanduser('~/.claude-team-sessions.json')   # proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
+SESSION_TTL = 24 * 3600
+
+
+def sess_load():
+    try:
+        with open(SESSIONS, encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:  # noqa
+        return {}
+
+
+def sess_save(d):
+    try:
+        now = time.time()
+        d = {k: v for k, v in d.items() if now - v.get('ts', 0) < SESSION_TTL}
+        tmp = SESSIONS + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(d, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, SESSIONS)
+    except Exception:  # noqa
+        pass
+
+
+def exec_claude(base, token, args, cmd, path):
+    """Bir claude prosesini işlədir; "Dayandır" və vaxt limiti izlənir. Qaytarır: (out, err, returncode) və ya (None, mesaj, 'end')."""
     env = {**os.environ, **load_env(), 'CLAUDE_TEAM_RUN': str(cmd['id'])}
     try:
-        proc = subprocess.Popen([claude, '-p', '--permission-mode', 'acceptEdits', '--allowedTools', READONLY_GIT],
-                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=path, env=env,
+        proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd=path, env=env,
                                 start_new_session=True)
     except Exception as e:  # noqa
-        return f'Agent xətası: {e}', 'failed'
+        return None, f'Agent xətası: {e}', 'end'
     box = {}
 
     def work():
@@ -128,19 +153,56 @@ def run_claude(base, token, claude, cmd, path):
         now = time.time()
         if now - t0 > TIMEOUT:
             kill_group(proc); th.join(5)
-            return f'Vaxt bitdi ({TIMEOUT} san).', 'failed'
+            return None, f'Vaxt bitdi ({TIMEOUT} san).', 'end'
         if now - last >= 3:
             last = now
             try:
                 if call(base, token, 'poll', {'id': cmd['id']}).get('cancel'):
                     kill_group(proc); th.join(5)
-                    return 'Dayandırıldı.', 'failed'
+                    return None, 'Dayandırıldı.', 'end'
             except Exception:  # noqa
                 pass
     if 'exc' in box:
-        return f"Agent xətası: {box['exc']}", 'failed'
-    out = (box.get('out') or '').strip() or (box.get('err') or '').strip() or '(boş cavab)'
-    return out, ('done' if proc.returncode == 0 else 'failed')
+        return None, f"Agent xətası: {box['exc']}", 'end'
+    return (box.get('out') or ''), (box.get('err') or ''), proc.returncode
+
+
+def parse_result(out):
+    """--output-format json cavabından mətn, sessiya nömrəsi və xəta bayrağı."""
+    try:
+        j = json.loads(out)
+        if isinstance(j, dict) and 'result' in j:
+            return str(j.get('result') or ''), j.get('session_id'), bool(j.get('is_error'))
+    except Exception:  # noqa
+        pass
+    return None, None, False
+
+
+def run_claude(base, token, claude, cmd, path):
+    """claude -p işlədir. Eyni proyekt və göndərən üçün əvvəlki söhbəti davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan."""
+    key = path + '|' + (cmd.get('creator') or '')
+    store = sess_load()
+    sid = None if cmd.get('fresh') else (store.get(key) or {}).get('sid')
+    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', READONLY_GIT]
+    out, err, rc = exec_claude(base, token, base_args + (['--resume', sid] if sid else []), cmd, path)
+    if rc == 'end':
+        return err, 'failed'
+    text, new_sid, is_err = parse_result(out)
+    if sid and (rc != 0 or is_err or text is None):            # köhnə söhbət tapılmadı/xəta: sıfırdan bir də cəhd et
+        out, err, rc = exec_claude(base, token, base_args, cmd, path)
+        if rc == 'end':
+            return err, 'failed'
+        text, new_sid, is_err = parse_result(out)
+        sid = None
+    if new_sid:
+        store[key] = {'sid': new_sid, 'ts': time.time()}
+        sess_save(store)
+    if text is None:
+        text = out.strip() or err.strip() or '(boş cavab)'
+    elif not text.strip():
+        text = err.strip() or '(boş cavab)'
+    head = '' if (not sid or cmd.get('fresh')) else '↻ əvvəlki söhbət davam etdi\n\n'
+    return head + text, ('done' if rc == 0 and not is_err else 'failed')
 
 
 def run_one(base, token, claude):
