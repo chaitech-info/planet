@@ -1,9 +1,10 @@
-/* Jarvis: Gemini Live API ilə real-time səsli agent.
-   Brauzer jarvis.php-dən qısa ömürlü token alır və Gemini-yə birbaşa WebSocket ilə qoşulur:
-   mikrofon → 16 kHz PCM → Gemini → 24 kHz PCM → dinamik. Alətləri (tool) burada, panelin mövcud funksiyaları ilə icra edirik.
+/* Jarvis: real-time səsli agent. Səs təminatçısı adapterdir (ADAPTERS): Gemini Live və ya Grok Voice (fal.ai).
+   Brauzer jarvis.php-dən qısa ömürlü token alır və təminatçıya birbaşa WebSocket ilə qoşulur:
+   mikrofon → PCM (adapterin tezliyi) → model → 24 kHz PCM → dinamik. Alətləri (tool) burada, panelin mövcud funksiyaları ilə icra edirik;
+   adapter yalnız protokolu çevirir, ona görə alətlər, UI və səs hər iki təminatçı üçün eynidir.
    index.php-dəki qlobal funksiyalardan istifadə edir: data, TSK, WLD, cmdApi, go, load, ME və s. */
 (() => {
-  const J = { watch: new Map(), ws: null, state: 'off', micCtx: null, micNode: null, micStream: null, outCtx: null, outGain: null, outAn: null, micLv: 0,
+  const J = { watch: new Map(), conn: null, ready: false, state: 'off', micCtx: null, micNode: null, micStream: null, outCtx: null, outGain: null, outAn: null, micLv: 0,
     nextT: 0, sources: new Set(), muted: false, t0: 0, lastUsage: 0, usageTimer: null, ending: false, lines: [], cur: { user: null, jarvis: null }, session: null };
 
   /* ---------- UI ---------- */
@@ -16,6 +17,8 @@
 .jv-top { display: flex; align-items: center; gap: 12px; padding: 14px 14px 10px; }
 .jv-orb { width: 74px; height: 74px; flex: none; }
 .jv-ttl { flex: 1; min-width: 0; } .jv-ttl b { display: block; font-size: 16px; letter-spacing: .14em; } .jv-ttl span { color: rgba(203,213,225,.75); font-size: 12.5px; }
+.jv-prov { display: block; margin-top: 5px; background: rgba(255,255,255,.08); color: #e9eef8; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; font: inherit; font-size: 12px; padding: 3px 6px; }
+.jv-prov option { color: #0f172a; }
 .jv-x { border: 0; background: rgba(255,255,255,.08); color: #e9eef8; width: 30px; height: 30px; border-radius: 9px; cursor: pointer; font-size: 15px; }
 .jv-log { flex: 1; overflow: auto; padding: 4px 14px 8px; display: grid; gap: 6px; align-content: start; min-height: 80px; scrollbar-width: thin; }
 .jv-l { line-height: 1.4; } .jv-l.u { color: #cbd5e1; } .jv-l.u::before { content: "Sən: "; color: #94a3b8; } .jv-l.j { color: #e0f2fe; } .jv-l.j::before { content: "Jarvis: "; color: #38bdf8; font-weight: 600; }
@@ -28,7 +31,7 @@
 @media (prefers-reduced-motion: reduce) { .jv-orb { animation: none; } }`;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
   const box = document.createElement('div'); box.className = 'jv'; box.hidden = true;
-  box.innerHTML = `<div class="jv-top"><canvas class="jv-orb" width="148" height="148"></canvas><div class="jv-ttl"><b>J.A.R.V.I.S.</b><span id="jv-st">hazırdır</span></div><button class="jv-x" id="jv-close" aria-label="Bağla">✕</button></div>
+  box.innerHTML = `<div class="jv-top"><canvas class="jv-orb" width="148" height="148"></canvas><div class="jv-ttl"><b>J.A.R.V.I.S.</b><span id="jv-st">hazırdır</span><select id="jv-prov" class="jv-prov" title="Səs modeli" hidden></select></div><button class="jv-x" id="jv-close" aria-label="Bağla">✕</button></div>
 <div class="jv-log" id="jv-log" aria-live="polite"></div>
 <div class="jv-hint" id="jv-hint">Danışmağa başla: sual ver və ya “neo planetinə uç” de. Qulaqcıqla daha yaxşı işləyir. Qısayol: Alt+J</div>
 <div class="jv-bar"><button id="jv-mic">🎙 Mikrofon açıq</button><button class="go" id="jv-go">▶ Başla</button></div>`;
@@ -280,7 +283,7 @@
       }
       out.push({ id: fc.id, name: fc.name, response });
     }
-    send({ toolResponse: { functionResponses: out } });
+    if (J.conn) J.conn.toolResults(out);
     if (J.state === 'tool') setState('listening');
     if (J.ending) setTimeout(waitAndStop, 300);
   }
@@ -297,14 +300,16 @@
       J.watch.delete(id);
       const res = (c.result || '').trim();
       line(c.status === 'done' ? 'a' : 'e', `🤖 Claude Code ${c.status === 'done' ? 'bitirdi' : c.status === 'canceled' ? 'dayandırıldı' : 'xəta verdi'} (#${id}, ${w.project})`);
-      if (J.ready) send({ clientContent: { turns: [{ role: 'user', parts: [{ text:
-        `[System note, not spoken by the user] Claude Code task #${id} in project "${w.project}" finished with status "${c.status}". Task: ${w.prompt.slice(0, 300)}\nResult (may be truncated):\n${res.slice(-2500) || '(empty)'}\nTell the user the outcome in 1-2 short sentences.` }] }], turnComplete: true } });
+      if (J.ready) J.conn.note(
+        `[System note, not spoken by the user] Claude Code task #${id} in project "${w.project}" finished with status "${c.status}". Task: ${w.prompt.slice(0, 300)}\nResult (may be truncated):\n${res.slice(-2500) || '(empty)'}\nTell the user the outcome in 1-2 short sentences.`);
     }
   }, 1500);
 
+
   /* ---------- Səs ---------- */
+  // Mikrofon: brauzerin tezliyindən adapterin istədiyi tezliyə (16/24 kHz) çevrilmiş 16-bit PCM parçaları
   const WORKLET = `class JvMic extends AudioWorkletProcessor {
-    constructor() { super(); this.ratio = sampleRate / 16000; this.t = 0; this.last = 0; this.out = new Int16Array(640); this.n = 0; this.lv = 0; }
+    constructor(o) { super(); const p = o.processorOptions; this.ratio = sampleRate / p.rate; this.t = 0; this.last = 0; this.out = new Int16Array(p.chunk); this.n = 0; this.lv = 0; }
     process(inputs) {
       const x = inputs[0] && inputs[0][0]; if (!x) return true;
       let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * x[i]; this.lv = Math.sqrt(s / x.length);
@@ -320,15 +325,15 @@
     }
   } registerProcessor('jv-mic', JvMic);`;
   function b64(buf) { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
-  async function startMic() {
+  async function startMic(ad) {
     J.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
     J.micCtx = new (window.AudioContext || window.webkitAudioContext)();
     await J.micCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: 'application/javascript' })));
     const src = J.micCtx.createMediaStreamSource(J.micStream);
-    J.micNode = new AudioWorkletNode(J.micCtx, 'jv-mic');
+    J.micNode = new AudioWorkletNode(J.micCtx, 'jv-mic', { processorOptions: { rate: ad.inRate, chunk: Math.round(ad.inRate * ad.chunkMs / 1000) } });
     J.micNode.port.onmessage = e => {
       J.micLv = e.data.lv;
-      if (!J.muted && J.ws && J.ws.readyState === 1 && J.ready) send({ realtimeInput: { audio: { data: b64(e.data.pcm), mimeType: 'audio/pcm;rate=16000' } } });
+      if (!J.muted && J.ready && J.conn) J.conn.audio(b64(e.data.pcm));
     };
     src.connect(J.micNode);
   }
@@ -338,8 +343,10 @@
     J.outGain.connect(J.outAn); J.outAn.connect(J.outCtx.destination);
     J.nextT = 0;
   }
-  function play(b64data) {
-    const bin = atob(b64data), n = bin.length >> 1, buf = J.outCtx.createBuffer(1, n, 24000), ch = buf.getChannelData(0);
+  function play(b64data, rate) {
+    if (!J.outCtx || !b64data) return;
+    const bin = atob(b64data), n = bin.length >> 1; if (!n) return;
+    const buf = J.outCtx.createBuffer(1, n, rate || 24000), ch = buf.getChannelData(0);
     for (let i = 0; i < n; i++) { let v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8); if (v >= 32768) v -= 65536; ch[i] = v / 32768; }
     const src = J.outCtx.createBufferSource(); src.buffer = buf; src.connect(J.outGain);
     const t = Math.max(J.nextT, J.outCtx.currentTime + .03); src.start(t); J.nextT = t + buf.duration;
@@ -347,55 +354,217 @@
     if (J.state !== 'tool') setState('speaking');
   }
   function stopPlayback() { for (const s of J.sources) { try { s.stop(); } catch (e) {} } J.sources.clear(); J.nextT = 0; }
+  const playing = () => J.outCtx && J.nextT > J.outCtx.currentTime + .05;
 
-  /* ---------- Sessiya ---------- */
-  const send = o => { if (J.ws && J.ws.readyState === 1) J.ws.send(JSON.stringify(o)); };
+  /* ---------- msgpack (fal realtime çərçivələri üçün kiçik kodlayıcı) ---------- */
+  const MP = (() => {
+    const te = new TextEncoder(), td = new TextDecoder();
+    function encode(v) {
+      const o = []; const u8 = (...b) => { for (const x of b) o.push(x & 255); };
+      const be = (n, bytes) => { for (let i = bytes - 1; i >= 0; i--) o.push(Math.floor(n / 2 ** (8 * i)) & 255); };
+      const raw = b => { for (let i = 0; i < b.length; i++) o.push(b[i]); };
+      (function w(v) {
+        if (v === null || v === undefined) return u8(0xc0);
+        if (v === true || v === false) return u8(v ? 0xc3 : 0xc2);
+        if (typeof v === 'number') {
+          if (Number.isInteger(v) && v >= 0 && v < 2 ** 32) { if (v < 128) return u8(v); if (v < 256) return u8(0xcc, v); if (v < 65536) { u8(0xcd); return be(v, 2); } u8(0xce); return be(v, 4); }
+          if (Number.isInteger(v) && v < 0 && v >= -(2 ** 31)) { if (v >= -32) return u8(0xe0 | (v + 32)); u8(0xd2); return be(v >>> 0, 4); }
+          const f = new DataView(new ArrayBuffer(8)); f.setFloat64(0, v); u8(0xcb); return raw(new Uint8Array(f.buffer));
+        }
+        if (typeof v === 'string') {
+          const b = te.encode(v), n = b.length;
+          if (n < 32) u8(0xa0 | n); else if (n < 256) u8(0xd9, n); else if (n < 65536) { u8(0xda); be(n, 2); } else { u8(0xdb); be(n, 4); }
+          return raw(b);
+        }
+        if (v instanceof Uint8Array) { const n = v.length; if (n < 256) u8(0xc4, n); else if (n < 65536) { u8(0xc5); be(n, 2); } else { u8(0xc6); be(n, 4); } return raw(v); }
+        if (Array.isArray(v)) { const n = v.length; if (n < 16) u8(0x90 | n); else if (n < 65536) { u8(0xdc); be(n, 2); } else { u8(0xdd); be(n, 4); } return v.forEach(w); }
+        const ks = Object.keys(v).filter(k => v[k] !== undefined), n = ks.length;
+        if (n < 16) u8(0x80 | n); else if (n < 65536) { u8(0xde); be(n, 2); } else { u8(0xdf); be(n, 4); }
+        for (const k of ks) { w(k); w(v[k]); }
+      })(v);
+      return new Uint8Array(o);
+    }
+    function decode(buf) {
+      const b = new Uint8Array(buf), dv = new DataView(b.buffer, b.byteOffset, b.byteLength); let p = 0;
+      const str = n => { const s = td.decode(b.subarray(p, p + n)); p += n; return s; };
+      const bin = n => { const s = b.slice(p, p + n); p += n; return s; };
+      const arr = n => { const a = []; for (let i = 0; i < n; i++) a.push(r()); return a; };
+      const map = n => { const m = {}; for (let i = 0; i < n; i++) { const k = r(); m[k] = r(); } return m; };
+      const u = n => { const v = n === 1 ? dv.getUint8(p) : n === 2 ? dv.getUint16(p) : n === 4 ? dv.getUint32(p) : Number(dv.getBigUint64(p)); p += n; return v; };
+      const s = n => { const v = n === 1 ? dv.getInt8(p) : n === 2 ? dv.getInt16(p) : n === 4 ? dv.getInt32(p) : Number(dv.getBigInt64(p)); p += n; return v; };
+      function r() {
+        const t = b[p++];
+        if (t < 0x80) return t; if (t >= 0xe0) return t - 256;
+        if (t >= 0xa0 && t < 0xc0) return str(t & 31); if (t >= 0x90 && t < 0xa0) return arr(t & 15); if (t >= 0x80 && t < 0x90) return map(t & 15);
+        switch (t) {
+          case 0xc0: return null; case 0xc2: return false; case 0xc3: return true;
+          case 0xc4: return bin(u(1)); case 0xc5: return bin(u(2)); case 0xc6: return bin(u(4));
+          case 0xc7: { const n = u(1); p += 1 + n; return null; } case 0xc8: { const n = u(2); p += 1 + n; return null; } case 0xc9: { const n = u(4); p += 1 + n; return null; }
+          case 0xca: { const v = dv.getFloat32(p); p += 4; return v; } case 0xcb: { const v = dv.getFloat64(p); p += 8; return v; }
+          case 0xcc: return u(1); case 0xcd: return u(2); case 0xce: return u(4); case 0xcf: return u(8);
+          case 0xd0: return s(1); case 0xd1: return s(2); case 0xd2: return s(4); case 0xd3: return s(8);
+          case 0xd4: p += 2; return null; case 0xd5: p += 3; return null; case 0xd6: p += 5; return null; case 0xd7: p += 9; return null; case 0xd8: p += 17; return null;
+          case 0xd9: return str(u(1)); case 0xda: return str(u(2)); case 0xdb: return str(u(4));
+          case 0xdc: return arr(u(2)); case 0xdd: return arr(u(4)); case 0xde: return map(u(2)); case 0xdf: return map(u(4));
+        }
+        throw new Error('msgpack: naməlum tip 0x' + t.toString(16));
+      }
+      return r();
+    }
+    return { encode, decode };
+  })();
+
+  /* ---------- Adapterlər ----------
+     Hər adapter: inRate/chunkMs (mikrofon), connect(sess, h) → { audio(b64), toolResults(out), note(text), mute(on), close() }.
+     h (nüvədən): ready(), audio(b64, rate), user(text, replace), bot(text), interrupted(), turnDone(), tools([{id,name,args}]), info(msg), closed(code, reason) */
+  const ADAPTERS = {
+    gemini: {
+      label: 'Gemini Live', inRate: 16000, chunkMs: 40,
+      connect(d, h) {
+        const ws = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
+        const send = o => { if (ws.readyState === 1) ws.send(JSON.stringify(o)); };
+        ws.onopen = () => send({ setup: d.setup });
+        ws.onmessage = async ev => {
+          let m; try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : await ev.data.text()); } catch (e) { return; }
+          if (m.setupComplete) return h.ready();
+          const sc = m.serverContent;
+          if (sc) {
+            if (sc.interrupted) h.interrupted();
+            if (sc.inputTranscription && sc.inputTranscription.text) h.user(sc.inputTranscription.text);
+            if (sc.outputTranscription && sc.outputTranscription.text) h.bot(sc.outputTranscription.text);
+            for (const p of (sc.modelTurn && sc.modelTurn.parts) || []) if (p.inlineData && p.inlineData.data) h.audio(p.inlineData.data, 24000);
+            if (sc.turnComplete) h.turnDone();
+          }
+          if (m.toolCall && m.toolCall.functionCalls) h.tools(m.toolCall.functionCalls);
+          if (m.goAway) h.info('Sessiya tezliklə bitəcək (Gemini limiti). Yenidən başlatmaq lazım ola bilər.');
+        };
+        ws.onclose = ev => h.closed(ev.code, ev.reason);
+        return {
+          audio: data => send({ realtimeInput: { audio: { data, mimeType: 'audio/pcm;rate=16000' } } }),
+          toolResults: out => send({ toolResponse: { functionResponses: out } }),
+          note: text => send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }),
+          mute: on => { if (on) send({ realtimeInput: { audioStreamEnd: true } }); },
+          close: () => { if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
+        };
+      },
+    },
+    grok: {
+      // xAI realtime hadisələri fal.ai relay-i ilə olduğu kimi ötürülür; çərçivələr msgpack-dir
+      label: 'Grok Voice (fal.ai)', inRate: 24000, chunkMs: 100,
+      connect(d, h) {
+        const ws = new WebSocket(d.ws + '?fal_jwt_token=' + encodeURIComponent(d.token)); ws.binaryType = 'arraybuffer';
+        const send = o => { if (ws.readyState === 1) ws.send(MP.encode(o)); };
+        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false;
+        // Cavab yaratmağı yalnız səs bitəndə istə (üst-üstə danışmasın)
+        const create = () => { if (playing()) { waitCreate = true; return setTimeout(create, 250); } waitCreate = false; send({ type: 'response.create' }); };
+        ws.onopen = () => send({ type: 'session.update', session: d.session });
+        ws.onmessage = ev => {
+          let m; try { m = typeof ev.data === 'string' ? JSON.parse(ev.data) : MP.decode(ev.data); } catch (e) { return; }
+          if (!m || typeof m !== 'object') return;
+          if (m.type === 'x-fal-error' || (m.status === 'error' && m.error)) { h.info('fal.ai: ' + (m.error || '') + (m.reason ? ' · ' + m.reason : '')); return; }
+          if (m.type === 'x-fal-message') return;
+          switch (m.type) {
+            case 'session.updated': if (!isReady) { isReady = true; h.ready(); } break;
+            case 'error': h.info('Grok: ' + ((m.error && (m.error.message || m.error.code)) || JSON.stringify(m).slice(0, 200))); break;
+            case 'input_audio_buffer.speech_started': h.interrupted(); userTxt = ''; break;
+            case 'conversation.item.input_audio_transcription.delta': if (m.delta) h.user(m.delta); break;
+            case 'conversation.item.input_audio_transcription.updated':
+            case 'conversation.item.input_audio_transcription.completed': {
+              const t = m.transcript || ''; if (t && t !== userTxt) { h.user(t, true); userTxt = t; } break;
+            }
+            case 'response.created': inResp = true; break;
+            case 'response.output_audio.delta': case 'response.audio.delta': h.audio(m.delta, 24000); break;
+            case 'response.output_audio_transcript.delta': case 'response.audio_transcript.delta': case 'response.text.delta': case 'response.output_text.delta':
+              if (m.delta) h.bot(m.delta); break;
+            case 'response.function_call_arguments.done': {
+              let args = {}; try { args = m.arguments ? JSON.parse(m.arguments) : {}; } catch (e) {}
+              pending.push({ id: m.call_id, name: m.name, args }); break;
+            }
+            case 'response.done': {
+              inResp = false; userTxt = '';
+              const st = m.response && m.response.status;
+              if (st === 'failed') h.info('Grok cavabı alınmadı: ' + JSON.stringify((m.response.status_details || {}).error || m.response.status_details || '').slice(0, 200));
+              if (pending.length) { const calls = pending; pending = []; h.tools(calls); }   // alətləri cavab bitəndə icra et (hamısını bir dəfəyə)
+              else h.turnDone();
+              break;
+            }
+          }
+        };
+        ws.onclose = ev => h.closed(ev.code, ev.reason);
+        return {
+          audio: data => send({ type: 'input_audio_buffer.append', audio: data }),
+          toolResults: out => {
+            for (const o of out) send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: o.id, output: JSON.stringify(o.response) } });
+            create();
+          },
+          note: text => {
+            send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
+            if (!inResp && !waitCreate) create();
+          },
+          mute: () => {},
+          close: () => { if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
+        };
+      },
+    },
+  };
+
+  /* ---------- Sessiya (təminatçıdan asılı deyil) ---------- */
   async function api(action, extra) {
     const r = await fetch('jarvis.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action, ...extra }) });
     return { status: r.status, d: await r.json().catch(() => ({})) };
   }
+  const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
+  const prov = $j('jv-prov');
+  async function loadProviders() {
+    const { status, d } = await api('status'); if (status !== 200) return;
+    const list = (d.providers || []).filter(p => ADAPTERS[p]);
+    prov.innerHTML = list.map(p => `<option value="${p}">${ADAPTERS[p].label}</option>`).join('');
+    const saved = store.get('jv-provider');
+    prov.value = list.includes(saved) ? saved : (d.provider || list[0] || '');
+    prov.hidden = list.length < 2;
+  }
+  prov.onchange = () => store.set('jv-provider', prov.value);
   async function start() {
     if (J.state !== 'off' && J.state !== 'error') return;
     if (!window.isSecureContext || !navigator.mediaDevices) { setState('error'); line('e', 'Mikrofon yalnız HTTPS və ya localhost-da işləyir.'); return; }
     setState('connecting'); J.ending = false; J.ready = false; endTurn();
-    const { status, d } = await api('session');
+    if (!prov.options.length) await loadProviders().catch(() => {});
+    const { status, d } = await api('session', prov.value ? { provider: prov.value } : {});
     if (status !== 200) {
       setState('error', status === 503 ? 'açar qurulmayıb' : 'xəta');
       line('e', d.error || 'Sessiya alınmadı');
       if (d.setup) line('i', d.setup);
       return;
     }
-    J.session = d;
-    try { startOut(); await startMic(); }
+    const ad = ADAPTERS[d.provider];
+    if (!ad) { setState('error'); line('e', 'Naməlum səs təminatçısı: ' + d.provider); return; }
+    J.session = d; prov.disabled = true;
+    try { startOut(); await startMic(ad); }
     catch (e) { cleanup(); setState('error'); line('e', 'Mikrofona icazə verilmədi: ' + (e.message || e)); return; }
-    const ws = J.ws = new WebSocket(d.ws + '?access_token=' + encodeURIComponent(d.token));
-    ws.onopen = () => send({ setup: d.setup });
-    ws.onmessage = async ev => {
-      let m; try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : await ev.data.text()); } catch (e) { return; }
-      if (m.setupComplete) {
+    J.conn = ad.connect(d, {
+      ready() {
         J.ready = true; J.t0 = J.lastUsage = Date.now(); setState(J.muted ? 'muted' : 'listening');
         line('i', 'Qoşuldu · ' + d.model);
         J.usageTimer = setInterval(reportUsage, 30000);
-        return;
-      }
-      const sc = m.serverContent;
-      if (sc) {
-        if (sc.interrupted) { stopPlayback(); endTurn(); setState(J.muted ? 'muted' : 'listening'); }
-        if (sc.inputTranscription && sc.inputTranscription.text) { J.cur.jarvis = null; stream('user', sc.inputTranscription.text); }
-        if (sc.outputTranscription && sc.outputTranscription.text) stream('jarvis', sc.outputTranscription.text);
-        for (const p of (sc.modelTurn && sc.modelTurn.parts) || []) if (p.inlineData && p.inlineData.data) play(p.inlineData.data);
-        if (sc.turnComplete) endTurn();
-      }
-      if (m.toolCall && m.toolCall.functionCalls) runTools(m.toolCall.functionCalls);
-      if (m.goAway) line('i', 'Sessiya tezliklə bitəcək (Gemini limiti). Yenidən başlatmaq lazım ola bilər.');
-    };
-    ws.onerror = () => { };
-    ws.onclose = ev => {
-      if (J.state === 'off') return;
-      const why = ev.reason ? ev.reason : ev.code === 1006 ? 'bağlantı qırıldı' : 'kod ' + ev.code;
-      if (!J.ending && ev.code !== 1000) { line('e', 'Gemini bağlantısı bağlandı: ' + why); }
-      cleanup(); setState(J.ending || ev.code === 1000 ? 'off' : 'error');
-    };
+      },
+      audio: (data, rate) => play(data, rate),
+      user(text, replace) {
+        J.cur.jarvis = null;
+        if (replace && J.cur.user) { J.cur.user._t = ''; }
+        stream('user', text);
+      },
+      bot: text => stream('jarvis', text),
+      interrupted() { stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); },
+      turnDone: endTurn,
+      tools: calls => { endTurn(); runTools(calls); },
+      info: msg => line('e', msg),
+      closed(code, reason) {
+        if (J.state === 'off') return;
+        const why = reason ? reason : code === 1006 ? 'bağlantı qırıldı' : 'kod ' + code;
+        if (!J.ending && code !== 1000) line('e', (ad.label || 'Səs') + ' bağlantısı bağlandı: ' + why);
+        cleanup(); setState(J.ending || code === 1000 ? 'off' : 'error');
+      },
+    });
   }
   async function reportUsage() {
     const s = Math.round((Date.now() - J.lastUsage) / 1000); J.lastUsage = Date.now();
@@ -406,23 +575,23 @@
   function cleanup() {
     clearInterval(J.usageTimer); J.usageTimer = null;
     if (J.ready && J.lastUsage) { const s = Math.round((Date.now() - J.lastUsage) / 1000); if (s > 0) api('usage', { seconds: s }); }
-    J.ready = false; J.lastUsage = 0;
+    J.ready = false; J.lastUsage = 0; prov.disabled = false;
     stopPlayback();
     if (J.micStream) J.micStream.getTracks().forEach(t => t.stop());
     if (J.micCtx) J.micCtx.close().catch(() => {});
     if (J.outCtx) J.outCtx.close().catch(() => {});
     J.micStream = J.micCtx = J.micNode = J.outCtx = J.outAn = J.outGain = null;
-    const ws = J.ws; J.ws = null; if (ws && ws.readyState <= 1) { try { ws.close(1000); } catch (e) {} }
+    const c = J.conn; J.conn = null; if (c) c.close();
   }
   function stop(msg) { if (J.state === 'off') return; J.state = 'off'; cleanup(); setState('off'); if (msg) line('i', msg); }
   function toggleMute() {
     J.muted = !J.muted;
     $j('jv-mic').textContent = J.muted ? '🔇 Mikrofon bağlı' : '🎙 Mikrofon açıq'; $j('jv-mic').classList.toggle('on', J.muted);
-    if (J.muted && J.ready) send({ realtimeInput: { audioStreamEnd: true } });
+    if (J.ready && J.conn) J.conn.mute(J.muted);
     if (J.ready && J.state !== 'speaking' && J.state !== 'tool') setState(J.muted ? 'muted' : 'listening');
   }
 
-  btn.onclick = () => { box.hidden = !box.hidden; if (!box.hidden && J.state === 'off') start(); };
+  btn.onclick = async () => { box.hidden = !box.hidden; if (!box.hidden && J.state === 'off') { await loadProviders().catch(() => {}); start(); } };
   $j('jv-close').onclick = () => { stop(); box.hidden = true; };
   $j('jv-go').onclick = () => (J.state === 'off' || J.state === 'error') ? start() : stop('Sessiya bitdi');
   $j('jv-mic').onclick = toggleMute;
@@ -430,5 +599,5 @@
     if (e.altKey && (e.code === 'KeyJ')) { e.preventDefault(); if (box.hidden) { box.hidden = false; start(); } else if (J.state === 'off' || J.state === 'error') start(); else stop('Sessiya bitdi'); }
   });
   addEventListener('beforeunload', () => cleanup());
-  window.Jarvis = { start, stop, tools: TOOLS, state: () => J.state };
+  window.Jarvis = { start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)), tools: TOOLS, state: () => J.state, adapters: ADAPTERS, msgpack: MP };
 })();
