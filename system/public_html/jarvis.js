@@ -253,6 +253,7 @@
   async function runTools(calls) {
     setState('tool');
     const out = [];
+    if (!data) { try { await load(); } catch (e) {} }           // məlumat hələ yüklənməyibsə
     for (const fc of calls) {
       let response;
       try {
