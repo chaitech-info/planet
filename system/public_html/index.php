@@ -453,7 +453,7 @@ body.v-space::before { display: none; }
 .urow .un { font-weight: 600; } .urow .ur { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; }
 .urow .us { margin-left: auto; font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
 .urow .gbtn { padding: 4px 11px; font-size: 12.5px; } .urow .gbtn.danger { color: #f87171; border-color: rgba(248,113,113,.35); }
-.madd { display: flex; gap: 8px; margin-top: 14px; } .madd input { margin-top: 0; } .madd .gbtn { white-space: nowrap; }
+.madd { display: flex; gap: 8px; margin-top: 14px; } .madd input { margin-top: 0; } .mbox .madd select { width: auto; margin-top: 0; } .madd .gbtn { white-space: nowrap; }
 .mres { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .mbox .cmdbar { margin: 10px 0 0; }
 
@@ -581,6 +581,9 @@ body.v-space::before { display: none; }
 .balloon[data-lv="2"] { animation: bwiggle 2.4s ease-in-out infinite; }
 @keyframes bwiggle { 0%, 100% { margin-top: 0; } 50% { margin-top: -4px; } }
 .dock.noproj .dtabs, .dock.noproj #pane-send, .dock.noproj #pane-live { display: none; }
+/* Student yalnız öz universini görür: komanda bölmələri gizlidir (server də bağlayır) */
+body.student #tab-panel, body.student #tab-board, body.student #b-plan, body.student #b-msg, body.student #b-rep,
+body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { display: none; }
 .dinfo { display: grid; gap: 8px; margin: 10px 0 4px; }
 .dinfo:empty { display: none; }
 .burnbox { padding: 9px 12px; border-radius: 12px; font-size: 13px; background: rgba(251,146,60,.12); border: 1px solid rgba(251,146,60,.4); color: #fed7aa; }
@@ -653,7 +656,7 @@ body.v-space::before { display: none; }
 }
 </style>
 </head>
-<body>
+<body<?= is_student(session_user()) ? ' class="student"' : '' ?>>
 <div class="wrap">
 <?php if (!$authed): ?>
   <form class="login card" method="post">
@@ -853,7 +856,7 @@ body.v-space::before { display: none; }
   <div class="mbox">
     <div class="mhead"><b>İstifadəçilər</b><button class="ibtn" data-close="adm" aria-label="Bağla">✕</button></div>
     <div id="adm-list" class="ulist"></div>
-    <div class="madd"><input id="adm-name" maxlength="24" placeholder="Yeni istifadəçinin adı" autocomplete="off"><button class="gbtn go" id="adm-add">Əlavə et</button></div>
+    <div class="madd"><input id="adm-name" maxlength="24" placeholder="Yeni istifadəçinin adı" autocomplete="off"><select id="adm-role" aria-label="İstifadəçi tipi"><option value="member">Üzv</option><option value="student">🎓 Student</option></select><button class="gbtn go" id="adm-add">Əlavə et</button></div>
     <div class="cmderr" id="adm-err" hidden></div>
     <div class="mres" id="adm-res" hidden>
       <div class="mnote" id="adm-note"></div>
@@ -1275,23 +1278,25 @@ function makeOrbit(p) {
 function renderSpace() {
   const all = buildProjects();
   // bütün universlər eyni kosmik xəritədədir: hamısının planetləri birlikdə göndərilir
-  const full = spaceList(all), lists = {};
-  for (const u of UNIVERSES) lists[u.id] = uniList(full, u.id);
-  const everything = UNIVERSES.flatMap(u => lists[u.id].map(p => ({ ...p, uni: u.id })));
+  const full = spaceList(all), lists = {}, unis = visUnis();
+  for (const u of UNIVERSES) lists[u.id] = unis.includes(u) ? uniList(full, u.id) : [];
+  const everything = unis.flatMap(u => lists[u.id].map(p => ({ ...p, uni: u.id })));
   const names = new Set(everything.map(p => p.name));
   const here = navUni ? lists[navUni] : [];
   const sums = {
     main: [all.length + ' proyekt', all.filter(p => p.st === 'working').length + ' işləyir'],
     studio: [lists.studio.length + ' stansiya', lists.studio.filter(p => p.st === 'working' || p.st === 'meet').length + ' aktiv'],
     mcp: [lists.mcp.length + ' MCP server', lists.mcp.filter(p => p.st === 'working').length + ' indi işləyir'],
-    agent: [lists.agent.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'] };
-  const hud = navUni ? [UNIVERSES.find(u => u.id === navUni).icon + ' ' + UNIVERSES.find(u => u.id === navUni).name + ' · ' + sums[navUni][0], sums[navUni][1]] : ['🗺 Kosmik xəritə', UNIVERSES.length + ' univers'];
+    agent: [lists.agent.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'],
+    student: [lists.student.length + ' student planeti', (data.students || []).filter(u => (data.presence || []).some(x => x.user === u && now() - x.last_seen < 60)).length + ' saytda'] };
+  const hud = navUni ? [UNIVERSES.find(u => u.id === navUni).icon + ' ' + UNIVERSES.find(u => u.id === navUni).name + ' · ' + sums[navUni][0], sums[navUni][1]] : ['🗺 Kosmik xəritə', unis.length + ' univers'];
   setText($('hudA'), hud[0]); setText($('hudB'), hud[1]);
   $('sempty').hidden = everything.length > 0;
   $('maphint').hidden = !!navUni || !!curPlanet || curShip;
-  const list = K && glOn ? here : lists.main;
+  const list = K && glOn ? here : lists[isStu() ? 'student' : 'main'];
   if (K && glOn) {
-    K.setUniverses(UNIVERSES.map(u => ({ id: u.id, icon: u.icon, name: u.name, sub: sums[u.id].join(' · ') })));
+    K.setHidden(UNIVERSES.filter(u => !unis.includes(u)).map(u => u.id));
+    K.setUniverses(unis.map(u => ({ id: u.id, icon: u.icon, name: u.name, sub: sums[u.id].join(' · ') })));
     K.setData(everything.map(p => ({ name: p.name, uni: p.uni, label: p.label || null, kind: p.kind, look: p.look || null, hue: p.hue ?? null, R: p.R || 0, st: p.st, edits: p.edits, tools: p.tools, sub: p.sub, alert: (data.alerts || []).some(a => a.project === p.name),
       burn: p.burn, sats: p.sats, fail: !!p.fail, users: [...p.users].map(([u, v]) => ({ name: u, st: v.st, color: tint(u) })) })));
     syncHits(); K.setAudio(data.sounds || {});
@@ -1312,7 +1317,7 @@ function renderSpace() {
       syncMoons(r.planet, p.users);
     }, { enter: false }));
   }
-  prime('travel', () => sync($('travel'), [...(navUni === 'main' || !(K && glOn) ? [{ name: SHIPKEY, label: '🛸 Plan' }] : []), ...list], p => p.name, p => {
+  prime('travel', () => sync($('travel'), [...(!isStu() && (navUni === 'main' || !(K && glOn)) ? [{ name: SHIPKEY, label: '🛸 Plan' }] : []), ...list], p => p.name, p => {
     const b = el('button'), d = el('i', 'tdot'); d.style.setProperty('--h', hue(p.name)); b.append(d, el('span', null, p.label || p.name));
     b.onclick = () => go(p.name); return b;
   }, () => {}));
@@ -1516,7 +1521,7 @@ function initGL() {
   K.onShip = () => go(SHIPKEY);
   K.onUniverse = id => { navUni = id; render(); };
   K.onPickUni = id => { location.hash = '#kainat/@' + id; };
-  $('zmap').onclick = () => { if (curPlanet || curShip) location.hash = '#kainat'; else K.home(); };
+  $('zmap').onclick = () => { if (curPlanet || curShip) location.hash = '#kainat'; else flyTo(null); };
   if (navTarget !== undefined) { K.flyUni(navTarget, true); navTarget = undefined; }
   K.onUserShip = u => openShip(u);
   if (ME) K.setMe(ME.name);
@@ -1559,6 +1564,7 @@ function setView(v, name) {
 }
 function route() {
   const [v, p] = location.hash.slice(1).split('/');
+  if (isStu() && v !== 'kainat') { location.replace('#kainat/@student'); return; }   // student üçün yalnız kainat
   if (v === 'kainat') {
     const name = p ? decodeURIComponent(p) : null;
     // #kainat = bütün universlərin xəritəsi, #kainat/@mcp = universin ümumi görünüşü, #kainat/<planet> = planet
@@ -1620,7 +1626,8 @@ async function ADM(action, extra) {
 let ME = null;
 function setMe(me) {
   if (!me || (ME && ME.name === me.name && ME.role === me.role)) return;
-  ME = me; setText($('who'), me.name); if (K) K.setMe(me.name); $('b-adm').hidden = me.role !== 'admin'; $('b-prj').hidden = me.role !== 'admin'; $('b-ntf').hidden = me.role !== 'admin';
+  ME = me; setText($('who'), me.name); if (K) K.setMe(me.name);
+  if (me.role === 'student') { setText($('t-world'), '🪐 Planetim'); $('t-world').title = 'Öz planetini fərdiləşdir'; } $('b-adm').hidden = me.role !== 'admin'; $('b-prj').hidden = me.role !== 'admin'; $('b-ntf').hidden = me.role !== 'admin';
 }
 const openM = id => { $(id).hidden = false; };
 const closeM = id => {
@@ -1660,7 +1667,9 @@ function showCreds(kind, d) {
     $('adm-msg').value = `İstifadəçi adı: ${d.name}\nParol: ${d.password}\nToken: ${d.token}\n\nKompüterində (bir dəfə):\nprintf 'URL=%s\\nTOKEN=%s\\n' '${url}ingest.php' '${d.token}' > ~/.claude-team-dash.conf && chmod 600 ~/.claude-team-dash.conf\npkill -f claude-team-agent.py`;
   } else {
     $('adm-note').textContent = d.name + ' üçün göndərəcəyin mətn:';
-    $('adm-msg').value = welcomeText(d.name, d.token, d.password);
+    $('adm-msg').value = d.role === 'student'
+      ? `Salam! Student Universe-ə dəvət olunmusan 🎓\n\nSayt: ${location.origin + location.pathname.replace(/[^/]*$/, '')}\nİstifadəçi adı: ${d.name}\nParol: ${d.password}\n\nDaxil ol, parolu sağ yuxarıdakı "Hesab" düyməsindən dəyiş. "🪐 Planetim" düyməsi ilə öz planetini fərdiləşdirə bilərsən.`
+      : welcomeText(d.name, d.token, d.password);
   }
 }
 async function admRefresh() {
@@ -1668,7 +1677,7 @@ async function admRefresh() {
   const box = $('adm-list'); box.replaceChildren();
   for (const u of d.users) {
     const row = el('div', 'urow');
-    row.append(el('span', 'un', u.name), el('span', 'ur', u.role === 'admin' ? 'admin' : 'üzv'));
+    row.append(el('span', 'un', u.name), el('span', 'ur', u.role === 'admin' ? 'admin' : u.role === 'student' ? '🎓 student' : 'üzv'));
     const live = u.agent_seen && d.now - u.agent_seen < 20;
     const st = el('span', 'us'); st.append(el('span', 'dot ' + (live ? 'idle' : '')), document.createTextNode(live ? 'agent onlayn' : u.agent_seen ? 'agent oflayn' : 'agent heç qoşulmayıb'));
     row.append(st);
@@ -1733,7 +1742,7 @@ function initAdmin() {
   $('adm-add').onclick = async () => {
     const name = $('adm-name').value.trim(); if (!name) return;
     $('adm-add').disabled = true; admErr('');
-    const { status, d } = await ADM('create', { name });
+    const { status, d } = await ADM('create', { name, role: $('adm-role').value });
     $('adm-add').disabled = false;
     if (status === 200) { $('adm-name').value = ''; showCreds('user', d); admRefresh(); } else admErr(d.error || 'Alınmadı');
   };
@@ -2331,11 +2340,16 @@ const UNIVERSES = [
   { id: 'studio', icon: '🎨', name: 'Studio', hint: 'Prompt Generator, Designer, Meeting, Test' },
   { id: 'mcp', icon: '🛰', name: 'MCP Universe', hint: 'MCP serverləri və onları işlədən proyektlər' },
   { id: 'agent', icon: '🤖', name: 'Agent Universe', hint: 'AI agentləri, tapşırıqları və avtomatlaşdırma' },
+  { id: 'student', icon: '🎓', name: 'Student Universe', hint: 'Hər studentin öz planeti' },
 ];
+/** Student yalnız öz universini görür (server də yalnız onun məlumatını verir) */
+const isStu = () => document.body.classList.contains('student');
+const visUnis = () => isStu() ? UNIVERSES.filter(u => u.id === 'student') : UNIVERSES;
+const stuWorld = n => (data && data.worlds || []).find(w => w.name === n && (data.students || []).includes(w.owner));
 let navUni = null, navTarget;             // navUni: kameranın hazırda olduğu univers (3D-dən gəlir), null = xəritə
 /** Universə (null = bütün xəritəyə) uç; 3D hələ hazır deyilsə, hazır olanda */
-function flyTo(id) { if (K && glOn) K.flyUni(id); else navTarget = id; }
-const uniOf = n => !n ? navUni || 'main' : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : specialOf(n) ? 'studio' : 'main';
+function flyTo(id) { if (isStu()) id = 'student'; if (K && glOn) K.flyUni(id); else navTarget = id; }
+const uniOf = n => !n ? navUni || (isStu() ? 'student' : 'main') : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : specialOf(n) ? 'studio' : stuWorld(n) ? 'student' : 'main';
 /** Xüsusi panel açılan planetlər: Studio stansiyaları, MCP serverləri, agentlər */
 function xKind(n) {
   if (!n) return null;
@@ -2347,7 +2361,8 @@ function uniList(full, u) {
   if (u === 'studio') return full.filter(p => specialOf(p.name));
   if (u === 'mcp') return mcpList();
   if (u === 'agent') return agentList();
-  return full.filter(p => !specialOf(p.name));
+  if (u === 'student') return full.filter(p => p.kind === 'custom' && stuWorld(p.name));
+  return full.filter(p => !specialOf(p.name) && !stuWorld(p.name));
 }
 function mcpServers() {
   const m = new Map();
@@ -2460,13 +2475,15 @@ function shipOf(u) {
 }
 function shipItems(names) {
   const live = liveMeetings();
-  return (data.users || []).map(u => {
+  return [...new Set([...(data.users || []), ...(data.students || [])])].map(u => {
     const s = shipOf(u);
     const act = (data.sessions || []).filter(x => x.user === u).map(x => ({ ...x, st: eff(x) })).filter(x => RANK[x.st] > 0)
       .sort((a, b) => RANK[b.st] - RANK[a.st] || b.updated_at - a.updated_at);
     let planet = act.length ? act[0].project : null, st = act.length ? act[0].st : 'offline';
     if (live.some(m => m.attendees.split(',').includes(u))) { planet = 'Meeting Planet'; st = 'working'; }
     if (!planet && agentInfo(u).online) planet = 'agent:' + u;   // boş vaxtda: Agent Universe-də öz agentinin ətrafında
+    const sw = !planet && (data.students || []).includes(u) && (data.worlds || []).find(w => w.owner === u);
+    if (sw) planet = sw.name;                                    // student: həmişə öz planetinin ətrafında
     if (planet && !names.has(planet)) planet = null;
     const dl = +s.deadline, left = dl - now();
     const warn = !dl ? 0 : left < 0 ? 2 : left < DAY ? 1 : 0;
@@ -2572,7 +2589,7 @@ function openWorld(w) {
   for (const b of $('w-surf').children) b.classList.toggle('on', +b.dataset.s === +v.surface);
   for (const b of $('w-size').children) b.classList.toggle('on', +b.dataset.z === +v.size);
   setText($('w-title'), w ? '🪐 ' + w.name : '🪐 Yeni planet'); setText($('w-save'), w ? 'Saxla' : 'Yarat');
-  $('w-del').hidden = !w; $('w-err').hidden = true;
+  $('w-del').hidden = !w || isStu(); $('w-err').hidden = true;   // student öz planetini silə bilməz, yalnız dəyişir
   openM('wm'); worldPreview(); $('w-name').focus();
 }
 function worldForm() {
@@ -2885,7 +2902,7 @@ function initWorld() {
   $('sh-save').onclick = () => shipSave(false);
   $('sh-dlclear').onclick = () => shipSave(true);
   // planet
-  $('t-world').onclick = () => openWorld(null);
+  $('t-world').onclick = () => openWorld(isStu() ? (data && data.worlds || []).find(w => ME && w.owner === ME.name) || null : null);
   for (const box of ['w-surf', 'w-size']) for (const b of $(box).children) b.onclick = () => { for (const x of $(box).children) x.classList.toggle('on', x === b); worldPreview(); };
   for (const id of ['w-name', 'w-hue', 'w-ring']) $(id).addEventListener('input', worldPreview);
   $('w-save').onclick = async () => {

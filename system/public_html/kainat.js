@@ -321,8 +321,8 @@ const focusObj = () => focusName === SHIP ? ship : planets.get(focusName);
 function pu(extra, light) { return Object.assign({ uTime: uT, uLight: light || uSun }, extra); }
 
 /* ====== Kosmik xəritə: bütün universlər eyni məkanda, hər birinin öz günəşi və qalaktikası var ====== */
-const UNI_IDS = ['main', 'studio', 'mcp', 'agent'];
-const UNI_POS = { main: [0, 0, 0], studio: [480, 40, -380], mcp: [-520, -30, -400], agent: [20, 60, -820] };
+const UNI_IDS = ['main', 'studio', 'mcp', 'agent', 'student'];
+const UNI_POS = { main: [0, 0, 0], studio: [480, 40, -380], mcp: [-520, -30, -400], agent: [20, 60, -820], student: [-560, 50, -860] };
 const MAP_TARGET = new THREE.Vector3(-10, 0, -270);
 const U = {};
 for (const id of UNI_IDS) {
@@ -1413,6 +1413,7 @@ const THEMES = {
   studio: { a: [.38, .08, .3], b: [.32, .2, .05], c: [.12, .1, .42], sa: [1, .28, .5], sb: [1, .86, .94], g1: 0xff70b0, g2: 0xff4f8f, lbl: 'Studio', gal: [255, 140, 200], gal2: [255, 210, 120] },
   mcp: { a: [.02, .26, .32], b: [.04, .36, .24], c: [.08, .14, .38], sa: [.05, .55, 1], sb: [.75, 1, 1], g1: 0x40d0ff, g2: 0x2090ff, lbl: 'MCP Hub', gal: [110, 230, 255], gal2: [90, 255, 190] },
   agent: { a: [.26, .05, .42], b: [.36, .05, .24], c: [.05, .1, .36], sa: [.5, .18, 1], sb: [.96, .78, 1], g1: 0xb070ff, g2: 0x8040ff, lbl: 'Agentlər', gal: [200, 140, 255], gal2: [255, 120, 200] },
+  student: { a: [.04, .3, .14], b: [.22, .3, .04], c: [.04, .16, .34], sa: [.2, 1, .45], sb: [.9, 1, .7], g1: 0x60f090, g2: 0x30d070, lbl: 'Studentlər', gal: [140, 255, 170], gal2: [255, 230, 120] },
 };
 let streaks = null, myUser = '', skyMix = null, navUni = null, camSpd = 0, warpK = 0, baseFov = 45;
 const prevCam = new THREE.Vector3();
@@ -1452,6 +1453,8 @@ function buildUniverses() {
   sunMesh = U.main.sun; sunGlow1 = U.main.g1; sunGlow2 = U.main.g2;
 }
 /** index.php universlərin adını və qısa məlumatını verir (qalaktika etiketi üçün) */
+/** Gizli universlər (məs. student yalnız öz universini görür): qalaktikası, günəşi və etiketləri görünmür */
+api.setHidden = ids => { for (const u of Object.values(U)) u.hidden = (ids || []).includes(u.id); if (ship) ship.holder.visible = !U.main.hidden; };
 api.setUniverses = list => { for (const x of list || []) { const u = U[x.id]; if (!u) continue; u.info = x; if (u.gb) { setText(u.gb, x.icon + ' ' + x.name); setText(u.gs, x.sub || ''); } } };
 const sst = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 /** Hər kadr: kameranın universə məsafəsinə görə görünüş səviyyələri (qalaktika → planetlər → detallar) */
@@ -1460,6 +1463,8 @@ function updateUniverses(dt) {
   const fu = focusName ? (focusName === SHIP ? U.main : (planets.get(focusName) || {}).U) : null;
   for (const u of Object.values(U)) {
     u.d = camera.position.distanceTo(u.center);
+    u.root.visible = !u.hidden;
+    if (u.hidden) { u.lvG = u.lvP = u.lvD = 0; u.galHit.visible = false; applyLabel(u.lbl, null); applyLabel(u.glbl, null); u.glbl.style.pointerEvents = 'none'; continue; }
     const R = Math.max(60, u.maxR);
     u.lvG = sst(R * 2.6, R * 4.4, u.d);
     u.lvP = 1 - sst(R * 3.2, R * 5, u.d);

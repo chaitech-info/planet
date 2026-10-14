@@ -7,6 +7,10 @@ if ($me === null) {
     http_response_code(401);
     exit('giriş lazımdır');
 }
+if (is_student($me)) {
+    http_response_code(403);
+    exit('Bu bölmə studentlər üçün bağlıdır');
+}
 $dir = __DIR__ . '/kit';
 if (!class_exists('ZipArchive') || !is_dir($dir)) {
     http_response_code(500);

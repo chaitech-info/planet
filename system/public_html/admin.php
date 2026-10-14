@@ -111,25 +111,33 @@ if ($act === 'create') {
     if ($ex->fetchColumn()) {
         json_out(['error' => 'Bu ad artıq var'], 409);
     }
+    $role = (string)($in['role'] ?? 'member');
+    if (!in_array($role, ['member', 'student'], true)) {
+        json_out(['error' => 'Yanlış istifadəçi tipi'], 400);
+    }
     $tok = gen_token();
     $pw = gen_pass();
     $pdo->prepare('INSERT INTO users (name, token_hash, pass_hash, role, created_at) VALUES (?,?,?,?,?)')
-        ->execute([$name, hash('sha256', $tok), password_hash($pw, PASSWORD_DEFAULT), 'member', $now]);
-    json_out(['ok' => true, 'name' => $name, 'token' => $tok, 'password' => $pw]);
+        ->execute([$name, hash('sha256', $tok), password_hash($pw, PASSWORD_DEFAULT), $role, $now]);
+    if ($role === 'student') {
+        ensure_student_planet($pdo, $name);     // hər studentin öz planeti Student universində
+    }
+    json_out(['ok' => true, 'name' => $name, 'role' => $role, 'token' => $tok, 'password' => $pw]);
 }
 
 if ($act === 'reset') {
     $name = (string)($in['name'] ?? '');
-    $ex = $pdo->prepare('SELECT 1 FROM users WHERE name = ?');
+    $ex = $pdo->prepare('SELECT role FROM users WHERE name = ?');
     $ex->execute([$name]);
-    if (!$ex->fetchColumn()) {
+    $role = $ex->fetchColumn();
+    if ($role === false) {
         json_out(['error' => 'istifadəçi tapılmadı'], 404);
     }
     $tok = gen_token();
     $pw = gen_pass();
     $pdo->prepare('UPDATE users SET token_hash = ?, pass_hash = ? WHERE name = ?')
         ->execute([hash('sha256', $tok), password_hash($pw, PASSWORD_DEFAULT), $name]);
-    json_out(['ok' => true, 'name' => $name, 'token' => $tok, 'password' => $pw]);
+    json_out(['ok' => true, 'name' => $name, 'role' => $role, 'token' => $tok, 'password' => $pw]);
 }
 
 if ($act === 'delete') {
@@ -147,6 +155,9 @@ if ($act === 'delete') {
         $pdo->prepare("DELETE FROM $t WHERE user = ?")->execute([$name]);
     }
     $pdo->prepare('DELETE FROM messages WHERE from_user = ? OR to_user = ?')->execute([$name, $name]);
+    if ($role === 'student') {
+        $pdo->prepare('DELETE FROM worlds WHERE owner = ?')->execute([$name]);
+    }
     $pdo->prepare('DELETE FROM users WHERE name = ?')->execute([$name]);
     json_out(['ok' => true]);
 }

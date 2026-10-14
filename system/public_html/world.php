@@ -19,6 +19,14 @@ $act = (string)($in['action'] ?? '');
 $pdo = db();
 $now = time();
 $isAdmin = $me['role'] === 'admin';
+// Student yeni planet yaratmır: yalnız öz planetini fərdiləşdirir və öz gəmisini dəyişir
+if (is_student($me)) {
+    if ($act === 'planet_save') {
+        $in['id'] = ensure_student_planet($pdo, $me['name']);
+    } elseif ($act !== 'ship_save') {
+        json_out(['error' => 'Bu bölmə studentlər üçün bağlıdır'], 403);
+    }
+}
 
 // Xüsusi planetlərin adları: istifadəçi planeti bu adlarla yarana bilməz
 const SPECIAL_PLANETS = ['Prompt Generator', 'Designer', 'Meeting Planet', 'Test Planet'];
