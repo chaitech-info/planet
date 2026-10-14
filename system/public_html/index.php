@@ -600,8 +600,10 @@ body.v-space::before { display: none; }
 @media (max-width: 520px) { .row { grid-template-columns: 48px 1fr; } .wrap { padding-top: 16px; } }
 
 /* ===== Yeni: gəmilər, peyklər, balonlar, xüsusi planetlər ===== */
-.glabel.galbl { font-size: 15px; padding: 6px 12px; } .glabel.galbl b { font-size: 17px; letter-spacing: -.01em; } .glabel.galbl span { font-size: 12.5px; }
-.glabel.galbl.hov b { transform: scale(1.08); }
+.glabel.galbl { font-size: 15px; padding: 7px 14px 8px; border-radius: 16px; background: rgba(8,10,20,.5); border: 1px solid rgba(255,255,255,.1); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); text-shadow: none; transition: opacity .3s ease, background-color .2s ease, border-color .2s ease; }
+.glabel.galbl b { font-size: 16px; letter-spacing: -.01em; display: block; } .glabel.galbl span { font-size: 12px; color: rgba(233,233,243,.62); display: block; margin-top: 1px; }
+@media (hover: hover) and (pointer: fine) { .glabel.galbl:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.22); } }
+.glabel.galbl.hov b { transform: none; }
 .maphint { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 2; pointer-events: none; font-size: 12.5px; color: rgba(233,233,243,.7); background: rgba(9,10,20,.5); border: 1px solid rgba(255,255,255,.1); border-radius: 999px; padding: 4px 12px; white-space: nowrap; transition: opacity .6s ease; }
 .maphint[hidden] { display: block; opacity: 0; }
 @media (max-width: 760px) { .maphint { display: none !important; } }

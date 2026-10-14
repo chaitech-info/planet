@@ -322,8 +322,12 @@ function pu(extra, light) { return Object.assign({ uTime: uT, uLight: light || u
 
 /* ====== Kosmik xəritə: bütün universlər eyni məkanda, hər birinin öz günəşi və qalaktikası var ====== */
 const UNI_IDS = ['main', 'studio', 'mcp', 'agent', 'desktop', 'student'];
-const UNI_POS = { main: [0, 0, 0], studio: [480, 40, -380], mcp: [-520, -30, -400], agent: [20, 60, -820], desktop: [0, -40, 430], student: [-560, 50, -860] };
-const MAP_TARGET = new THREE.Vector3(-10, 0, -215);
+// Səliqəli düzülüş: Komanda mərkəzdə, qalan beş univers eyni müstəvidə bərabər bucaqlı halqada (yuxarıdan saat əqrəbi ilə: Agent, Studio, Desktop, Student, MCP)
+const RING_R = 560;
+const ringPos = k => [Math.round(Math.sin(k * 1.2566) * RING_R), 0, -Math.round(Math.cos(k * 1.2566) * RING_R)];   // 1.2566 = 2π/5
+const UNI_POS = { main: [0, 0, 0], agent: ringPos(0), studio: ringPos(1), desktop: ringPos(2), student: ringPos(3), mcp: ringPos(4) };
+const MAP_TARGET = new THREE.Vector3(0, 0, 0);
+const GAL_R = 60;                                   // xəritədə bütün qalaktikalar eyni ölçüdə görünür (planet sayından asılı deyil)
 const U = {};
 for (const id of UNI_IDS) {
   const c = new THREE.Vector3(...UNI_POS[id]);
@@ -1474,7 +1478,7 @@ function buildUniverses() {
     u.g1 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: th.g1, transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending }));
     u.g2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: th.g2, transparent: true, opacity: .28, depthWrite: false, blending: THREE.AdditiveBlending }));
     u.gal = makeGalaxy(th.gal.join(','), th.gal2.join(','), hash(id));
-    u.gal.rotation.x = .5 + (hash(id) % 5) * .08; u.gal.rotation.z = ((hash(id) >> 3) % 7 - 3) * .09; u.gal.renderOrder = -1;
+    u.gal.rotation.x = .62; u.gal.rotation.z = ((hash(id) >> 3) % 7 - 3) * .03; u.gal.renderOrder = -1;   // hamısı eyni meyldə, çox az fərqlə
     u.galHit = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ visible: false })); u.galHit.userData.uni = id;
     u.root.add(u.sun, u.g1, u.g2, u.gal, u.galHit);
     u.lbl = document.createElement('div'); u.lbl.className = 'glabel sunl'; u.lbl.textContent = th.lbl; lblBox.append(u.lbl);
@@ -1503,17 +1507,17 @@ function updateUniverses(dt) {
     u.lvP = 1 - sst(R * 3.2, R * 5, u.d);
     u.lvD = fu === u ? 1 : 1 - sst(R * 1.7, R * 2.8, u.d);
     if (u.lvP > .35 && u.d < nd) { nd = u.d; near = u; }
-    const gs = R * 3.4;
+    const gs = GAL_R * 3.4;                                      // sabit ölçü: xəritədə hamısı bərabər
     u.gal.scale.setScalar(gs); u.gal.material.uniforms.uOp.value = .95 * u.lvG; u.gal.visible = u.lvG > .01;
     u.gal.material.uniforms.uPx.value = H * pr / (2 * Math.tan(camera.fov * Math.PI / 360));
     if (!REDUCE) u.gal.rotation.y += dt * .035;
-    u.galHit.scale.setScalar(R * 1.25); u.galHit.visible = u.lvG > .3;
+    u.galHit.scale.setScalar(GAL_R * 1.25); u.galHit.visible = u.lvG > .3;
     const sp = 1 + Math.sin(tScene * 1.3 + u.center.x) * .03;
     u.g1.scale.setScalar(30 * sp * (1 + u.lvG * 3)); u.g2.scale.setScalar((78 + Math.sin(tScene * .7) * 3) * (1 + u.lvG * 2));
     u.sun.rotation.y += dt * .02;
     u.lbl.style.opacity = focusName ? 0 : u.lvP;
     applyLabel(u.lbl, u.lvP > .02 && !focusName ? labelPos(u.center, 5.2, true) : null);
-    const gq = u.lvG > .02 ? labelPos(u.center, R * 1.1, true) : null;
+    const gq = u.lvG > .02 ? labelPos(u.center, GAL_R * 1.15, true) : null;   // etiket hər qalaktikanın altında eyni məsafədə
     applyLabel(u.glbl, gq); u.glbl.style.opacity = u.lvG; u.glbl.style.pointerEvents = u.lvG > .4 ? 'auto' : 'none';
   }
   const id = near ? near.id : null;
@@ -1564,7 +1568,7 @@ function uniPose(id) {
   return { pos: u.center.clone().add(new THREE.Vector3(0, d * .52, d * .86)), target: u.center.clone() };
 }
 function mapPose() {
-  const asp = W / H, d = 1250 / Math.max(.55, Math.min(1.5, asp)) + 300;
+  const asp = W / H, d = 1400 / Math.max(.55, Math.min(1.5, asp)) + 320;   // halqa (RING_R) + qalaktika + etiket kadra sığsın
   return { pos: MAP_TARGET.clone().add(new THREE.Vector3(0, d * .88, d * .48)), target: MAP_TARGET.clone() };
 }
 /** Universə (və ya id = null: bütün xəritəyə) axıcı uçuş; uzaq məsafədə qövslə */
