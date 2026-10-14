@@ -90,10 +90,13 @@ $projects = $pdo->prepare('SELECT project, user, COUNT(*) AS sessions, SUM(edits
     FROM sessions WHERE updated_at > ? GROUP BY project, user');
 $projects->execute([$now - 30 * 86400]);
 
-$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, images
+// təsdiqi 1 saat gözlənilməyən uzaq komanda ləğv olunur
+$pdo->prepare("UPDATE commands SET status = 'canceled', result = ?, finished_at = ? WHERE status = 'pending' AND created_at < ?")
+    ->execute(['Vaxt bitdi: təsdiq edilmədi', $now, $now - 3600]);
+$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images
     FROM commands ORDER BY id DESC LIMIT 40')->fetchAll();
-foreach ($cmds as &$c) {
-    $c['result'] = mb_substr($c['result'], 0, 3000);
+foreach ($cmds as $i => &$c) {
+    $c['result'] = mb_substr($c['result'], 0, $i < 8 ? 8000 : 1500);   // ən yeni 8 cavab tam, köhnələr qısa (hər 3 saniyədə göndərilir)
     $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
 }
 unset($c);
@@ -175,6 +178,11 @@ json_out([
     'meeting_posts' => $posts,
     'sounds' => (object)$sounds,
     'messages' => $msgs,
+    'grants' => (function () use ($pdo, $me) {
+        $g = $pdo->prepare("SELECT owner, grantee, mode FROM remote_grants WHERE owner = ? OR grantee = ? OR grantee = '*'");
+        $g->execute([$me['name'], $me['name']]);
+        return $g->fetchAll();
+    })(),
     'plans' => $pl->fetchAll(),
     'presence' => $pdo->query('SELECT user, last_seen FROM presence')->fetchAll(),
     'alerts' => $al->fetchAll(),

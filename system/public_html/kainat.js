@@ -4,7 +4,7 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const STC = { working: '#fbbf24', waiting: '#f87171', idle: '#4ade80', offline: '#6f6f7c', ended: '#6f6f7c', meet: '#5eead4' };
-const KIND_TYPE = { prompt: 6, designer: 7, meeting: 8, test: 9, mcp: 10, agent: 11 };
+const KIND_TYPE = { prompt: 6, designer: 7, meeting: 8, test: 9, mcp: 10, agent: 11, desktop: 9 };
 const uT = { value: 0 };
 const uSun = { value: new THREE.Vector3(0, 0, 0) };
 
@@ -321,9 +321,9 @@ const focusObj = () => focusName === SHIP ? ship : planets.get(focusName);
 function pu(extra, light) { return Object.assign({ uTime: uT, uLight: light || uSun }, extra); }
 
 /* ====== Kosmik xəritə: bütün universlər eyni məkanda, hər birinin öz günəşi və qalaktikası var ====== */
-const UNI_IDS = ['main', 'studio', 'mcp', 'agent', 'student'];
-const UNI_POS = { main: [0, 0, 0], studio: [480, 40, -380], mcp: [-520, -30, -400], agent: [20, 60, -820], student: [-560, 50, -860] };
-const MAP_TARGET = new THREE.Vector3(-10, 0, -270);
+const UNI_IDS = ['main', 'studio', 'mcp', 'agent', 'desktop', 'student'];
+const UNI_POS = { main: [0, 0, 0], studio: [480, 40, -380], mcp: [-520, -30, -400], agent: [20, 60, -820], desktop: [0, -40, 430], student: [-560, 50, -860] };
+const MAP_TARGET = new THREE.Vector3(-10, 0, -215);
 const U = {};
 for (const id of UNI_IDS) {
   const c = new THREE.Vector3(...UNI_POS[id]);
@@ -1263,10 +1263,11 @@ function disposeUShip(s) {
   s.trail.g.dispose(); s.trail.mat.dispose();
 }
 const figMatsHas = m => { for (const v of figMats.values()) if (v === m) return true; return false; };
+const SHOW_USHIPS = false;           // istifadəçi gəmiləri kainatda göstərilmir (məlumat bazada qalır, true edəndə qayıdır)
 api.setShips = list => {
   if (!api.mounted) return;
   const seen = new Set();
-  for (const o of list || []) {
+  for (const o of (SHOW_USHIPS ? list : null) || []) {
     seen.add(o.user);
     let s = uships.get(o.user);
     const sig = [o.model, o.color, o.accent].join('|');
@@ -1412,25 +1413,57 @@ const THEMES = {
   main: { a: [.2, .1, .38], b: [.05, .22, .36], c: [.38, .1, .2], sa: [1, .36, .04], sb: [1, .82, .32], g1: 0xffa040, g2: 0xff7a30, lbl: 'Komanda', gal: [255, 190, 120], gal2: [150, 130, 255] },
   studio: { a: [.38, .08, .3], b: [.32, .2, .05], c: [.12, .1, .42], sa: [1, .28, .5], sb: [1, .86, .94], g1: 0xff70b0, g2: 0xff4f8f, lbl: 'Studio', gal: [255, 140, 200], gal2: [255, 210, 120] },
   mcp: { a: [.02, .26, .32], b: [.04, .36, .24], c: [.08, .14, .38], sa: [.05, .55, 1], sb: [.75, 1, 1], g1: 0x40d0ff, g2: 0x2090ff, lbl: 'MCP Hub', gal: [110, 230, 255], gal2: [90, 255, 190] },
+  desktop: { a: [.04, .3, .2], b: [.1, .28, .1], c: [.04, .2, .34], sa: [.15, .85, .5], sb: [.85, 1, .9], g1: 0x40e090, g2: 0x20b070, lbl: 'Desktop', gal: [110, 255, 170], gal2: [120, 200, 255] },
   agent: { a: [.26, .05, .42], b: [.36, .05, .24], c: [.05, .1, .36], sa: [.5, .18, 1], sb: [.96, .78, 1], g1: 0xb070ff, g2: 0x8040ff, lbl: 'Agentlər', gal: [200, 140, 255], gal2: [255, 120, 200] },
   student: { a: [.04, .3, .14], b: [.22, .3, .04], c: [.04, .16, .34], sa: [.2, 1, .45], sb: [.9, 1, .7], g1: 0x60f090, g2: 0x30d070, lbl: 'Studentlər', gal: [140, 255, 170], gal2: [255, 230, 120] },
 };
 let streaks = null, myUser = '', skyMix = null, navUni = null, camSpd = 0, warpK = 0, baseFov = 45;
 const prevCam = new THREE.Vector3();
-/** Spiral qalaktika teksturu (kanvasda): iki qol, parlaq nüvə, ulduz tozu */
-function galaxyTex(c1, c2, seed) {
-  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S;
-  const g = cv.getContext('2d'), r = rnd(seed);
-  const core = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-  core.addColorStop(0, `rgba(255,248,235,.95)`); core.addColorStop(.08, `rgba(${c1},.55)`); core.addColorStop(.35, `rgba(${c2},.12)`); core.addColorStop(1, 'rgba(0,0,0,0)');
-  g.fillStyle = core; g.fillRect(0, 0, S, S);
-  g.globalCompositeOperation = 'lighter';
-  for (let i = 0; i < 2600; i++) {
-    const arm = i % 2, t = Math.pow(r(), .8) * 3.2, ang = t * 1.9 + arm * Math.PI + (r() - .5) * .55, rad = (t / 3.2) * S * .46 + (r() - .5) * 10;
-    const x = S / 2 + Math.cos(ang) * rad, y = S / 2 + Math.sin(ang) * rad * .92, sz = r() * 2.4 + .4, a = (1 - t / 3.4) * (.25 + r() * .55);
-    g.fillStyle = `rgba(${r() < .7 ? c1 : c2},${a.toFixed(3)})`; g.beginPath(); g.arc(x, y, sz, 0, 6.2832); g.fill();
+const GAL_VS = `
+attribute float size; attribute vec3 color; uniform float uPx; varying vec3 vC; varying float vT;
+void main(){
+  vC=color; vec4 mv=modelViewMatrix*vec4(position,1.);
+  gl_Position=projectionMatrix*mv;
+  float s=length(modelMatrix[0].xyz);
+  gl_PointSize=clamp(size*s*uPx/-mv.z,1.4,26.);
+}`;
+const GAL_FS = `
+uniform float uOp; varying vec3 vC;
+void main(){ float d=length(gl_PointCoord-.5); float a=pow(smoothstep(.5,0.,d),1.6); gl_FragColor=vec4(vC*a,a*uOp); }`;
+/** 3D spiral qalaktika: parlaq nüvə (şar), qalın mərkəz, iki spiral qol və nazik ulduz diski, ətrafda zəif halo.
+ *  Vahid ölçü: radius ≈ .46 (köhnə müstəvi ilə eyni), qalınlıq həqiqi həcm verir. */
+function makeGalaxy(c1, c2, seed) {
+  const r = rnd(seed), gs = () => (r() + r() + r() + r() - 2) * .87;     // təxminən Qauss
+  const A = c1.split(',').map(x => +x / 255), B = c2.split(',').map(x => +x / 255);
+  const NB = 2600, NA = 14000, NH = 700, NG = 1100, N = NB + NA + NH + NG;
+  const pos = new Float32Array(N * 3), col = new Float32Array(N * 3), sz = new Float32Array(N);
+  let k = 0;
+  const put = (x, y, z, c, s, m) => { pos[k * 3] = x; pos[k * 3 + 1] = y; pos[k * 3 + 2] = z; col[k * 3] = c[0] * m; col[k * 3 + 1] = c[1] * m; col[k * 3 + 2] = c[2] * m; sz[k] = s; k++; };
+  for (let i = 0; i < NB; i++) {                                           // nüvə: yastılanmış şar
+    const q = i < 120, u = gs() * (q ? .02 : .06), v = gs() * (q ? .016 : .045), w = gs() * (q ? .02 : .06), f = .75 + r() * .25;
+    put(u, v, w, [1 * f, .93 * f, .8 * f], q ? .03 + r() * .03 : .005 + r() * .008, q ? .5 : .62);
   }
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  for (let i = 0; i < NA; i++) {                                           // qollar
+    const arm = i % 2, t = Math.pow(r(), .75) * 3.2, tt = t / 3.2;
+    const ang = t * 1.9 + arm * Math.PI + gs() * (.3 + tt * .3), rad = tt * .46 + gs() * .016;
+    const y = gs() * (.03 * (1 - tt * .5) + .006);
+    const c = r() < .68 ? A : B, m = (1 - tt * .5) * (.3 + r() * .7), big = r() < .03;
+    put(Math.cos(ang) * rad, y, Math.sin(ang) * rad, c, big ? .018 + r() * .014 : .006 + r() * .008, big ? 1.1 : m * 1.15);
+  }
+  for (let i = 0; i < NH; i++) {                                           // halo: zəif qlobul ulduzlar
+    const a = r() * 6.2832, z = r() * 2 - 1, q = Math.sqrt(1 - z * z), rad = .1 + Math.pow(r(), .8) * .4;
+    put(Math.cos(a) * q * rad, z * rad * .8, Math.sin(a) * q * rad, [.85, .9, 1], .004 + r() * .004, .22 + r() * .2);
+  }
+  for (let i = 0; i < NG; i++) {                                           // iri zəif qaz/toz ləkələri qollar boyunca
+    const arm = i % 2, t = Math.pow(r(), .85) * 3.2, tt = t / 3.2;
+    const ang = t * 1.9 + arm * Math.PI + gs() * .16, rad = tt * .46 + gs() * .02;
+    put(Math.cos(ang) * rad, gs() * .012, Math.sin(ang) * rad, r() < .5 ? A : B, .028 + r() * .03, .07 + r() * .06);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('size', new THREE.BufferAttribute(sz, 1));
+  const m = new THREE.ShaderMaterial({ vertexShader: GAL_VS, fragmentShader: GAL_FS, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uOp: { value: 0 }, uPx: { value: 1 } } });
+  const pts = new THREE.Points(g, m); pts.frustumCulled = false;
+  return pts;
 }
 function buildUniverses() {
   for (const id of UNI_IDS) {
@@ -1440,8 +1473,8 @@ function buildUniverses() {
       uniforms: { uTime: uT, uSA: { value: new THREE.Vector3(...th.sa) }, uSB: { value: new THREE.Vector3(...th.sb) } } }));
     u.g1 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: th.g1, transparent: true, opacity: .85, depthWrite: false, blending: THREE.AdditiveBlending }));
     u.g2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: th.g2, transparent: true, opacity: .28, depthWrite: false, blending: THREE.AdditiveBlending }));
-    u.gal = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: galaxyTex(th.gal.join(','), th.gal2.join(','), hash(id)), transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-    u.gal.rotation.x = -Math.PI / 2 + .25; u.gal.renderOrder = -1;
+    u.gal = makeGalaxy(th.gal.join(','), th.gal2.join(','), hash(id));
+    u.gal.rotation.x = .5 + (hash(id) % 5) * .08; u.gal.rotation.z = ((hash(id) >> 3) % 7 - 3) * .09; u.gal.renderOrder = -1;
     u.galHit = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ visible: false })); u.galHit.userData.uni = id;
     u.root.add(u.sun, u.g1, u.g2, u.gal, u.galHit);
     u.lbl = document.createElement('div'); u.lbl.className = 'glabel sunl'; u.lbl.textContent = th.lbl; lblBox.append(u.lbl);
@@ -1471,8 +1504,9 @@ function updateUniverses(dt) {
     u.lvD = fu === u ? 1 : 1 - sst(R * 1.7, R * 2.8, u.d);
     if (u.lvP > .35 && u.d < nd) { nd = u.d; near = u; }
     const gs = R * 3.4;
-    u.gal.scale.setScalar(gs); u.gal.material.opacity = .9 * u.lvG; u.gal.visible = u.lvG > .01;
-    u.gal.rotation.z += dt * .01;
+    u.gal.scale.setScalar(gs); u.gal.material.uniforms.uOp.value = .95 * u.lvG; u.gal.visible = u.lvG > .01;
+    u.gal.material.uniforms.uPx.value = H * pr / (2 * Math.tan(camera.fov * Math.PI / 360));
+    if (!REDUCE) u.gal.rotation.y += dt * .035;
     u.galHit.scale.setScalar(R * 1.25); u.galHit.visible = u.lvG > .3;
     const sp = 1 + Math.sin(tScene * 1.3 + u.center.x) * .03;
     u.g1.scale.setScalar(30 * sp * (1 + u.lvG * 3)); u.g2.scale.setScalar((78 + Math.sin(tScene * .7) * 3) * (1 + u.lvG * 2));
@@ -1514,6 +1548,7 @@ function updateStreaks(k, dt) {
 }
 /** Sürətli uçuşda (universlər arası) ulduz xətləri və geniş baxış bucağı — kameranın real sürətindən */
 function updateSpeedFx(dt) {
+  return;                                  // ulduz xətləri və baxış bucağı effekti söndürülüb (istifadəçi bəyənmədi)
   if (dt <= 0) return;
   const v = camera.position.distanceTo(prevCam) / dt; prevCam.copy(camera.position);
   camSpd += (v - camSpd) * Math.min(1, dt * 5);
@@ -1982,7 +2017,6 @@ api.mount = function (el) {
   // universlər (hər birinin günəşi, qalaktikası, etiketləri)
   buildUniverses();
   buildShip();
-  buildStreaks();
   sunSats.body = new THREE.Group(); U.main.root.add(sunSats.body);
 
   // Trackball: sürükləyəndə bütün istiqamətlərdə sərbəst 360° fırlanma (qütb bucağı məhdudiyyəti yoxdur).

@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 H=u131695581@77.37.71.174
 D=domains/development.chaitech.info/public_html
 KEY=$HOME/.ssh/hostinger
-PHPFILES="index feed db command agent ingest admin kit tasks report daily control message sound plans world jarvis cmdimg"
+PHPFILES="index feed db command agent ingest admin kit tasks report daily control message sound plans world remote jarvis cmdimg"
 SSH="ssh -i $KEY -p 65002 $H"
 SCP="scp -i $KEY -P 65002 -q"
 RUN=".tmp-dash/run-$(date +%s)"

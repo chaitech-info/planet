@@ -143,6 +143,24 @@ function db(): PDO
         created_at INT NOT NULL,
         updated_at INT NOT NULL
     )");
+    try {
+        $pdo->exec("ALTER TABLE commands ADD COLUMN creator VARCHAR(64) NOT NULL DEFAULT ''");   // komandanı kim göndərib (uzaqdan göndərilibsə sahibindən fərqli)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    try {
+        $pdo->exec('ALTER TABLE commands ADD COLUMN fresh INT NOT NULL DEFAULT 0');   // 1 = əvvəlki söhbəti davam etdirmə, sıfırdan başla
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    // Desktop Universe: kompüterin sahibi başqalarına öz Claude Code-una komanda göndərməyə icazə verir (mode: approve = hər dəfə təsdiq, auto = avtomatik)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS remote_grants (
+        owner VARCHAR(64) NOT NULL,
+        grantee VARCHAR(64) NOT NULL,
+        mode VARCHAR(8) NOT NULL,
+        created_at INT NOT NULL,
+        PRIMARY KEY (owner, grantee)
+    )");
     $pdo->exec("CREATE TABLE IF NOT EXISTS login_fail (
         ip VARCHAR(64) NOT NULL,
         ts INT NOT NULL

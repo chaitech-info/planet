@@ -155,6 +155,7 @@ if ($act === 'delete') {
         $pdo->prepare("DELETE FROM $t WHERE user = ?")->execute([$name]);
     }
     $pdo->prepare('DELETE FROM messages WHERE from_user = ? OR to_user = ?')->execute([$name, $name]);
+    $pdo->prepare('DELETE FROM remote_grants WHERE owner = ? OR grantee = ?')->execute([$name, $name]);
     if ($role === 'student') {
         $pdo->prepare('DELETE FROM worlds WHERE owner = ?')->execute([$name]);
     }
