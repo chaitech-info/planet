@@ -46,7 +46,7 @@
 .rd-bar .go { background: linear-gradient(135deg,#16a34a,#0284c7); border-color: transparent; font-weight: 600; }
 .rd-bar .off { background: rgba(248,113,113,.18); border-color: rgba(248,113,113,.5); }
 .rd-err { font-size: 12px; color: #fca5a5; } .rd-err[hidden] { display: none; }
-@media (max-width: 700px) { .rd { left: 10px; right: 10px; bottom: 10px; width: auto; } }`;
+@media (max-width: 700px) { .rd { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; max-height: calc(100dvh - 24px); overflow: auto; z-index: 71; } .rd-ptt { padding: 22px 12px; } .rd-log { max-height: 84px; } }`;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
   const box = document.createElement('div'); box.className = 'rd'; box.hidden = true;
   box.innerHTML = `<div class="rd-top"><div class="rd-led" id="rd-led"></div><div class="rd-ttl"><b>RATSİYA</b><span id="rd-st">bağlıdır</span></div><button class="rd-x" id="rd-close" aria-label="Bağla">✕</button></div>

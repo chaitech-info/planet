@@ -38,7 +38,7 @@ $authed = session_user() !== null;
 <html lang="az">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
 <title>Komanda Claude</title>
 <style>
@@ -752,6 +752,70 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body
   .shoot { display: none; }
   .space.warping .scene, .space.warping .skyz { transition: none; }
   @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+}
+
+/* ===== Mobil: telefon və planşet (yuxarıdakı qaydaların üstündən) ===== */
+html { -webkit-text-size-adjust: 100%; }
+.wrap { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+#space { --H: calc(100dvh - 116px); }
+@media (max-width: 900px) {
+  /* Başlıq: 1-ci sətir brend + tablar, 2-ci sətir alət zolağı (sürüşdürülür, sətirlərə parçalanmır) */
+  header { gap: 10px 12px; margin-bottom: 16px; }
+  .meta { flex: 1 0 100%; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: 2px 2px 6px; margin: 0 -2px; gap: 8px;
+    -webkit-mask: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  .meta::-webkit-scrollbar { display: none; }
+  .meta > * { flex: none; white-space: nowrap; }
+  .meta .who { display: none; }
+  .tabs { margin-left: auto; }
+  #space { --H: calc(100dvh - 150px); min-height: 440px; }
+  .hud { right: 60px; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; }
+  .travel { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; padding: 6px 12px 12px; -webkit-overflow-scrolling: touch; }
+  .travel::-webkit-scrollbar { display: none; } .travel button { flex: none; }
+  .dock { border-radius: 18px 18px 14px 14px; }
+  .dock::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.22); margin: -4px auto 10px; }
+}
+@media (max-width: 600px) {
+  .wrap { padding-top: 12px; padding-bottom: 40px; }
+  h1 { font-size: 17px; } .logo { width: 30px; height: 30px; }
+  .brand { gap: 9px; }
+  .tabs { margin-left: 0; width: 100%; display: flex; }
+  .tabs a { flex: 1; text-align: center; padding: 7px 8px; font-size: 13px; }
+  h2 { margin: 22px 0 10px; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .stat { padding: 10px 12px; } .stat b { font-size: 22px; }
+  .grid { grid-template-columns: 1fr; gap: 10px; }
+  .card { padding: 14px; border-radius: 14px; }
+  .filters { gap: 6px; } .filters button { padding: 6px 12px; }
+  /* Kainat: tam en, hündürlük ekrana görə; dock aşağıdan açılan vərəq */
+  body.v-space .wrap { padding: 8px 8px 10px; }
+  #space { --H: calc(100dvh - 140px); min-height: 400px; border-radius: 16px; }
+  .zbtns { top: 50px; right: 10px; gap: 5px; } .zbtns button { width: 34px; height: 34px; } .fsbtn { right: 10px; top: 8px; width: 34px; height: 34px; }
+  .hud { left: 12px; top: 10px; }
+  .dock { left: 8px; right: 8px; bottom: 8px; height: 64%; padding: 12px; }
+  .dtitle { font-size: 22px; } .dtop .dtitle { font-size: 19px; }
+  .xd-comp { margin: 12px -12px -12px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); bottom: -12px; }
+  /* Lövhə */
+  .bbar { gap: 8px; } .bbar select { flex: 1; min-width: 0; } .bbar .sp { display: none; } .bbar #b-newtask { width: 100%; }
+  .btoken { flex-direction: column; align-items: stretch; } .btoken input { min-width: 0; }
+  .bflow-cap { font-size: 11.5px; }
+  .bcol { min-height: 0; border-radius: 16px; }
+  .tcard .tact .gbtn { padding: 6px 11px; }
+  /* Modallar: aşağıdan açılan vərəq */
+  .modal { padding: 0; place-items: end stretch; }
+  .mbox, .mbox.small { width: 100%; max-height: min(94dvh, 100%); border-radius: 18px 18px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); box-sizing: border-box; }
+  .mbox::before { content: ""; display: block; width: 40px; height: 4px; border-radius: 4px; background: rgba(255,255,255,.22); margin: -4px auto 12px; }
+  .madd { flex-wrap: wrap; } .madd input { flex: 1 1 160px; }
+  .urow .us { margin-left: 0; width: 100%; }
+  .mtoasts { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; }
+  .alert { font-size: 13px; padding: 9px 12px; }
+  .rcard, .prow { padding: 9px 10px; }
+}
+/* Toxunma ekranı: iOS fokusda yaxınlaşdırmasın (16px), düymələr barmaq üçün yetərli */
+@media (pointer: coarse) {
+  .dock input, .dock textarea, .dock select, .mbox input, .mbox textarea, .mbox select, .bbar select, .btoken input, .cmdbox textarea, .tokrow input { font-size: 16px; }
+  .gbtn, .filters button, .travel button { min-height: 36px; }
+  .ibtn, .zbtns button, .fsbtn { min-width: 38px; min-height: 38px; }
+  .tcard .tdesc, .prow .pbt, .xbub .pbt { -webkit-tap-highlight-color: transparent; }
 }
 </style>
 </head>

@@ -51,6 +51,9 @@ Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun
 Gəmilər hər biri öz trayektoriyası ilə uçur; sahibi işləyəndə öz proyektinin, boş vaxtda (agent onlayndırsa) öz agentinin ətrafında olur və arabir başqa universlərdəki planetlərə uçur.
 URL-lər: `#kainat` (xəritə), `#kainat/@mcp` (universin ümumi görünüşü), `#kainat/<planet>` (planet).
 
+## 📱 Mobil
+Sayt telefon və planşetdə də işləyir (CSS-in sonundakı "Mobil" bloku): başlıqda alət zolağı tək sətirdə sürüşdürülür, tablar tam enə yayılır; statistika 2 sütun, kartlar 1 sütun; Kainat ekran hündürlüyünə görə (`100dvh`), planet paneli (dock) aşağıdan açılan vərəqdir, səyahət düymələri sürüşdürülür; lövhə sütunları alt-alta; modallar, Jarvis və Ratsiya aşağıdan açılan tam en vərəqlərdir; iOS-da sahələr 16px (fokusda yaxınlaşdırma olmasın), düymələr barmaq ölçüsündə, `safe-area` boşluqları nəzərə alınır.
+
 ## 📻 Ratsiya (bas-danış səs)
 Başlıqdakı `📻 Ratsiya` düyməsi (və ya `Alt+R`) paneli açır və ratsiyanı yandırır (mikrofon icazəsi bir dəfə). Böyük düyməni (və ya Space-i) basılı saxlayıb danışırsan, buraxanda klip serverə gedir (`radio.php`, fayl `data/radio/`, 15 dəqiqə saxlanır). Kanal: hamıya və ya bir nəfərə. Ratsiyası açıq olan hər kəs klipi avtomatik eşidir: sorğu 2 saniyədən bir Web Worker-dən gedir, ona görə brauzer tabı arxada olanda da səs gəlir (icazə verilibsə bildiriş də çıxır). Səs radio tembrindədir (300–3400 Hz + yüngül təhrif), hər klipin əvvəlində rele kliki və xışıltı, sonunda xışıltı və iki tonlu "roger" siqnalı sintez olunur (polis ratsiyası kimi). Paneldə kimin eşitdiyi, son kliplər (▶ ilə yenidən çalmaq) və səs səviyyəsi görünür; panelin ✕-i ratsiyanı bağlamır, "⏻ Bağla" bağlayır. Yarım-dupleksdir: danışarkən gələn kliplər növbədə gözləyir. Ən çox 60 saniyə bir klip; HTTPS lazımdır.
 
