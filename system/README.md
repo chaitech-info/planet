@@ -45,3 +45,11 @@ Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun
 - **🤖 Agent Universe**: hər istifadəçinin AI agenti bir planetdir (onlayn/işləyir/növbə); yeni tapşırıq agentə raketlə çatır (başqası təyin edibsə, onun agentindən), paneldə avtomatlaşdırma axını.
 Gəmilər hər biri öz trayektoriyası ilə uçur; sahibi işləyəndə öz proyektinin, boş vaxtda (agent onlayndırsa) öz agentinin ətrafında olur və arabir başqa universlərdəki planetlərə uçur.
 URL-lər: `#kainat` (xəritə), `#kainat/@mcp` (universin ümumi görünüşü), `#kainat/<planet>` (planet).
+
+## 🎙 Jarvis (səsli agent, Gemini Live API)
+Real-time danışan köməkçi: sual verirsən ("kim nə edir?", "hansı planet yanır?"), kainatda gəzdirir ("MCP universinə uç"), əməllər edir (tapşırıq, status, deadline, görüş, test nəticəsi, mesaj raketi, agentə prompt). Dəyişiklik edən hər əmrdən əvvəl səslə təsdiq soruşur; silə bilmir.
+1. `system/public_html/config.local.example.php` faylını `config.local.php` adı ilə kopyala, `gemini_api_key` yaz (Google AI Studio). Bu fayl git-ə düşmür; serverdə də əl ilə yaradılmalıdır.
+2. Səhifədə `🎙 Jarvis` düyməsi və ya `Alt+J`. Mikrofon yalnız HTTPS və ya localhost-da işləyir; qulaqcıqla daha yaxşıdır.
+- Açar brauzerə getmir: `jarvis.php` 30 dəqiqəlik bir dəfəlik token yaradır, brauzer Gemini-yə birbaşa WebSocket ilə qoşulur.
+- Gündəlik limit: `jarvis_daily_minutes` (standart 60 dəq/istifadəçi). Model, səs və dil də `config.local.php`-dən dəyişir.
+
