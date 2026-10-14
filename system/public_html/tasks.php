@@ -91,8 +91,16 @@ if ($act === 'move') {
     }
     $pdo->prepare('UPDATE tasks SET status = ?, updated_at = ?, done_at = ? WHERE id = ?')
         ->execute([$to, $now, $to === 'done' ? $now : 0, $t['id']]);
+    $auto = null;
+    if ($to === 'todo') {                                   // yenidən açıldı: yoxlama dövrələri sıfırdan
+        $pdo->prepare("UPDATE tasks SET rounds = 0, verdict = '' WHERE id = ?")->execute([$t['id']]);
+    }
     if ($to === 'review' && $t['status'] !== 'review') {
-        notify_later("🔎 Yoxlamada: {$t['title']}\n{$t['assignee']} · {$t['project']}");
+        // insan "Yoxlamaya ver" dedi: agent hələ işləmirsə yoxlamanı da agent etsin (mümkünsə başqa agent)
+        $ac = $pdo->prepare("SELECT 1 FROM commands WHERE id = ? AND status IN ('pending','queued','running')");
+        $ac->execute([(int)$t['command_id']]);
+        $auto = $ac->fetchColumn() ? null : start_review($pdo, array_merge($t, ['status' => 'review']), '(icraçı işi özü bitirdi, agent hesabatı yoxdur: dəyişiklikləri git ilə tap)', $now);
+        notify_later($auto ? "🔎 Yoxlamada, $auto-in agenti yoxlayır: {$t['title']}\n{$t['assignee']} · {$t['project']}" : "🔎 Yoxlamada: {$t['title']}\n{$t['assignee']} · {$t['project']}");
     } elseif ($to === 'done' && $t['status'] !== 'done') {
         notify_later("✅ Bitdi: {$t['title']}\n{$t['assignee']} · {$t['project']}");
     }

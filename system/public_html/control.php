@@ -46,6 +46,8 @@ if ($act === 'stop_command') {
     $pdo->prepare("UPDATE commands SET status = 'canceled', result = ?, finished_at = ? WHERE id = ?")->execute(['Dayandırıldı', $now, $c['id']]);
     // bu icra ilə bağlı lövhə tapşırığı yenidən "Gözləyir"ə qayıdır
     $pdo->prepare("UPDATE tasks SET status = 'todo', updated_at = ? WHERE command_id = ? AND status = 'doing'")->execute([$now, $c['id']]);
+    // yoxlama dayandırıldısa tapşırıq "Yoxlamada" qalır, amma artıq insan baxmalıdır
+    $pdo->prepare("UPDATE tasks SET verdict = 'error', updated_at = ? WHERE command_id = ? AND status = 'review'")->execute([$now, $c['id']]);
     json_out(['ok' => true]);
 }
 

@@ -158,6 +158,21 @@ function db(): PDO
     } catch (Throwable $e) {
         // sütun artıq var
     }
+    try {
+        $pdo->exec("ALTER TABLE commands ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'prompt'");   // prompt | task (lövhə tapşırığının icrası) | review (başqa agentin yoxlaması)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    try {
+        $pdo->exec('ALTER TABLE tasks ADD COLUMN rounds INT NOT NULL DEFAULT 0');   // avtomatik yoxlama dövrələri (FAIL → düzəliş → yenidən yoxlama), limit var
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    try {
+        $pdo->exec("ALTER TABLE tasks ADD COLUMN verdict VARCHAR(16) NOT NULL DEFAULT ''");   // son yoxlamanın nəticəsi: pass | fail | unsynced | error
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
     // Desktop Universe: kompüterin sahibi başqalarına öz Claude Code-una komanda göndərməyə icazə verir (mode: approve = hər dəfə təsdiq, auto = avtomatik)
     $pdo->exec("CREATE TABLE IF NOT EXISTS remote_grants (
         owner VARCHAR(64) NOT NULL,
@@ -165,6 +180,20 @@ function db(): PDO
         mode VARCHAR(8) NOT NULL,
         created_at INT NOT NULL,
         PRIMARY KEY (owner, grantee)
+    )");
+    // Ratsiya: bas-danış səs klipləri (qısa ömürlü, fayl data/radio/ içində) və ratsiyası açıq olanlar
+    $pdo->exec("CREATE TABLE IF NOT EXISTS radio (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        target VARCHAR(64) NOT NULL,
+        file VARCHAR(64) NOT NULL,
+        mime VARCHAR(32) NOT NULL,
+        dur REAL NOT NULL DEFAULT 0,
+        created_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS radio_presence (
+        user VARCHAR(64) NOT NULL PRIMARY KEY,
+        last_seen INT NOT NULL
     )");
     $pdo->exec("CREATE TABLE IF NOT EXISTS login_fail (
         ip VARCHAR(64) NOT NULL,
@@ -360,6 +389,19 @@ function cmdimg_cleanup(PDO $pdo): void
     }
 }
 
+/** Ratsiya kliplərinin qovluğu (data/ içində, yalnız radio.php verir). Yaradıla bilmirsə null. */
+function radio_dir(): ?string
+{
+    $dir = __DIR__ . '/data/radio';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return null;
+    }
+    if (!is_file($dir . '/.htaccess')) {
+        @file_put_contents($dir . '/.htaccess', "Require all denied\n");
+    }
+    return $dir;
+}
+
 /* ---------- Lövhə tapşırığı → agent: prompt və avtomatik icra ---------- */
 /** Lövhə tapşırığından Claude Code promptu (əl ilə "▶ Claude ilə" və avtomatik icra eyni mətni işlədir). */
 function task_command_prompt(array $t): string
@@ -408,11 +450,139 @@ function auto_run_task(PDO $pdo, array $t, int $now): ?int
     if ((int)$c->fetchColumn() >= 5) {
         return null;
     }
-    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh) VALUES (?,?,?,?,?,?,?,?,'',1)")
-        ->execute([$t['assignee'], $t['project'], mb_substr(task_command_prompt($t), 0, 4000), 'queued', '', $now, 0, 0]);   // tapşırıq həmişə təzə söhbətdə
-    $cid = (int)$pdo->lastInsertId();
-    $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, updated_at = ? WHERE id = ?")->execute([$cid, $now, $t['id']]);
+    $cid = queue_command($pdo, $t['assignee'], $t['project'], task_command_prompt($t), 'task', $now);
+    $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, updated_at = ?, verdict = '' WHERE id = ?")->execute([$cid, $now, $t['id']]);
     return $cid;
+}
+
+/** Agentə təzə söhbətdə bir komanda qoyur (avtomatik, göndərən yoxdur). Komandanın id-sini qaytarır. */
+function queue_command(PDO $pdo, string $user, string $project, string $prompt, string $kind, int $now): int
+{
+    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, kind) VALUES (?,?,?,?,?,?,?,?,'',1,?)")
+        ->execute([$user, $project, mb_substr($prompt, 0, 4000), 'queued', '', $now, 0, 0, $kind]);
+    return (int)$pdo->lastInsertId();
+}
+
+/* ---------- Avtomatik yoxlama: iş bitəndə başqa agent müstəqil yoxlayır, keçsə "Bitdi", keçməsə iradlarla icraçıya qayıdır ---------- */
+const REVIEW_ROUNDS = 2;          // ən çox bu qədər FAIL → düzəliş → yenidən yoxlama; sonra insan baxır
+
+/** Yoxlayıcı agent: proyekti olan, avtomatik rejimi açıq, onlayn və icraçıdan fərqli bir agent (növbəsi ən boş olan). Yoxdursa null. */
+function pick_reviewer(PDO $pdo, string $project, string $exclude): ?string
+{
+    $q = $pdo->query('SELECT user, last_seen FROM agents WHERE auto_tasks = 1');
+    $best = null;
+    $bestLoad = 99;
+    $now = time();
+    foreach ($q->fetchAll() as $a) {
+        if ($a['user'] === $exclude || $now - (int)$a['last_seen'] > 30 || !agent_has_project($pdo, $a['user'], $project)) {
+            continue;
+        }
+        $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('pending','queued','running')");
+        $c->execute([$a['user']]);
+        $load = (int)$c->fetchColumn();
+        if ($load < 5 && $load < $bestLoad) {
+            $best = $a['user'];
+            $bestLoad = $load;
+        }
+    }
+    return $best;
+}
+
+/** Yoxlayıcı üçün prompt. $remote: başqa kompüterdədir (əvvəl pull etməli, dəyişiklik yoxdursa UNSYNCED). */
+function review_prompt(array $t, string $implResult, string $implementer, bool $remote): string
+{
+    $p = "Kod yoxlaması (review): \"" . $t['title'] . "\"\n\nTapşırıq:\n" . trim((string)$t['details']) . "\n\n"
+        . "İcraçı ($implementer) belə hesabat verib:\n" . trim(mb_substr($implResult, 0, 2500)) . "\n\n"
+        . "Sən müstəqil yoxlayıcısan: hesabata inanma, özün yoxla. ";
+    if ($remote) {
+        $p .= "Əvvəlcə `git pull` et (yalnız fast-forward). Hesabatdakı dəyişikliklər bu klonda yoxdursa (push olunmayıb), heç nə etmə və cavabın ilk sətri \"VERDICT: UNSYNCED\" olsun. ";
+    }
+    $p .= "`git status`, `git diff`, `git log` və faylları oxuyaraq tapşırığın həqiqətən və düzgün yerinə yetirildiyini, aydın səhv və ya yarımçıq yerin qalmadığını yoxla. Heç bir faylı dəyişmə.\n\n"
+        . "Cavabın İLK sətri mütləq bunlardan biri olsun: \"VERDICT: PASS\" və ya \"VERDICT: FAIL\". Sonra 3-6 cümlə əsaslandırma; FAIL-dirsə düzəldilməli olanları maddə-maddə, konkret fayl və sətirlə yaz.";
+    return $p;
+}
+
+/** Yoxlayıcının iradlarından sonra icraçıya düzəliş promptu. */
+function fix_prompt(array $t, string $review, string $reviewer): string
+{
+    return task_command_prompt($t) . "\n\nYoxlayıcı ($reviewer) işə baxıb və bu iradları yazıb, onları düzəlt (əvvəlki dəyişikliklər qovluqdadır):\n" . trim(mb_substr($review, 0, 2500));
+}
+
+/** Nəticədən qərar: pass | fail | unsynced | '' (tapılmadı). */
+function parse_verdict(string $result): string
+{
+    return preg_match('/VERDICT\s*:\s*\**\s*(PASS|FAIL|UNSYNCED)/iu', $result, $m) ? strtolower($m[1]) : '';
+}
+
+/**
+ * Tapşırıq üçün yoxlama başladır: mümkünsə başqa agent (fərqli kompüter, əvvəl pull edir), yoxsa icraçının öz agenti təzə söhbətdə.
+ * $selfOnly = true: yalnız icraçının agenti (UNSYNCED-dən sonra). Qaytarır: yoxlayıcının adı və ya null (heç bir agent yoxdur).
+ */
+function start_review(PDO $pdo, array $t, string $implResult, int $now, bool $selfOnly = false): ?string
+{
+    $reviewer = $selfOnly ? null : pick_reviewer($pdo, $t['project'], $t['assignee']);
+    $remote = $reviewer !== null;
+    if ($reviewer === null) {
+        $ag = $pdo->prepare('SELECT auto_tasks FROM agents WHERE user = ?');
+        $ag->execute([$t['assignee']]);
+        $auto = $ag->fetchColumn();
+        if ($auto === false || (int)$auto !== 1 || !agent_has_project($pdo, $t['assignee'], $t['project'])) {
+            return null;
+        }
+        $reviewer = $t['assignee'];
+    }
+    $cid = queue_command($pdo, $reviewer, $t['project'], review_prompt($t, $implResult, $t['assignee'], $remote), 'review', $now);
+    $pdo->prepare("UPDATE tasks SET status = 'review', command_id = ?, updated_at = ?, verdict = '' WHERE id = ?")->execute([$cid, $now, $t['id']]);
+    return $reviewer;
+}
+
+/**
+ * Agent komandanı bitirəndə lövhə tapşırığını irəli aparır (agent.php finish çağırır):
+ *  task   done → yoxlamaya göndər (agent yoxdursa insan yoxlasın); failed → "Gözləyir"ə qayıdır
+ *  review PASS → "Bitdi"; FAIL → dövrə limiti içində iradlarla icraçıya düzəliş; UNSYNCED → icraçının öz agenti yoxlasın; nəticəsiz → insan baxsın
+ */
+function advance_task(PDO $pdo, int $cid, string $user, string $status, string $result, int $now): void
+{
+    $cq = $pdo->prepare('SELECT kind FROM commands WHERE id = ?');
+    $cq->execute([$cid]);
+    $kind = (string)$cq->fetchColumn();
+    $tq = $pdo->prepare('SELECT * FROM tasks WHERE command_id = ?');
+    $tq->execute([$cid]);
+    $t = $tq->fetch();
+    if (!$t) {
+        return;
+    }
+    $who = "{$t['assignee']} · {$t['project']}";
+    if ($kind === 'review' && $t['status'] === 'review') {
+        $v = $status === 'done' ? parse_verdict($result) : 'error';
+        if ($v === 'pass') {
+            $pdo->prepare("UPDATE tasks SET status = 'done', done_at = ?, updated_at = ?, verdict = 'pass' WHERE id = ?")->execute([$now, $now, $t['id']]);
+            notify_later("✅ Yoxlamadan keçdi, bitdi: {$t['title']}\n$who · yoxladı: $user");
+        } elseif ($v === 'fail' && (int)$t['rounds'] < REVIEW_ROUNDS) {
+            $fid = queue_command($pdo, $t['assignee'], $t['project'], fix_prompt($t, $result, $user), 'task', $now);
+            $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, rounds = rounds + 1, updated_at = ?, verdict = 'fail' WHERE id = ?")->execute([$fid, $now, $t['id']]);
+            notify_later("🔁 Yoxlama keçmədi, düzəlişə göndərildi (" . ((int)$t['rounds'] + 1) . "/" . REVIEW_ROUNDS . "): {$t['title']}\n$who · yoxladı: $user");
+        } elseif ($v === 'unsynced' && $user !== $t['assignee'] && start_review($pdo, $t, $result, $now, true) !== null) {
+            $pdo->prepare("UPDATE tasks SET verdict = 'unsynced' WHERE id = ?")->execute([$t['id']]);
+        } else {                                       // FAIL limiti doldu / nəticə yoxdur / xəta: insan baxsın
+            $pdo->prepare("UPDATE tasks SET verdict = ?, updated_at = ? WHERE id = ?")->execute([$v === '' ? 'error' : $v, $now, $t['id']]);
+            notify_later("👀 İnsan yoxlaması lazımdır: {$t['title']}\n$who · agent yoxlaması: " . ($v ?: 'nəticəsiz'));
+        }
+        return;
+    }
+    if ($t['status'] !== 'doing' || $t['assignee'] !== $user) {
+        return;
+    }
+    if ($status === 'done') {                           // iş bitdi → müstəqil yoxlama
+        $rev = start_review($pdo, $t, $result, $now);
+        notify_later($rev ? "🤖 Claude işi bitirdi, $rev-in agenti yoxlayır: {$t['title']}\n$who" : "🤖 Claude işi bitirdi, yoxlamada: {$t['title']}\n$who");
+        if (!$rev) {
+            $pdo->prepare("UPDATE tasks SET status = 'review', updated_at = ? WHERE id = ?")->execute([$now, $t['id']]);
+        }
+    } else {                                            // alınmadı → "Gözləyir"ə qayıdır ki, kartda xəta görünsün və yenidən göndərilə bilsin
+        $pdo->prepare("UPDATE tasks SET status = 'todo', updated_at = ? WHERE id = ?")->execute([$now, $t['id']]);
+        notify_later("⚠ Claude tapşırığı bacarmadı: {$t['title']}\n$who");
+    }
 }
 
 /* ---------- Studentlər: ayrıca univers, yalnız öz universlərini görürlər ---------- */
