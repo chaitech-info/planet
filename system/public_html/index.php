@@ -530,24 +530,62 @@ body.v-space::before { display: none; }
 .btoken { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); margin-bottom: 14px; font-size: 13px; color: var(--muted); }
 .btoken input { min-width: 200px; }
 .bmsg { padding: 10px 12px; border-radius: 12px; font-size: 13.5px; margin-bottom: 14px; background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.3); color: #f87171; }
+/* ---- Lövhə: axın zolağı (tapşırıq → agent → yoxlayıcı agent → bitdi) ---- */
+.bflow { display: flex; align-items: center; gap: 4px; margin: 0 0 6px; padding: 8px 12px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.bflow .bn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; padding: 3px 10px; border-radius: 999px; transition: background-color .3s ease, color .3s ease; }
+.bflow .bn b { color: var(--text); font-variant-numeric: tabular-nums; }
+.bflow .bn[data-on="1"] { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--text); }
+.bflow .bn[data-on="1"] .ic { animation: wiggle 1.6s ease-in-out infinite; display: inline-block; }
+.bflow .bs { flex: 1; min-width: 26px; height: 2px; border-radius: 2px; background: var(--line); position: relative; overflow: hidden; }
+.bflow .bs::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, var(--c) 50%, transparent); transform: translateX(-100%); opacity: 0; }
+.bflow .bs[data-on="1"]::after { opacity: 1; animation: bsflow 1.4s linear infinite; }
+.bflow-cap { font-size: 12px; color: var(--muted); margin: 0 4px 14px; }
+@keyframes bsflow { to { transform: translateX(100%); } }
+@keyframes wiggle { 0%, 100% { transform: rotate(-10deg); } 50% { transform: rotate(10deg); } }
+/* ---- Sütunlar ---- */
 .bcols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
 @media (max-width: 1000px) { .bcols { grid-template-columns: repeat(2, minmax(0, 1fr)); } } @media (max-width: 600px) { .bcols { grid-template-columns: 1fr; } }
-.bcol { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 10px; min-height: 120px; }
-.bch { display: flex; align-items: center; justify-content: space-between; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 4px 6px 10px; }
-.bch .count { background: var(--line); color: var(--text); border-radius: 999px; padding: 0 8px; font-size: 11px; }
-.bcol[data-s="doing"] .bch { color: var(--work); } .bcol[data-s="review"] .bch { color: var(--violet); } .bcol[data-s="done"] .bch { color: var(--idle); }
-.blist { display: grid; gap: 10px; }
-.tcard { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.bcol, .tcard, .bflow .bn, .bflow .bs, .tverdict { --c: var(--off); }
+.bcol[data-s="doing"], .bn[data-s="doing"], .bs[data-s="doing"] { --c: var(--work); } .bcol[data-s="review"], .bn[data-s="review"], .bs[data-s="review"] { --c: var(--violet); } .bcol[data-s="done"], .bn[data-s="done"], .bs[data-s="done"] { --c: var(--idle); }
+.tcard[data-st="doing"] { --c: var(--work); } .tcard[data-st="review"] { --c: var(--violet); } .tcard[data-st="done"] { --c: var(--idle); }
+.bcol { position: relative; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 10px; min-height: 160px; transition: border-color .4s ease, box-shadow .4s ease; }
+.bcol::before { content: ""; position: absolute; left: 16px; right: 16px; top: -1px; height: 2px; border-radius: 2px; background: var(--c); opacity: .55; }
+.bcol[data-live="1"] { border-color: color-mix(in srgb, var(--c) 45%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 18%, transparent), 0 14px 40px -18px var(--c); }
+.bch { display: flex; align-items: center; gap: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--c); font-weight: 700; padding: 6px 6px 10px; }
+.bch .ic { font-size: 15px; display: inline-block; } .bch .sp { flex: 1; } .bcol[data-live="1"] .bch .ic { animation: wiggle 1.6s ease-in-out infinite; }
+.bch .count { background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--text); border-radius: 999px; padding: 0 8px; font-size: 11px; }
+.bch .count.bump { animation: bump .45s var(--ease-out); }
+.blist { display: grid; gap: 10px; min-height: 56px; }
+.blist:empty { border: 1px dashed var(--line); border-radius: 12px; display: grid; place-items: center; color: var(--muted); font-size: 12.5px; padding: 18px 10px; text-align: center; }
+.blist:empty::before { content: attr(data-empty); }
+/* ---- Kartlar ---- */
+.tcard { position: relative; overflow: hidden; background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 12px; padding: 10px 12px; transition: transform .25s var(--ease-out), box-shadow .25s ease, border-color .3s ease; }
+@media (hover: hover) and (pointer: fine) { .tcard:hover { transform: translateY(-2px); box-shadow: var(--shadow); } }
+.tcard.busy::after { content: ""; position: absolute; top: -40%; bottom: -40%; left: -40%; width: 35%; background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--c) 12%, transparent), transparent); transform: skewX(-14deg); animation: sheen 2.6s linear infinite; pointer-events: none; }
+@keyframes sheen { to { transform: translateX(480%) skewX(-14deg); } }
 .tcard .tt { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
 .tcard .tm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 6px; }
 .tcard .tp { background: var(--line); color: var(--text); border-radius: 6px; padding: 1px 7px; cursor: pointer; }
 .tcard .tdesc { font-size: 13px; color: var(--muted); margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; cursor: pointer; }
 .tcard .tdesc.open { -webkit-line-clamp: unset; display: block; }
-.tcard .tcmd summary .dot { width: 7px; height: 7px; }
-.tcard .tcmd { margin-top: 8px; font-size: 12.5px; } .tcard .tcmd summary { cursor: pointer; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.tcard .tbot { margin-top: 8px; border-radius: 10px; padding: 7px 9px; background: color-mix(in srgb, var(--c) 9%, transparent); border: 1px solid color-mix(in srgb, var(--c) 28%, transparent); font-size: 12.5px; }
+.tcard .tbot[hidden], .tcard .tprog[hidden], .tcard .tverdict[hidden] { display: none; }
+.tcard .tbot .trow { display: flex; align-items: center; gap: 7px; } .tcard .tbot .tb-ic { font-size: 14px; display: inline-block; }
+.tcard .tbot.run .tb-ic { animation: botbob 1.1s ease-in-out infinite; }
+@keyframes botbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.tcard .tprog { height: 3px; border-radius: 3px; margin-top: 7px; background: var(--line); overflow: hidden; position: relative; }
+.tcard .tprog::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; border-radius: 3px; background: var(--c); animation: slide 1.5s linear infinite; }
+.tcard .tbot.scan .tprog::after { width: 22%; animation: scan 1.3s ease-in-out infinite alternate; }
+@keyframes scan { from { left: 0; } to { left: 78%; } }
+.tverdict { display: inline-block; margin-top: 7px; font-size: 11.5px; border-radius: 999px; padding: 1px 9px; border: 1px solid var(--line); color: var(--muted); }
+.tverdict[data-v="pass"] { color: var(--idle); border-color: color-mix(in srgb, var(--idle) 55%, transparent); background: color-mix(in srgb, var(--idle) 10%, transparent); }
+.tverdict[data-v="fail"] { color: var(--work); border-color: color-mix(in srgb, var(--work) 55%, transparent); background: color-mix(in srgb, var(--work) 10%, transparent); }
+.tcard .tcmd { margin-top: 6px; font-size: 12px; } .tcard .tcmd summary { cursor: pointer; color: var(--muted); }
 .tcard .tcmd pre { margin: 6px 0 0; padding: 8px; border-radius: 8px; background: rgba(0,0,0,.25); font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; color: var(--text); }
 .tcard .tact { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; } .tcard .tact .gbtn { padding: 4px 10px; font-size: 12.5px; }
 .tcard .tact .danger { color: #f87171; border-color: rgba(248,113,113,.35); }
+.tcard .cf { position: absolute; width: 6px; height: 6px; border-radius: 2px; top: 50%; left: 50%; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .bflow .bs::after, .bch .ic, .bflow .ic, .tcard.busy::after, .tcard .tb-ic, .tcard .tprog::after { animation: none !important; } }
 .tcard .avatar { width: 20px; height: 20px; font-size: 10px; } .tcard .avatar .ring { display: none; }
 
 /* Giriş */
@@ -763,6 +801,8 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn { dis
       <span class="cmderr" id="btok-err" hidden></span>
     </div>
     <div class="bmsg" id="bmsg" hidden></div>
+    <div class="bflow" id="bflow"></div>
+    <div class="bflow-cap">Tapşırıq təyin olunur → icraçının agenti işləyir → başqa bir agent müstəqil yoxlayır → keçsə Bitdi, keçməsə iradlarla düzəlişə qayıdır (2 dövrə), sonra insan baxır.</div>
     <div class="bcols" id="bcols"></div>
   </div>
 
@@ -2195,14 +2235,18 @@ function makeTask() {
   const n = el('div', 'tcard');
   const tt = el('div', 'tt'), tm = el('div', 'tm'), tp = el('span', 'tp'), who = el('span'), age = el('span'), due = el('span', 'tdue');
   tm.append(tp, who, age, due);
-  const desc = el('div', 'tdesc'), cmd = el('details', 'tcmd'), sm = el('summary'), dot = el('span', 'dot'), sl = el('span'), pre = el('pre');
-  sm.append(dot, sl); cmd.append(sm, pre);
+  const desc = el('div', 'tdesc');
   desc.title = 'Tam mətn üçün klik et'; desc.onclick = () => desc.classList.toggle('open');   // 3 sətirdən uzun təsvir: klik ilə açılır
+  // agent paneli: kim işləyir / yoxlayır, irəliləyiş zolağı, yoxlama nəticəsi; nəticə mətni yığılan blokda
+  const bot = el('div', 'tbot'), trow = el('div', 'trow'), bic = el('span', 'tb-ic', '🤖'), btx = el('span'), prog = el('div', 'tprog'), ver = el('span', 'tverdict');
+  trow.append(bic, btx); bot.append(trow, prog, ver); bot.hidden = true;
+  const cmd = el('details', 'tcmd'), sm = el('summary', null, 'Agentin hesabatı'), pre = el('pre'); cmd.append(sm, pre);
   const act = el('div', 'tact');
-  n.append(tt, tm, desc, cmd, act);
-  n._r = { tt, tp, who, age, due, desc, cmd, sm, dot, sl, pre, act, sig: '' };
+  n.append(tt, tm, desc, bot, cmd, act);
+  n._r = { tt, tp, who, age, due, desc, bot, bic, btx, prog, ver, cmd, pre, act, sig: '' };
   return n;
 }
+const VERDICT_TXT = { pass: '✅ Yoxlamadan keçdi', fail: '🔁 Yoxlayıcı iradlar yazdı, düzəlişə getdi', unsynced: '↻ Dəyişikliklər push olunmayıb, icraçının öz agenti yoxlayır', error: '👀 Agent yoxlaması nəticəsiz qaldı, insan baxmalıdır' };
 /** Tapşırıq kartını yeniləyir (lövhədə və Designer planetində) */
 function updTask(n, t) {
   const r = n._r;
@@ -2210,18 +2254,23 @@ function updTask(n, t) {
   setText(r.who, t.assignee + (t.creator !== t.assignee ? ' · ' + t.creator + ' təyin etdi' : '')); setText(r.age, ago(t.updated_at));
   const dl = dueInfo(t); r.due.hidden = !dl; if (dl) { setText(r.due, dl.text); r.due.dataset.lv = String(dl.level); }
   setText(r.desc, t.details || ''); r.desc.hidden = !t.details;
+  n.dataset.st = t.status;
   const cm = t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
-  r.cmd.hidden = !cm;
-  if (cm) {                                                     // Claude Code-un bu tapşırıq üzrə vəziyyəti (agent onlayndırmı da görünür)
-    const [, dc] = CMD_ST[cm.status] || [cm.status, 'offline'], ag = agentInfo(t.assignee);
-    const txt = cm.status === 'queued' ? (ag.online ? 'Claude: növbədə, indi başlayır…' : 'Claude: növbədə · agent oflayndır') :
-      cm.status === 'running' ? 'Claude: işləyir · ' + ago(cm.started_at) :
-      cm.status === 'done' ? 'Claude: bitdi · ' + ago(cm.finished_at) :
-      cm.status === 'failed' ? 'Claude: xəta · ' + ago(cm.finished_at) :
-      cm.status === 'canceled' ? 'Claude: dayandırıldı' : 'Claude: ' + (CMD_ST[cm.status] || [cm.status])[0];
-    setCls(r.dot, 'dot ' + dc); setText(r.sl, txt);
-    setText(r.pre, cm.result || (cm.status === 'queued' ? (ag.online ? 'Agent indi götürür…' : t.assignee + '-in agenti oflayndır: kompüterində agent işə düşəndə başlayacaq.') : cm.status === 'running' ? 'İşləyir, nəticə bitəndə burada görünəcək…' : ''));
-    if ((cm.status === 'done' || cm.status === 'failed') && !r.cmd._o) { r.cmd._o = true; r.cmd.open = cm.status === 'failed'; }
+  r.cmd.hidden = !cm; r.bot.hidden = !cm;
+  const active = !!cm && ['pending', 'queued', 'running'].includes(cm.status);
+  n.classList.toggle('busy', active);
+  if (cm) {                                                     // agentin bu tapşırıq üzrə vəziyyəti: icra (🤖) və ya yoxlama (🔍)
+    const rev = cm.kind === 'review', who = cm.user, ag = agentInfo(who);
+    setCls(r.bot, 'tbot' + (cm.status === 'running' ? ' run' : '') + (rev && active ? ' scan' : ''));
+    setText(r.bic, rev ? '🔍' : '🤖');
+    const txt = rev
+      ? (cm.status === 'queued' ? who + '-in agenti yoxlamaya hazırlaşır' + (ag.online ? '…' : ' · oflayn, növbədə') : cm.status === 'running' ? who + '-in agenti müstəqil yoxlayır · ' + ago(cm.started_at) : cm.status === 'done' ? 'Yoxlama bitdi · ' + ago(cm.finished_at) : cm.status === 'failed' ? 'Yoxlayıcı xəta verdi · ' + ago(cm.finished_at) : 'Yoxlama dayandırıldı')
+      : (cm.status === 'queued' ? (ag.online ? who + '-in agenti indi başlayır…' : who + '-in agenti oflayndır, növbədə gözləyir') : cm.status === 'running' ? who + '-in agenti işləyir · ' + ago(cm.started_at) : cm.status === 'done' ? 'Agent işi bitirdi · ' + ago(cm.finished_at) : cm.status === 'failed' ? 'Agent bacarmadı · ' + ago(cm.finished_at) : 'Dayandırıldı');
+    setText(r.btx, txt); r.prog.hidden = !active;
+    const v = t.verdict || '', vt = VERDICT_TXT[v];
+    r.ver.hidden = !vt; if (vt) { setText(r.ver, vt + (v === 'fail' && +t.rounds ? ' · dövrə ' + t.rounds + '/2' : '')); r.ver.dataset.v = v; }
+    setText(r.pre, cm.result || (active ? (ag.online ? 'Nəticə bitəndə burada görünəcək…' : who + '-in kompüterində agent işə düşəndə başlayacaq.') : ''));
+    if ((cm.status === 'done' || cm.status === 'failed') && !r.cmd._o) { r.cmd._o = true; r.cmd.open = cm.status === 'failed' || v === 'fail' || v === 'error'; }
   }
   const btns = taskButtons(t), sig = t.status + '|' + btns.map(b => b[0]).join(',') + '|' + (ME ? ME.name : '');
   if (r.sig !== sig) {
@@ -2250,18 +2299,43 @@ function taskButtons(t) {
     else { const { status, d } = await TSK('move', { id: t.id, status: 'todo' }); if (status !== 200) bmsg(d.error || 'Alınmadı'); }
     load();
   }]);
+  if (canMove && t.status === 'review' && busy && cmNow.kind === 'review') B.push(['■ Yoxlamanı dayandır', 'danger', async () => { await CTL('stop_command', { id: cmNow.id }); load(); }]);
   if (canMove && (t.status === 'doing' || t.status === 'review')) mv('Bitdi', 'done');
   if (canMove && t.status === 'review') mv('Geri qaytar', 'doing');
   if (canMove && t.status === 'done') mv('Yenidən aç', 'todo');
   if (canEdit) B.push(['Sil', 'danger', async () => { if (!confirm('"' + t.title + '" silinsin?')) return; await TSK('delete', { id: t.id }); load(); }]);
   return B;
 }
+const BICON = { todo: '📥', doing: '⚙️', review: '🔍', done: '✅' };
+const BEMPTY = { todo: 'Gözləyən yoxdur. "+ Yeni tapşırıq" ilə əlavə et, icraçının agenti özü götürəcək.', doing: 'Heç bir agent işləmir.', review: 'Yoxlanan yoxdur.', done: 'Hələ bitən yoxdur.' };
+const tPrev = new Map();                                    // tapşırıq id → əvvəlki status (sütunlar arası uçuş və konfeti üçün)
+/** Kart "Bitdi"yə düşəndə: kiçik konfeti partlayışı */
+function confetti(n) {
+  const cols = ['#4ade80', '#fbbf24', '#f08a5d', '#9d8cff', '#38bdf8', '#f472b6'];
+  for (let i = 0; i < 18; i++) {
+    const p = el('span', 'cf'); p.style.background = cols[i % cols.length]; n.append(p);
+    const a = Math.random() * Math.PI * 2, d = 40 + Math.random() * 80;
+    p.animate([{ transform: 'translate(-50%,-50%) rotate(0deg)', opacity: 1 }, { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d}px) rotate(${Math.random() * 540}deg)`, opacity: 0 }],
+      { duration: 700 + Math.random() * 500, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => p.remove();
+  }
+}
+/** Axın zolağı: sütun sayları və hansı keçidin indi "axdığı" */
+function renderFlow(list, busyDoing, busyReview) {
+  const f = $('bflow');
+  if (!f.children.length) for (const [k, label] of TCOLS) {
+    if (f.children.length) { const s = el('span', 'bs'); s.dataset.s = k; f.append(s); }
+    const n = el('span', 'bn'); n.dataset.s = k; n.append(el('span', 'ic', BICON[k]), el('span', null, label), el('b', null, '0')); f.append(n);
+  }
+  for (const n of f.querySelectorAll('.bn')) { const k = n.dataset.s, c = list.filter(t => t.status === k).length; setText(n.querySelector('b'), String(c)); n.dataset.on = (k === 'doing' && busyDoing) || (k === 'review' && busyReview) ? '1' : '0'; }
+  for (const s of f.querySelectorAll('.bs')) s.dataset.on = (s.dataset.s === 'doing' && busyDoing) || (s.dataset.s === 'review' && (busyDoing || busyReview)) || (s.dataset.s === 'done' && busyReview) ? '1' : '0';
+}
 function renderBoard() {
   updateTaskBadge();
   const box = $('bcols');
   if (!box.children.length) for (const [k, label] of TCOLS) {
     const c = el('div', 'bcol'); c.dataset.s = k;
-    const h = el('div', 'bch'); h.append(el('span', null, label), el('span', 'count', '0')); c.append(h, el('div', 'blist'));
+    const h = el('div', 'bch'); h.append(el('span', 'ic', BICON[k]), el('span', null, label), el('span', 'sp'), el('span', 'count', '0'));
+    const l = el('div', 'blist'); l.dataset.empty = BEMPTY[k]; c.append(h, l);
     box.append(c);
   }
   // süzgəclər
@@ -2273,11 +2347,27 @@ function renderBoard() {
   const list = boardTasks();
   const myTok = !!(getTok() && myName);
   if (myTok) $('btoken').hidden = true;
+  const cmdOf = t => t.command_id && (data.commands || []).find(x => +x.id === +t.command_id);
+  const isBusy = t => { const c = cmdOf(t); return !!c && ['queued', 'running'].includes(c.status); };
+  const before = new Map();                                  // FLIP: kartların köhnə yerləri
+  for (const n of box.querySelectorAll('.tcard')) before.set(n.dataset.k, n.getBoundingClientRect());
   for (const c of box.children) {
-    const s = c.dataset.s, col = list.filter(t => t.status === s);
-    setText(c.querySelector('.count'), String(col.length));
+    const s = c.dataset.s, col = list.filter(t => t.status === s), cnt = c.querySelector('.count');
+    if (cnt.textContent !== String(col.length)) { setText(cnt, String(col.length)); cnt.classList.remove('bump'); void cnt.offsetWidth; cnt.classList.add('bump'); }
+    c.dataset.live = col.some(isBusy) ? '1' : '0';
     sync(c.querySelector('.blist'), col, t => t.id, makeTask, updTask);
   }
+  // sütun dəyişən kart köhnə yerindən yenisinə uçur; "Bitdi"yə çatanda konfeti
+  if (!REDUCE) for (const n of box.querySelectorAll('.tcard')) {
+    const k = n.dataset.k, old = before.get(k), prev = tPrev.get(k), st = n.dataset.st;
+    if (!old || !prev || prev === st) continue;
+    n.classList.remove('enter');
+    const nw = n.getBoundingClientRect(), dx = old.left - nw.left, dy = old.top - nw.top;
+    if (dx || dy) n.animate([{ transform: `translate(${dx}px, ${dy}px) scale(1.04)`, boxShadow: '0 18px 40px rgba(0,0,0,.35)' }, { transform: 'none', boxShadow: '0 0 0 rgba(0,0,0,0)' }], { duration: 640, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    if (st === 'done') confetti(n);
+  }
+  tPrev.clear(); for (const t of data.tasks || []) tPrev.set(String(t.id), t.status);
+  renderFlow(list, list.some(t => t.status === 'doing' && isBusy(t)), list.some(t => t.status === 'review' && isBusy(t)));
 }
 function openTaskModal(prj) {
   const known = [...new Set([...(data.projects || []).map(p => p.project), ...(data.worlds || []).map(w => w.name), ...SPECIALS.map(x => x.name)])].sort();
