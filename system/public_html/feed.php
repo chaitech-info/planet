@@ -26,7 +26,13 @@ $sessions = $pdo->prepare('SELECT user, session_id, project, status, last_prompt
 $sessions->execute([$now - 86400]);
 
 $onlyProject = isset($_GET['project']) ? substr((string)$_GET['project'], 0, 128) : '';
-if ($onlyProject !== '') {
+$onlyMcp = isset($_GET['mcp']) ? substr((string)$_GET['mcp'], 0, 64) : '';
+if ($onlyMcp !== '') {             // MCP Universe: bu serverin son çağırışları
+    $ev = $pdo->prepare("SELECT id, user, session_id, project, event, tool, summary, created_at
+        FROM events WHERE tool LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT 60");
+    $ev->execute(['mcp\\_\\_' . addcslashes($onlyMcp, '%_\\') . '\\_\\_%']);
+    $events = $ev->fetchAll();
+} elseif ($onlyProject !== '') {
     $ev = $pdo->prepare('SELECT id, user, session_id, project, event, tool, summary, created_at
         FROM events WHERE project = ? ORDER BY id DESC LIMIT 60');
     $ev->execute([$onlyProject]);

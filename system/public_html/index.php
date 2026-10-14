@@ -552,6 +552,19 @@ body.v-space::before { display: none; }
 @media (max-width: 520px) { .row { grid-template-columns: 48px 1fr; } .wrap { padding-top: 16px; } }
 
 /* ===== Yeni: gəmilər, peyklər, balonlar, xüsusi planetlər ===== */
+.unibar { position: absolute; right: 62px; top: 12px; z-index: 3; display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(9,10,20,.55); border: 1px solid rgba(255,255,255,.12); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); max-width: calc(100% - 28px); overflow-x: auto; scrollbar-width: none; }
+.unibar button { display: inline-flex; gap: 6px; align-items: center; border: 0; background: none; color: rgba(233,233,243,.75); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; transition: background-color .2s ease, color .2s ease, transform .15s var(--ease-out); }
+.unibar button b { font-weight: 600; } .unibar button:active { transform: scale(.96); }
+.unibar button.on { background: var(--accent); color: #fff; }
+.unibar button.from { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+.space.docked .unibar { right: 458px; max-width: calc(100% - 640px); }
+@media (max-width: 1180px) { .space.docked .unibar { display: none; } }
+.warpmsg { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 3; pointer-events: none; text-align: center; color: #fff; opacity: 0; display: grid; gap: 4px; text-shadow: 0 2px 18px rgba(0,0,0,.8); }
+.warpmsg span { font-size: 34px; } .warpmsg b { font-size: 24px; letter-spacing: -.01em; } .warpmsg small { font-size: 13px; color: rgba(233,233,243,.8); }
+.warpmsg.go { animation: warpmsg 2.8s var(--ease-io) both; }
+@keyframes warpmsg { 0% { opacity: 0; transform: translate(-50%, -40%) scale(.9); } 25%, 60% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1.06); } }
+@media (max-width: 760px) { .unibar { left: 14px; right: auto; top: 76px; } .stools { top: 40px; } .unibar button b { display: none; } .unibar button.on b { display: inline; } }
+@media (prefers-reduced-motion: reduce) { .warpmsg.go { animation: none; } }
 .stools { position: absolute; left: 14px; top: 40px; z-index: 3; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 80px); }
 .stools button { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9e9f3; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; transition: background-color .15s ease, transform .15s var(--ease-out); }
 .stools button:active { transform: scale(.97); }
@@ -702,6 +715,8 @@ body.v-space::before { display: none; }
   <div id="v-space" hidden>
     <div class="space" id="space">
       <div class="hud"><span id="hudA"></span><span id="hudB"></span></div>
+      <div class="unibar" id="unibar"></div>
+      <div class="warpmsg" id="warpmsg" aria-live="polite"></div>
       <div class="stools"><button id="t-ship" title="Öz gəmini fərdiləşdir və deadline təyin et">🚀 Gəmim</button><button id="t-world" title="Özünə planet yarat">🪐 Yeni planet</button><button id="t-mcp" title="MCP inteqrasiyaları üçün peyklər">🛰 MCP peykləri</button></div>
       <button class="fsbtn" id="fs" title="Tam ekran" aria-label="Tam ekran">⛶</button>
       <div class="zbtns"><button id="zin" aria-label="Yaxınlaşdır">+</button><button id="zout" aria-label="Uzaqlaşdır">−</button><button id="sbtn" aria-label="Səs" title="Səs">🔊</button><button id="qbtn" aria-label="Təsvir keyfiyyəti" title="Təsvir keyfiyyəti: Avto / HD (həmişə tam kəskinlik)">HD</button></div>
@@ -829,6 +844,8 @@ body.v-space::before { display: none; }
             <div id="ts-cmds"></div>
           </div>
         </div>
+        <div id="x-mcpu" hidden><div id="xm-info"></div></div>
+        <div id="x-agentu" hidden><div id="xa-info"></div></div>
         <div id="x-meeting" hidden>
           <div class="cmdbar" style="margin-top:10px"><span class="cmdwho">Neytral ərazi: heç kimin proyekti deyil. Görüş vaxtı iştirakçıların gəmiləri bura uçur.</span><button class="gbtn go" id="mt-add">+ Görüş təyin et</button></div>
           <div class="lbl">🔴 İndi gedir</div><div id="mt-live"></div><div class="empty" id="mt-live-e">Hazırda görüş yoxdur.</div>
@@ -1266,20 +1283,33 @@ function makeOrbit(p) {
 }
 function renderSpace() {
   const all = buildProjects();
-  const list = spaceList(all);
+  // universin dəyişməsi: 3D-də gəmi ilə səyahət, ekran ən parlaq olanda yeni universin planetləri qurulur
+  if (shownUni !== uni) {
+    const to = uni;
+    if (K && glOn && view === 'space') { if (!K.warping()) { showWarpMsg(to); K.warp(to, () => { shownUni = to; renderSpace(); }); } }
+    else { shownUni = to; if (K && glOn) K.warp(to, null); }
+  }
+  const list = uniList(spaceList(all), shownUni);
   const names = new Set(list.map(p => p.name));
-  setText($('hudA'), all.length + ' proyekt');
-  setText($('hudB'), all.filter(p => p.st === 'working').length + ' işləyir');
+  renderUniBar();
+  const hud = { main: [all.length + ' proyekt', all.filter(p => p.st === 'working').length + ' işləyir'],
+    studio: [list.length + ' stansiya', list.filter(p => p.st === 'working' || p.st === 'meet').length + ' aktiv'],
+    mcp: [list.length + ' MCP server', list.filter(p => p.st === 'working').length + ' indi işləyir'],
+    agent: [list.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'] }[shownUni];
+  setText($('hudA'), hud[0]); setText($('hudB'), hud[1]);
   $('sempty').hidden = list.length > 0;
+  setText($('sempty'), { main: 'Hələ heç bir dünya yoxdur. Hook quraşdırılmış proyektdə Claude Code işlət, ilk planet yaranacaq.', studio: '', mcp: 'Hələ MCP server yoxdur. Claude Code-da MCP aləti işlət və ya 🛰 MCP peykləri bölməsindən əl ilə qeyd et.', agent: 'Hələ istifadəçi yoxdur.' }[shownUni]);
   if (K && glOn) {
-    K.setData(list.map(p => ({ name: p.name, kind: p.kind, look: p.look || null, st: p.st, edits: p.edits, tools: p.tools, sub: p.sub, alert: (data.alerts || []).some(a => a.project === p.name),
+    K.setData(list.map(p => ({ name: p.name, label: p.label || null, kind: p.kind, look: p.look || null, hue: p.hue ?? null, R: p.R || 0, st: p.st, edits: p.edits, tools: p.tools, sub: p.sub, alert: (data.alerts || []).some(a => a.project === p.name),
       burn: p.burn, sats: p.sats, fail: !!p.fail, users: [...p.users].map(([u, v]) => ({ name: u, st: v.st, color: tint(u) })) })));
     syncHits(); K.setAudio(data.sounds || {});
     const pl = data.plans || [], op = k => pl.filter(x => x.kind === k && x.status === 'open').length;
     K.setShip({ sub: op('plan') + ' plan · ' + op('scope') + ' scope' });
-    K.setShips(shipItems(names));
-    K.setBalloons(balloonItems(names));
-    K.setSunSats((data.mcp || []).filter(x => !x.project || !names.has(x.project)).map(x => ({ name: x.name, manual: true })));
+    K.setPlanShipVisible(shownUni === 'main');
+    K.setShips(shipItems(names, shownUni));
+    K.setBalloons(shownUni === 'main' || shownUni === 'studio' ? balloonItems(names) : []);
+    K.setSunSats(shownUni === 'main' ? (data.mcp || []).filter(x => !x.project || !(names.has(x.project) || specialOf(x.project))).map(x => ({ name: x.name, manual: true })) : []);
+    fireAgentRockets();
   } else {
     const step = Math.min(9, 46 / Math.max(list.length, 1));
     prime('orbits', () => sync($('orbits'), list, p => p.name, makeOrbit, (o, p) => {
@@ -1287,15 +1317,15 @@ function renderSpace() {
       if (o._d !== d) { o._d = d; o.style.setProperty('--d', d); }
       const sz = (5 + Math.min(5, Math.log2(1 + p.edits + p.tools / 4) * .6)).toFixed(1);
       if (r.b._s !== sz) { r.b._s = sz; r.b.style.setProperty('--s', sz); }
-      setSt(r.b, p.st); setText(r.nm, p.name); setText(r.sub, p.sub);
+      setSt(r.b, p.st); setText(r.nm, p.label || p.name); setText(r.sub, p.sub);
       syncMoons(r.planet, p.users);
     }, { enter: false }));
   }
-  prime('travel', () => sync($('travel'), [{ name: SHIPKEY, label: '🛸 Plan' }, ...list], p => p.name, p => {
+  prime('travel', () => sync($('travel'), [...(shownUni === 'main' ? [{ name: SHIPKEY, label: '🛸 Plan' }] : []), ...list], p => p.name, p => {
     const b = el('button'), d = el('i', 'tdot'); d.style.setProperty('--h', hue(p.name)); b.append(d, el('span', null, p.label || p.name));
     b.onclick = () => go(p.name); return b;
   }, () => {}));
-  if (curPlanet) { if (specialOf(curPlanet)) renderX(curPlanet); else renderDock(all); }
+  if (curPlanet) { if (xKind(curPlanet)) renderX(curPlanet); else renderDock(all); }
   if (curShip) renderPlan();
 }
 /* ====== 3D kamera: sürüşdür = fırlat/əy, boş vaxtda yavaş dönür ====== */
@@ -1493,7 +1523,9 @@ function initGL() {
   $('space').classList.add('gl');
   K.onPick = name => go(name);
   K.onShip = () => go(SHIPKEY);
+  K.setTheme(shownUni);
   K.onUserShip = u => openShip(u);
+  if (ME) K.setMe(ME.name);
   K.onBalloon = id => { const t = (data.tasks || []).find(x => +x.id === +id); if (t) go(t.project); };
   $('zin').onclick = () => K.zoom(.78); $('zout').onclick = () => K.zoom(1.28);
   let q = 'auto'; try { q = localStorage.getItem('tdq') === 'high' ? 'high' : 'auto'; } catch (e) {}
@@ -1521,7 +1553,7 @@ function setView(v, name) {
   document.body.classList.toggle('v-space', v === 'space');
   $('v-panel').hidden = v !== 'panel'; $('v-space').hidden = v !== 'space'; $('v-board').hidden = v !== 'board';
   $('tab-panel').classList.toggle('on', v === 'panel'); $('tab-space').classList.toggle('on', v === 'space'); $('tab-board').classList.toggle('on', v === 'board');
-  const spc = !!(curPlanet && specialOf(curPlanet));
+  const spc = !!(curPlanet && xKind(curPlanet));
   $('dock').classList.toggle('open', !!curPlanet && !spc);
   $('xdock').classList.toggle('open', spc);
   $('plandock').classList.toggle('open', curShip);
@@ -1533,7 +1565,11 @@ function setView(v, name) {
 }
 function route() {
   const [v, p] = location.hash.slice(1).split('/');
-  if (v === 'kainat') setView('space', p ? decodeURIComponent(p) : null);
+  if (v === 'kainat') {
+    const name = p ? decodeURIComponent(p) : null;
+    if (name && name[0] === '@') { setUni(name.slice(1)); setView('space', null); }   // #kainat/@mcp = universin ümumi görünüşü
+    else { if (name && name !== SHIPKEY) setUni(uniOf(name)); else if (name === SHIPKEY) setUni('main'); setView('space', name); }
+  }
   else if (v === 'lovhe') setView('board');
   else setView('panel');
 }
@@ -1558,7 +1594,8 @@ function render() {
 async function load() {
   if (document.hidden) return;
   try {
-    const r = await fetch('feed.php' + (view === 'space' && curPlanet ? '?project=' + encodeURIComponent(curPlanet) : ''), { cache: 'no-store' });
+    const q = view === 'space' && curPlanet ? (curPlanet.startsWith('mcp:') ? '?mcp=' + encodeURIComponent(curPlanet.slice(4)) : xKind(curPlanet) ? '' : '?project=' + encodeURIComponent(curPlanet)) : '';
+    const r = await fetch('feed.php' + q, { cache: 'no-store' });
     if (r.status === 401) return location.reload();
     data = await r.json();
     setMe(data.me);
@@ -1587,7 +1624,7 @@ async function ADM(action, extra) {
 let ME = null;
 function setMe(me) {
   if (!me || (ME && ME.name === me.name && ME.role === me.role)) return;
-  ME = me; setText($('who'), me.name); $('b-adm').hidden = me.role !== 'admin'; $('b-prj').hidden = me.role !== 'admin'; $('b-ntf').hidden = me.role !== 'admin';
+  ME = me; setText($('who'), me.name); if (K) K.setMe(me.name); $('b-adm').hidden = me.role !== 'admin'; $('b-prj').hidden = me.role !== 'admin'; $('b-ntf').hidden = me.role !== 'admin';
 }
 const openM = id => { $(id).hidden = false; };
 const closeM = id => {
@@ -2292,11 +2329,155 @@ function spaceList(all) {
   return out;
 }
 
+/* ====== Universlər: Komanda (proyektlər), Studio (xüsusi planetlər), MCP, Agent ====== */
+const UNIVERSES = [
+  { id: 'main', icon: '🌌', name: 'Komanda', hint: 'Proyektlər və istifadəçi planetləri' },
+  { id: 'studio', icon: '🎨', name: 'Studio', hint: 'Prompt Generator, Designer, Meeting, Test' },
+  { id: 'mcp', icon: '🛰', name: 'MCP Universe', hint: 'MCP serverləri və onları işlədən proyektlər' },
+  { id: 'agent', icon: '🤖', name: 'Agent Universe', hint: 'AI agentləri, tapşırıqları və avtomatlaşdırma' },
+];
+let uni = (() => { try { const v = localStorage.getItem('tduni'); return UNIVERSES.some(u => u.id === v) ? v : 'main'; } catch (e) { return 'main'; } })();
+let shownUni = uni;
+function setUni(id) {
+  if (!UNIVERSES.some(u => u.id === id) || id === uni) return;
+  uni = id; try { localStorage.setItem('tduni', id); } catch (e) {}
+}
+const uniOf = n => !n ? uni : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : specialOf(n) ? 'studio' : 'main';
+/** Xüsusi panel açılan planetlər: Studio stansiyaları, MCP serverləri, agentlər */
+function xKind(n) {
+  if (!n) return null;
+  if (n.startsWith('mcp:')) return { kind: 'mcpu', icon: '🛰', name: n.slice(4) };
+  if (n.startsWith('agent:')) return { kind: 'agentu', icon: '🤖', name: n.slice(6) };
+  return specialOf(n);
+}
+function uniList(full, u) {
+  if (u === 'studio') return full.filter(p => specialOf(p.name));
+  if (u === 'mcp') return mcpList();
+  if (u === 'agent') return agentList();
+  return full.filter(p => !specialOf(p.name));
+}
+function mcpServers() {
+  const m = new Map();
+  const add = n => { if (!m.has(n)) m.set(n, { name: n, n: 0, last: 0, projects: new Map(), manual: null }); return m.get(n); };
+  for (const u of data.mcp_use || []) { const x = add(u.name); x.n += +u.n; x.last = Math.max(x.last, +u.last_at); x.projects.set(u.project, (x.projects.get(u.project) || 0) + +u.n); }
+  for (const x of data.mcp || []) { const y = add(x.name); y.manual = x; if (x.project && !y.projects.has(x.project)) y.projects.set(x.project, 0); }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+function mcpList() {
+  return mcpServers().slice(0, 14).map(x => {
+    const act = now() - x.last < 600, day = now() - x.last < DAY;
+    return { name: 'mcp:' + x.name, label: '🛰 ' + x.name, kind: 'mcp', hue: hue(x.name), R: 2.3 + Math.min(1.8, Math.log2(1 + x.n) * .3),
+      st: act ? 'working' : day || !x.n ? 'idle' : 'offline',
+      sub: x.n ? x.n + ' çağırış · ' + x.projects.size + ' proyekt · ' + ago(x.last) : 'əl ilə qeyd olunub',
+      users: new Map([...x.projects.keys()].map(p => [p, { st: act ? 'working' : 'idle' }])), edits: 0, tools: 0, burn: 0, sats: [] };
+  });
+}
+function agentInfo(u) {
+  const ag = (data.agents || []).find(a => a.user === u);
+  const online = !!(ag && now() - ag.last_seen < 20);
+  const cm = (data.commands || []).filter(c => c.user === u);
+  return { ag, online, cm, run: cm.filter(c => c.status === 'running'), queued: cm.filter(c => c.status === 'queued'), login: !ag || +ag.claude_ok === 1 };
+}
+function agentList() {
+  return (data.users || []).map(u => {
+    const a = agentInfo(u);
+    const st = a.run.length ? 'working' : a.queued.length ? 'waiting' : a.online ? 'idle' : 'offline';
+    const sub = (a.online ? 'onlayn' : a.ag ? 'oflayn' : 'qoşulmayıb') + (a.run.length ? ' · işləyir' : '') + (a.queued.length ? ' · ' + a.queued.length + ' növbədə' : '') + (a.online && !a.login ? ' · Claude girişi yoxdur' : '');
+    return { name: 'agent:' + u, label: '🤖 ' + u, kind: 'agent', hue: hue(u), R: 3, st, sub,
+      users: new Map(a.cm.map(c => [c.project, { st: c.status === 'running' ? 'working' : 'idle' }])), edits: 0, tools: 0, burn: 0, sats: [] };
+  });
+}
+function renderUniBar() {
+  sync($('unibar'), UNIVERSES, u => u.id, u => {
+    const b = el('button'); b.title = u.hint; b.append(el('span', null, u.icon), el('b', null, u.name));
+    b.onclick = () => { if (u.id !== uni) location.hash = '#kainat/@' + u.id; else if (curPlanet || curShip) go(); };
+    return b;
+  }, (b, u) => setCls(b, (u.id === uni ? 'on' : '') + (u.id === shownUni && shownUni !== uni ? ' from' : '')), { enter: false });
+}
+function showWarpMsg(to) {
+  const u = UNIVERSES.find(x => x.id === to), m = $('warpmsg');
+  m.replaceChildren(el('span', null, '🚀'), el('b', null, u.icon + ' ' + u.name), el('small', null, u.hint));
+  m.classList.remove('go'); void m.offsetWidth; m.classList.add('go');
+}
+/* Agent Universe: yeni tapşırıq agentə raketlə çatır (tapşırığı başqası təyin edibsə, onun agentindən), bitəndə agent planetində partlayış */
+let agentCmdInit = false; const agentCmdSeen = new Map();
+function fireAgentRockets() {
+  const cs = data.commands || [];
+  if (!agentCmdInit) { agentCmdInit = true; for (const c of cs) agentCmdSeen.set(+c.id, c.status); return; }
+  for (const c of cs.slice().reverse()) {
+    const prev = agentCmdSeen.get(+c.id);
+    if (prev === c.status) continue;
+    agentCmdSeen.set(+c.id, c.status);
+    if (shownUni !== 'agent' || !K || !glOn) continue;
+    if (prev === undefined) {
+      const t = (data.tasks || []).find(x => +x.command_id === +c.id);
+      const from = t && t.creator !== c.user ? 'agent:' + t.creator : null;
+      K.rocket({ id: 1e6 + +c.id, from, to: 'agent:' + c.user, who: c.project, hue: hue(c.user), soft: true, delay: 0 });
+    } else if (c.status === 'done' || c.status === 'failed') K.burst('agent:' + c.user, c.status === 'done');
+  }
+}
+function renderMcpPlanet(name) {
+  const x = mcpServers().find(s => s.name === name);
+  const box = $('xm-info'), evs = (data.events || []).filter(e => (e.tool || '').startsWith('mcp__' + name + '__')).slice(0, 12);
+  const sig = [name, x && x.n, x && x.last, x && x.manual && x.manual.id, x && [...x.projects].join(), evs.map(e => e.id).join(), Math.floor(now() / 30)].join('|');
+  if (box._sig === sig) return; box._sig = sig; box.replaceChildren();
+  if (!x) { box.append(el('div', 'empty', 'Bu server artıq yoxdur.')); return; }
+  const act = now() - x.last < 600;
+  const head = el('div', 'infobox'), r = el('div', 'row2');
+  r.append(el('b', null, (act ? '🟢 ' : '') + name), el('span', 'sp'));
+  const ed = el('button', 'gbtn', x.manual ? '✎ Dəyiş' : '+ Qeyd et');
+  ed.onclick = () => { mcpReset(); renderMcp(); if (x.manual) { mcpEdit = +x.manual.id; setText($('mcp-save'), 'Saxla'); setText($('mcp-ftitle'), 'Dəyiş: ' + name); $('mcp-cancel').hidden = false; } $('mcp-name').value = name; $('mcp-prj').value = x.manual ? x.manual.project : ''; $('mcp-descr').value = x.manual ? x.manual.descr : ''; openM('mcpm'); };
+  r.append(ed); head.append(r);
+  head.append(el('div', 'mnote', x.n ? `${x.n} çağırış (30 gün) · son: ${ago(x.last)}${act ? ' · indi işləyir' : ''}` : 'Hələ çağırış qeydə alınmayıb (əl ilə qeyd olunub).'));
+  if (x.manual && x.manual.descr) head.append(el('div', null, x.manual.descr));
+  box.append(head);
+  box.append(el('div', 'lbl', '🪐 İşlədən proyektlər'));
+  const chips = el('div', 'filters');
+  for (const [pr, n] of [...x.projects].sort((a, b) => b[1] - a[1])) { const b = el('button', null, pr + (n ? ' · ' + n : '')); b.onclick = () => go(pr); chips.append(b); }
+  if (!x.projects.size) chips.append(el('span', 'mnote', 'Yoxdur'));
+  box.append(chips);
+  box.append(el('div', 'lbl', '⚡ Son çağırışlar'));
+  if (!evs.length) box.append(el('div', 'empty', 'Son hadisələrdə bu serverin çağırışı yoxdur.'));
+  for (const e of evs) {
+    const row = el('div', 'prow'); row.append(el('div', 'pt', e.tool.split('__').slice(2).join('__') || e.tool), el('div', 'pm', e.user + ' · ' + e.project + ' · ' + ago(e.created_at)));
+    if (e.summary) row.append(el('div', 'pb', e.summary));
+    box.append(row);
+  }
+}
+function renderAgentPlanet(u) {
+  const a = agentInfo(u), mine = ME && ME.name === u, admin = ME && ME.role === 'admin';
+  const box = $('xa-info');
+  const sig = [u, a.online, a.login, a.cm.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 15)].join('|');
+  if (box._sig === sig) return; box._sig = sig; box.replaceChildren();
+  const head = el('div', 'infobox');
+  head.append(el('div', null, (a.online ? '🟢 Agent onlayn' : a.ag ? '⚫ Agent oflayn · son: ' + ago(a.ag.last_seen) : '⚫ Agent heç qoşulmayıb') + (a.online && !a.login ? ' · ⚠ Claude girişi yoxdur' : '')));
+  const done = a.cm.filter(c => c.status === 'done').length, fail = a.cm.filter(c => c.status === 'failed').length;
+  head.append(el('div', 'mnote', `${a.run.length} işləyir · ${a.queued.length} növbədə · ${done} bitdi · ${fail} xəta (son 40 tapşırıq içində)`));
+  if (mine && !a.online) { const l = el('a', 'gbtn go', '▶ Agenti işə sal'); l.href = 'claudeteam://start'; l.style.textDecoration = 'none'; l.style.display = 'inline-block'; l.style.marginTop = '6px'; head.append(l); }
+  box.append(head);
+  const tasks = (data.tasks || []).filter(t => t.assignee === u && t.status !== 'done');
+  if (tasks.length) {
+    box.append(el('div', 'lbl', '📌 Ona təyin olunan açıq tapşırıqlar'));
+    for (const t of tasks.slice(0, 6)) { const row = el('div', 'prow'); row.append(el('div', 'pt', t.title), el('div', 'pm', t.project + ' · ' + (TCOLS.find(c => c[0] === t.status) || [, t.status])[1] + (t.creator !== u ? ' · təyin edən ' + t.creator : ''))); box.append(row); }
+  }
+  box.append(el('div', 'lbl', '🔁 Avtomatlaşdırma axını'));
+  if (!a.cm.length) box.append(el('div', 'empty', 'Bu agentə hələ tapşırıq göndərilməyib. Proyekt planetinin panelindən "Göndər" ilə prompt göndər.'));
+  for (const c of a.cm.slice(0, 12)) {
+    const [lbl] = CMD_ST[c.status] || [c.status];
+    const row = el('div', 'prow'), t = (data.tasks || []).find(x => +x.command_id === +c.id);
+    row.dataset.s = c.status === 'done' ? 'pass' : c.status === 'failed' ? 'fail' : '';
+    row.append(el('div', 'pt', c.prompt.split('\n')[0].slice(0, 120)), el('div', 'pm', '🪐 ' + c.project + ' · ' + lbl + ' · ' + ago(c.created_at) + (t && t.creator !== u ? ' · ' + t.creator + ' → ' + u : '')));
+    if (c.result) row.append(el('div', 'pb', c.result));
+    if ((mine || admin) && (c.status === 'running' || c.status === 'queued')) { const pa = el('div', 'pa'), st = el('button', 'gbtn danger', 'Dayandır'); st.onclick = async () => { await CTL('stop_command', { id: c.id }); load(); }; pa.append(st); row.append(pa); }
+    box.append(row);
+  }
+}
+
 function shipOf(u) {
   const s = (data.ships || []).find(x => x.user === u) || { user: u, name: u + ' gəmisi', model: 'shuttle', color: '#cfd6e6', accent: '#f59e0b', deadline: 0, mission: '' };
   return shipDraft && ME && u === ME.name ? { ...s, ...shipDraft } : s;
 }
-function shipItems(names) {
+function shipItems(names, u2) {
   const live = liveMeetings();
   return (data.users || []).map(u => {
     const s = shipOf(u);
@@ -2304,6 +2485,7 @@ function shipItems(names) {
       .sort((a, b) => RANK[b.st] - RANK[a.st] || b.updated_at - a.updated_at);
     let planet = act.length ? act[0].project : null, st = act.length ? act[0].st : 'offline';
     if (live.some(m => m.attendees.split(',').includes(u))) { planet = 'Meeting Planet'; st = 'working'; }
+    if (u2 === 'agent') planet = 'agent:' + u;                 // Agent Universe: gəmi öz agentinin ətrafında
     if (planet && !names.has(planet)) planet = null;
     const dl = +s.deadline, left = dl - now();
     const warn = !dl ? 0 : left < 0 ? 2 : left < DAY ? 1 : 0;
@@ -2454,9 +2636,11 @@ function mcpReset() { mcpEdit = 0; $('mcp-name').value = ''; $('mcp-descr').valu
 
 /* ---- Xüsusi planetlərin paneli ---- */
 function renderX(name) {
-  const sp = specialOf(name);
+  const sp = xKind(name);
   setText($('xtitle'), sp.icon + ' ' + sp.name);
-  for (const k of ['prompt', 'designer', 'meeting', 'test']) $('x-' + k).hidden = k !== sp.kind;
+  for (const k of ['prompt', 'designer', 'meeting', 'test', 'mcpu', 'agentu']) $('x-' + k).hidden = k !== sp.kind;
+  if (sp.kind === 'mcpu') { setText($('xmeta'), 'MCP Universe · server, onu işlədən proyektlər və son çağırışlar'); return renderMcpPlanet(sp.name); }
+  if (sp.kind === 'agentu') { setText($('xmeta'), 'Agent Universe · ' + sp.name + ' istifadəçisinin AI agenti'); return renderAgentPlanet(sp.name); }
   if (sp.kind === 'prompt') { setText($('xmeta'), 'AI promptlarını yarat, saxla və komanda ilə paylaş'); renderPrompts(); }
   else if (sp.kind === 'designer') { setText($('xmeta'), 'Dizayn işləri, kreativ layihələr və dizayn tapşırıqları'); renderDesigner(); }
   else if (sp.kind === 'test') { setText($('xmeta'), 'Proyekt seç və test et: ssenarilər, nəticələr, Claude ilə yoxlama'); renderTests(); }
@@ -2802,7 +2986,7 @@ addEventListener('hashchange', route);
 addEventListener('keydown', e => {
   if (!(view === 'space' && (curPlanet || curShip)) || e.target.closest('input,textarea,select')) return;
   if (e.key === 'Escape') go();
-  else if (curShip || specialOf(curPlanet)) return;
+  else if (curShip || xKind(curPlanet)) return;
   else if (e.key === 'ArrowLeft' && !$('pprev').hidden) $('pprev').click();
   else if (e.key === 'ArrowRight' && !$('pnext').hidden) $('pnext').click();
 });

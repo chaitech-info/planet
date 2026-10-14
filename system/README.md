@@ -35,3 +35,11 @@ Lokal Emil tokeni ilə hook hadisəsini əl ilə yoxlamaq: `curl -X POST http://
 - **Xatırlatma balonları**: tapşırığa son tarix verilə bilər; bir gündən az qalanda planetin (planet yoxdursa icraçının gəmisinin) üstündə balon çıxır.
 - **Prompt Generator, Designer, Meeting Planet**: xüsusi planetlər. Prompt yaratma və kitabxana; dizayn layihələri və tapşırıqları; görüşlər, gündəm və müzakirə (görüş vaxtı iştirakçıların gəmiləri ora uçur).
 - **Test Planet** (🧪): planetə gir, test ediləcək proyekti seç. Proyekt üzrə test ssenariləri (keçdi / xəta + qeyd), "Yeni raund" ilə sıfırlama və Claude agentinə test promptu göndərmək. Xəta varsa Test Planet qırmızı yanır, proyektin planetində "🧪 N xəta" görünür.
+
+## Universlər
+Kainatın yuxarısındakı keçid ilə 4 univers arasında gəmi ilə səyahət edilir (warp effekti: ulduz xətləri, öz gəmin önündə uçur, yeni universə çatanda ekran parlayır). Hər universin öz səması və günəşi var.
+- **🌌 Komanda**: proyektlər və istifadəçi planetləri.
+- **🎨 Studio**: Prompt Generator, Designer, Meeting Planet, Test Planet.
+- **🛰 MCP Universe**: hər MCP server bir planetdir (ayları onu işlədən proyektlərdir); paneldə proyektlər və son çağırışlar.
+- **🤖 Agent Universe**: hər istifadəçinin AI agenti bir planetdir (onlayn/işləyir/növbə); yeni tapşırıq agentə raketlə çatır (başqası təyin edibsə, onun agentindən), paneldə avtomatlaşdırma axını.
+Gəmilər daha böyükdür və hər biri öz trayektoriyası, istiqaməti, sürəti ilə uçur, arabir başqa planetlərə qısa səyahətə çıxır.
