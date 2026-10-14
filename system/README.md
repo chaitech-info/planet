@@ -34,6 +34,7 @@ Lokal Emil tokeni ilə hook hadisəsini əl ilə yoxlamaq: `curl -X POST http://
 - **Fərdi gəmi və deadline** (🚀 Gəmim): model, rənglər, deadline + missiya. 24 saatdan az qalanda miqalka yanıb-sönür, keçəndə qırmızı çaxır. Gəmi sahibinin işlədiyi planetin ətrafında uçur.
 - **Xatırlatma balonları**: tapşırığa son tarix verilə bilər; bir gündən az qalanda planetin (planet yoxdursa icraçının gəmisinin) üstündə balon çıxır.
 - **Prompt Generator, Designer, Meeting Planet**: xüsusi planetlər. Prompt yaratma və kitabxana; dizayn layihələri və tapşırıqları; görüşlər, gündəm və müzakirə (görüş vaxtı iştirakçıların gəmiləri ora uçur).
+- **Şəkilli prompt** (planet → Göndər tabı): "🖼 Şəkil" düyməsi, yapışdırma (Cmd/Ctrl+V) və ya sürüşdürmə ilə prompta 4-ə qədər şəkil (PNG/JPEG/GIF/WebP, 5 MB) əlavə olunur; böyük şəkillər brauzerdə kiçildilir. Şəkillər `data/cmdimg/` içində saxlanır, yalnız `cmdimg.php` verir (giriş və ya token), 7 gündən sonra silinir. Agent onları müvəqqəti qovluğa endirib Claude-a `--add-dir` ilə göstərir. Prompt **Enter** ilə gedir, Shift+Enter yeni sətirdir.
 - **Test Planet** (🧪): planetə gir, test ediləcək proyekti seç. Proyekt üzrə test ssenariləri (keçdi / xəta + qeyd), "Yeni raund" ilə sıfırlama və Claude agentinə test promptu göndərmək. Xəta varsa Test Planet qırmızı yanır, proyektin planetində "🧪 N xəta" görünür.
 
 ## Kosmik xəritə və universlər

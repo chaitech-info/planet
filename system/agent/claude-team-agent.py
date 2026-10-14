@@ -4,6 +4,7 @@
 Saytdakı növbədən YALNIZ SƏNİN tokenin üçün göndərilən promptları götürür və
 həmin proyektin qovluğunda `claude -p` ilə işlədir. Yalnız ~/.claude-team-projects
 siyahısındakı proyektlərə icazə verilir. Fayl redaktəsi və git əmrləri icazəlidir (səviyyəyə görə, aşağıya bax), qalan terminal əmrləri yox.
+Prompta şəkil əlavə olunubsa, agent onları müvəqqəti qovluğa endirir və Claude-a yolunu verir (iş bitəndə silinir).
 
 Git səviyyəsi (kompüterin sahibi seçir; CLAUDE_TEAM_GIT mühit dəyişəni və ya ~/.claude-team-agent.env faylında):
   read  : yalnız oxuma (status, log, diff, show, branch)
@@ -13,7 +14,7 @@ Git səviyyəsi (kompüterin sahibi seçir; CLAUDE_TEAM_GIT mühit dəyişəni v
 İstifadə:  python3 claude-team-agent.py          (davamlı işləyir, Ctrl+C ilə dayandır)
            python3 claude-team-agent.py --once   (bir tapşırıq götürüb çıxır)
 """
-import atexit, json, os, shlex, shutil, signal, subprocess, sys, threading, time, urllib.request, urllib.error
+import atexit, json, os, shlex, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 
 CONF = os.environ.get('CLAUDE_TEAM_CONF', os.path.expanduser('~/.claude-team-dash.conf'))
 PROJECTS = os.environ.get('CLAUDE_TEAM_PROJECTS', os.path.expanduser('~/.claude-team-projects'))
@@ -97,6 +98,26 @@ def call(base, token, action, payload=None):
         headers={'X-Team-Token': token, 'Content-Type': 'application/json'})
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode())
+
+
+def fetch_images(base, token, names):
+    """Prompta əlavə olunmuş şəkilləri müvəqqəti qovluğa endirir. Qaytarır: (qovluq, fayl yolları). Alınmasa xəta atır."""
+    d = tempfile.mkdtemp(prefix='claude-team-img-')
+    paths = []
+    try:
+        for i, name in enumerate(names, 1):
+            req = urllib.request.Request(base.replace('agent.php', 'cmdimg.php') + '?f=' + urllib.parse.quote(str(name)),
+                                         headers={'X-Team-Token': token})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                data = r.read()
+            p = os.path.join(d, f'sekil-{i}{os.path.splitext(str(name))[1] or ".png"}')
+            with open(p, 'wb') as f:
+                f.write(data)
+            paths.append(p)
+    except Exception:
+        shutil.rmtree(d, ignore_errors=True)
+        raise
+    return d, paths
 
 
 def find_claude():
@@ -203,12 +224,12 @@ def parse_result(out):
     return None, None, False
 
 
-def run_claude(base, token, claude, cmd, path):
+def run_claude(base, token, claude, cmd, path, extra_args=()):
     """claude -p işlədir. Eyni proyekt və göndərən üçün əvvəlki söhbəti davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan."""
     key = path + '|' + (cmd.get('creator') or '')
     store = sess_load()
     sid = None if cmd.get('fresh') else (store.get(key) or {}).get('sid')
-    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY]
+    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
     out, err, rc = exec_claude(base, token, base_args + (['--resume', sid] if sid else []), cmd, path)
     if rc == 'end':
         return err, 'failed'
@@ -241,7 +262,20 @@ def run_one(base, token, claude):
         call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
              'result': f"'{cmd['project']}' bu kompüterdə icazəli deyil. ~/.claude-team-projects siyahısına əlavə et."})
         return True
-    out, status = run_claude(base, token, claude, cmd, path)
+    imgdir, extra = None, ()
+    if cmd.get('images'):                                   # şəkilli prompt: faylları endir, Claude-a yolunu ver (--add-dir ilə oxuya bilsin)
+        try:
+            imgdir, files = fetch_images(base, token, cmd['images'])
+        except Exception as e:  # noqa
+            call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed', 'result': f'Şəkillər saytdan alınmadı: {e}'})
+            return True
+        extra = ('--add-dir', imgdir)
+        cmd['prompt'] += '\n\n[Göndərənin prompta əlavə etdiyi şəkillər (Read aləti ilə bax): ' + ', '.join(files) + ']'
+    try:
+        out, status = run_claude(base, token, claude, cmd, path, extra)
+    finally:
+        if imgdir:
+            shutil.rmtree(imgdir, ignore_errors=True)
     call(base, token, 'finish', {'id': cmd['id'], 'status': status, 'result': out[-7500:]})
     print(f'   → {status}', flush=True)
     return True

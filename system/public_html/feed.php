@@ -90,10 +90,11 @@ $projects = $pdo->prepare('SELECT project, user, COUNT(*) AS sessions, SUM(edits
     FROM sessions WHERE updated_at > ? GROUP BY project, user');
 $projects->execute([$now - 30 * 86400]);
 
-$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at
+$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, images
     FROM commands ORDER BY id DESC LIMIT 40')->fetchAll();
 foreach ($cmds as &$c) {
     $c['result'] = mb_substr($c['result'], 0, 3000);
+    $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
 }
 unset($c);
 $agents = $pdo->query('SELECT user, last_seen, claude_ok, projects FROM agents')->fetchAll();
