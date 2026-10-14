@@ -181,6 +181,20 @@ function db(): PDO
         created_at INT NOT NULL,
         PRIMARY KEY (owner, grantee)
     )");
+    // Ratsiya: bas-danış səs klipləri (qısa ömürlü, fayl data/radio/ içində) və ratsiyası açıq olanlar
+    $pdo->exec("CREATE TABLE IF NOT EXISTS radio (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        target VARCHAR(64) NOT NULL,
+        file VARCHAR(64) NOT NULL,
+        mime VARCHAR(32) NOT NULL,
+        dur REAL NOT NULL DEFAULT 0,
+        created_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS radio_presence (
+        user VARCHAR(64) NOT NULL PRIMARY KEY,
+        last_seen INT NOT NULL
+    )");
     $pdo->exec("CREATE TABLE IF NOT EXISTS login_fail (
         ip VARCHAR(64) NOT NULL,
         ts INT NOT NULL
@@ -339,6 +353,19 @@ function cmdimg_cleanup(PDO $pdo): void
         }
         $pdo->prepare("UPDATE commands SET images = '' WHERE id = ?")->execute([$r['id']]);
     }
+}
+
+/** Ratsiya kliplərinin qovluğu (data/ içində, yalnız radio.php verir). Yaradıla bilmirsə null. */
+function radio_dir(): ?string
+{
+    $dir = __DIR__ . '/data/radio';
+    if (!is_dir($dir) && !@mkdir($dir, 0755, true) && !is_dir($dir)) {
+        return null;
+    }
+    if (!is_file($dir . '/.htaccess')) {
+        @file_put_contents($dir . '/.htaccess', "Require all denied\n");
+    }
+    return $dir;
 }
 
 /* ---------- Lövhə tapşırığı → agent: prompt və avtomatik icra ---------- */

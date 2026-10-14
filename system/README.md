@@ -51,6 +51,9 @@ Yaxınlaşdıqca görünüş pillə-pillə dəyişir: uzaqdan qalaktika və onun
 Gəmilər hər biri öz trayektoriyası ilə uçur; sahibi işləyəndə öz proyektinin, boş vaxtda (agent onlayndırsa) öz agentinin ətrafında olur və arabir başqa universlərdəki planetlərə uçur.
 URL-lər: `#kainat` (xəritə), `#kainat/@mcp` (universin ümumi görünüşü), `#kainat/<planet>` (planet).
 
+## 📻 Ratsiya (bas-danış səs)
+Başlıqdakı `📻 Ratsiya` düyməsi (və ya `Alt+R`) paneli açır və ratsiyanı yandırır (mikrofon icazəsi bir dəfə). Böyük düyməni (və ya Space-i) basılı saxlayıb danışırsan, buraxanda klip serverə gedir (`radio.php`, fayl `data/radio/`, 15 dəqiqə saxlanır). Kanal: hamıya və ya bir nəfərə. Ratsiyası açıq olan hər kəs klipi avtomatik eşidir: sorğu 2 saniyədən bir Web Worker-dən gedir, ona görə brauzer tabı arxada olanda da səs gəlir (icazə verilibsə bildiriş də çıxır). Səs radio tembrindədir (300–3400 Hz + yüngül təhrif), hər klipin əvvəlində rele kliki və xışıltı, sonunda xışıltı və iki tonlu "roger" siqnalı sintez olunur (polis ratsiyası kimi). Paneldə kimin eşitdiyi, son kliplər (▶ ilə yenidən çalmaq) və səs səviyyəsi görünür; panelin ✕-i ratsiyanı bağlamır, "⏻ Bağla" bağlayır. Yarım-dupleksdir: danışarkən gələn kliplər növbədə gözləyir. Ən çox 60 saniyə bir klip; HTTPS lazımdır.
+
 ## 🎙 Jarvis (səsli agent: Grok Voice / Gemini Live)
 Real-time danışan köməkçi: sual verirsən ("kim nə edir?", "hansı planet yanır?"), kainatda gəzdirir ("MCP universinə uç"), əməllər edir (tapşırıq, status, deadline, görüş, test nəticəsi, mesaj raketi, agentə prompt). Dəyişiklik edən hər əmrdən əvvəl səslə təsdiq soruşur; silə bilmir.
 1. `system/public_html/config.local.example.php` faylını `config.local.php` adı ilə kopyala, `fal_key` yaz (fal.ai → Keys). Bu fayl git-ə düşmür; serverdə də əl ilə yaradılmalıdır.
