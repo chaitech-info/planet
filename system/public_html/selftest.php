@@ -38,6 +38,13 @@ try {
 
 // 3) Jarvis modulları: hər biri massiv qaytarır, alət adları təkrarlanmır, JSON-a çevrilir
 define('JARVIS_MODULE', 1);
+// memory.php jarvis.php-dəki memory_split()-i çağırır; selftest jarvis.php-ni yükləmir, ona görə yalnız test üçün boş əvəzedici
+if (!function_exists('memory_split')) {
+    function memory_split(PDO $pdo, string $user): array
+    {
+        return ['facts' => [], 'project' => [], 'summary' => []];
+    }
+}
 $me = ['name' => '__selftest__', 'role' => 'admin'];
 $names = [];
 foreach (glob(__DIR__ . '/jarvis_modules/*.php') ?: [] as $mf) {

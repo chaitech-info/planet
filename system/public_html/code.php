@@ -372,7 +372,7 @@ const S = { me: '', comps: [], pending: [], target: '', tab: 'chats', chats: nul
   steps: new Map(), openSteps: new Set(), openRes: new Set(), q: '', imgs: [], tmp: null, last: '', unseen: false, at: {} };
 const comp = () => S.comps.find(c => c.name === S.target) || null;
 const isMine = () => S.target === S.me;
-const canSend = () => { const c = comp(); return !!c && !c.me && !!c.grant; };
+const canSend = () => { const c = comp(); return !!c && (c.me || !!c.grant); };
 const canSee = () => { const c = comp(); return !!c && (c.me || !!c.grant); };
 const curChat = () => S.sel && S.sel.k === 'chat' ? (S.chats || []).find(c => c.chat === S.sel.id) || null : null;
 
@@ -490,7 +490,7 @@ function renderSide() {
   const btn = $('pcbtn');
   if (c) { const [dc, sub] = compState(c); btn.children[0].className = 'dot ' + dc; btn.children[1].textContent = '🖥 ' + c.name + (c.me ? ' (sən)' : ''); btn.children[2].textContent = sub; }
   $('newchat').disabled = !canSend();
-  $('newchat').title = canSend() ? 'Təzə söhbət: Claude sıfırdan başlayır' : isMine() ? 'Öz kompüterinə buradan göndərilmir: öz terminalında Claude Code işlət' : 'Bu kompüterə icazən yoxdur';
+  $('newchat').title = canSend() ? 'Təzə söhbət: Claude sıfırdan başlayır' : 'Bu kompüterə icazən yoxdur';
   // Sahib üçün: təsdiq gözləyən komandalar
   const pb = $('pendbox');
   pb.hidden = !S.pending.length;
@@ -510,14 +510,14 @@ function renderSide() {
     if (S.chats === null) { box.append(el('div', 'sempty', 'Yüklənir…')); return; }
     if (S.sel && S.sel.k === 'new') { const n = el('button', 'si on'); n.append(el('span', 'dot working'), el('span', 't', '✎ Yeni söhbət'), el('span', 'm', 'ilk mesajı yaz')); box.append(n); }
     const list = S.chats.filter(x => !q || (x.title + ' ' + x.project + ' ' + x.creator).toLowerCase().includes(q));
-    if (!list.length) box.append(el('div', 'sempty', q ? 'Tapılmadı' : isMine() ? 'Hələ heç kim sənin kompüterinə komanda göndərməyib.' : 'Hələ söhbət yoxdur. Yaz, göndər: ilk söhbət burada görünəcək.'));
+    if (!list.length) box.append(el('div', 'sempty', q ? 'Tapılmadı' : isMine() ? 'Hələ söhbət yoxdur. Yaz, göndər: ilk söhbət burada görünəcək.' : 'Hələ söhbət yoxdur. Yaz, göndər: ilk söhbət burada görünəcək.'));
     let g = '';
     for (const x of list) {
       const gg = ageGroup(x.last_at); if (gg !== g) { g = gg; box.append(el('div', 'sg', g)); }
       const on = S.sel && S.sel.k === 'chat' && S.sel.id === x.chat;
       const b = el('button', 'si' + (on ? ' on' : '')); b.type = 'button';
       const [lbl, dc] = ST[x.status] || [x.status, ''];
-      b.append(el('span', 'dot ' + dc), el('span', 't', x.title || '…'), el('span', 'm', (isMine() ? x.creator + ' · ' : '') + x.project + ' · ' + x.n + ' mesaj · ' + (['done', 'canceled'].includes(x.status) ? ago(x.last_at) : lbl)));
+      b.append(el('span', 'dot ' + dc), el('span', 't', x.title || '…'), el('span', 'm', (isMine() && x.creator !== S.me ? x.creator + ' · ' : '') + x.project + ' · ' + x.n + ' mesaj · ' + (['done', 'canceled'].includes(x.status) ? ago(x.last_at) : lbl)));
       b.title = x.title + '\n🪐 ' + x.project + ' · ' + x.n + ' mesaj · ' + ago(x.last_at);
       b.onclick = () => nav(S.target, { k: 'chat', id: x.chat });
       box.append(b);
@@ -556,7 +556,7 @@ function renderTop() {
   const c = comp(), t = $('title'), cc = curChat();
   let head = 'Claude Code', sub = '';
   if (S.sel && S.sel.k === 'sess') { head = S.sess && S.sess.last_prompt ? S.sess.last_prompt.slice(0, 90) : 'Sessiya'; sub = '⌨ ' + S.target + '-in sessiyası' + (S.sess && S.sess.project ? ' · 🪐 ' + S.sess.project : ''); }
-  else if (cc) { head = cc.title || 'Söhbət'; sub = '🖥 ' + S.target + ' · 🪐 ' + cc.project + (isMine() ? ' · ' + cc.creator : ''); }
+  else if (cc) { head = cc.title || 'Söhbət'; sub = '🖥 ' + S.target + ' · 🪐 ' + cc.project + (isMine() && cc.creator !== S.me ? ' · ' + cc.creator : ''); }
   else if (S.sel && S.sel.k === 'new') { head = 'Yeni söhbət'; sub = '🖥 ' + S.target; }
   else if (c) { head = '🖥 ' + c.name; sub = accessTxt(c); }
   t.children[0].textContent = head; t.children[1].textContent = sub;
@@ -595,7 +595,7 @@ function message(m, latest, hidePrj) {
   const um = el('div', 'um');
   if (long) { const b = el('button', 'lb', ut.classList.contains('clamp') ? '▾ Tam göstər' : '▴ Yığ'); b.type = 'button'; b.onclick = () => { S.openRes.has('p' + id) ? S.openRes.delete('p' + id) : S.openRes.add('p' + id); redraw(); }; um.append(b); }
   if (canSend() && m.status !== 'sending') { const b = el('button', 'lb', '↻'); b.type = 'button'; b.title = 'Yazı qutusuna qoy: düzəldib yenidən göndər'; b.onclick = () => fill(text); um.append(b); }
-  if (isMine()) um.append(el('b', null, m.creator), el('span', null, '·'));
+  if (isMine() && m.creator !== S.me) um.append(el('b', null, m.creator), el('span', null, '·'));
   if (!hidePrj) um.append(el('span', null, '🪐 ' + m.project), el('span', null, '·'));
   const tm = el('span', null, hm(m.created_at)); tm.title = new Date(m.created_at * 1000).toLocaleString('az'); um.append(tm);
   u.append(um); w.append(u);
@@ -718,7 +718,7 @@ function hero() {
   h.append(el('div', 'logo', 'C'));
   if (!c) { h.append(el('h1', null, 'Claude Code'), el('p', null, S.comps.length ? 'Soldan kompüter seç.' : 'Yüklənir…')); return h; }
   if (S.chats === null && S.sel && S.sel.k === 'chat') { h.append(el('p', null, 'Yüklənir…')); return h; }
-  if (c.me) { h.append(el('h1', null, 'Sənin kompüterin'), el('p', null, 'Burada başqalarının sənin kompüterinə göndərdiyi söhbətlər görünür. Soldakı "⌨ Sessiyalar"da öz Claude Code sessiyaların var. İcazələri Desktop Universe-də idarə edirsən.')); return h; }
+  if (c.me) { h.append(el('h1', null, 'Nə edək?'), el('p', null, 'Sənin kompüterində, öz Claude Code-unla. Komanda dərhal işə düşür. Yeni söhbət: Claude sıfırdan başlayır. Başqalarının göndərdiyi söhbətlər də solda görünür, öz sessiyaların "⌨ Sessiyalar"dadır.')); return h; }
   if (!c.grant) { h.append(el('h1', null, '🔒 ' + c.name), el('p', null, c.name + ' hələ sənə icazə verməyib. Onun kompüterinə komanda göndərmək üçün Desktop Universe-də ' + c.name + '-in planetində sənə "+ İcazə ver" etməlidir.')); return h; }
   h.append(el('h1', null, 'Nə edək?'), el('p', null, c.name + '-in kompüterində, onun Claude Code-u ilə. ' + (c.grant === 'auto' ? 'Komanda dərhal işə düşür.' : c.name + ' hər komandanı təsdiqləyir.') + ' Yeni söhbət: Claude sıfırdan başlayır.'));
   const prjs = c.projects || [];
@@ -741,7 +741,6 @@ function renderComposer() {
   const lock = $('lock'), note = $('cnote');
   lock.hidden = true; note.className = 'cnote'; note.textContent = '';
   if (c && sess) { lock.hidden = false; lock.replaceChildren(el('span', null, '⌨ Sessiya yalnız oxumaq üçündür. ')); if (canSend()) { const a = el('a', null, 'Yeni söhbət aç'); a.href = hashOf(S.target, { k: 'new' }); lock.append(a); } }
-  else if (c && c.me) { lock.hidden = false; lock.textContent = 'Sənin kompüterin: buradan özünə komanda göndərilmir. Gələn komandaları təsdiq et, sessiyalarına bax.'; }
   else if (c && !c.grant) { lock.hidden = false; lock.replaceChildren(el('span', null, '🔒 ' + c.name + ' sənə icazə verməyib. ')); const a = el('a', null, 'Desktop Universe-də icazə istə'); a.href = './#kainat/desktop%3A' + encodeURIComponent(c.name); lock.append(a); }
   if (!c || !canSend() || sess) return;
   // proyekt: açıq söhbət bir proyektə bağlıdır; yeni söhbətdə seçilir
