@@ -408,6 +408,7 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
         'idx_tasks_cmd' => 'tasks (command_id)',
         'idx_tasks_status' => 'tasks (status, updated_at)',
         'idx_events_project' => 'events (project, id)',
+        'idx_events_session' => 'events (session_id, id)',   // code.php: bir sessiyanın hadisələri
     ] as $name => $on) {
         try {
             $pdo->exec("CREATE INDEX " . ($sqlite ? 'IF NOT EXISTS ' : '') . "$name ON $on");

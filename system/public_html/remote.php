@@ -239,6 +239,115 @@ if ($act === 'chat') {                                            // bir söhbə
     json_out(['chat' => $chat, 'messages' => $msgs]);
 }
 
+/* ---- code.php (tam səhifəlik Claude Code): kompüterlər, sessiya tarixçəsi, komandanın addımları ---- */
+
+/** Kompüterin Claude Code sessiyalarına baxış: yalnız sahibi və ona icazə verilənlər */
+function can_see_sessions(PDO $pdo, string $target, string $name): bool
+{
+    if ($target === $name) {
+        return true;
+    }
+    $g = $pdo->prepare("SELECT 1 FROM remote_grants WHERE owner = ? AND grantee IN (?, '*') LIMIT 1");
+    $g->execute([$target, $name]);
+    return (bool)$g->fetchColumn();
+}
+
+if ($act === 'overview') {                                        // bütün kompüterlər: onlayn, Claude girişi, növbə, icazə, proyektlər
+    $users = $pdo->query("SELECT name FROM users WHERE role != 'student' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
+    $agents = [];
+    foreach ($pdo->query('SELECT user, last_seen, claude_ok FROM agents')->fetchAll() as $r) {
+        $agents[$r['user']] = $r;
+    }
+    $load = [];
+    foreach ($pdo->query("SELECT user, status, COUNT(*) AS n FROM commands WHERE status IN ('pending','queued','running') GROUP BY user, status")->fetchAll() as $r) {
+        $load[$r['user']][$r['status']] = (int)$r['n'];
+    }
+    $g = $pdo->prepare("SELECT owner, grantee, mode FROM remote_grants WHERE owner = ? OR grantee IN (?, '*')");
+    $g->execute([$name, $name]);
+    $grants = $g->fetchAll();
+    $pq = $pdo->prepare('SELECT DISTINCT user, project FROM sessions WHERE updated_at > ? ORDER BY project');
+    $pq->execute([$now - 30 * 86400]);
+    $projects = [];
+    foreach ($pq->fetchAll() as $r) {
+        $projects[$r['user']][] = $r['project'];
+    }
+    $out = [];
+    foreach ($users as $u) {
+        $a = $agents[$u] ?? null;
+        $mine = null;                                            // mənə verilən icazə: şəxsi icazə hamıya olandan üstündür
+        foreach ($grants as $x) {
+            if ($x['owner'] === $u && ($x['grantee'] === $name || ($x['grantee'] === '*' && !$mine))) {
+                $mine = $x;
+            }
+        }
+        $out[] = [
+            'name' => $u, 'me' => $u === $name, 'agent' => (bool)$a, 'online' => $a && $now - (int)$a['last_seen'] < 30,
+            'last_seen' => $a ? (int)$a['last_seen'] : 0, 'login' => !$a || (int)$a['claude_ok'] === 1,
+            'running' => $load[$u]['running'] ?? 0, 'queued' => $load[$u]['queued'] ?? 0, 'pending' => $load[$u]['pending'] ?? 0,
+            'grant' => $mine ? $mine['mode'] : null, 'projects' => $projects[$u] ?? [],
+            'granted' => $u === $name ? array_values(array_map(fn($x) => ['grantee' => $x['grantee'], 'mode' => $x['mode']], array_filter($grants, fn($x) => $x['owner'] === $name))) : [],
+        ];
+    }
+    $pd = $pdo->prepare("SELECT id, project, prompt, creator, images, created_at, chat FROM commands WHERE user = ? AND status = 'pending' ORDER BY id ASC LIMIT 20");
+    $pd->execute([$name]);
+    $pend = $pd->fetchAll();
+    foreach ($pend as &$c) {
+        $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
+    }
+    unset($c);
+    json_out(['now' => $now, 'me' => $name, 'computers' => $out, 'pending' => $pend]);
+}
+
+if ($act === 'sessions') {                                        // kompüterin Claude Code sessiyaları (hook-dan, son 30 gün)
+    $target = (string)($in['target'] ?? '');
+    if (!can_see_sessions($pdo, $target, $name)) {
+        json_out(['error' => $target . ' sənə icazə verməyib'], 403);
+    }
+    $q = $pdo->prepare('SELECT session_id, project, status, last_prompt, last_summary, edits, tool_count, started_at, updated_at FROM sessions WHERE user = ? AND updated_at > ? ORDER BY updated_at DESC LIMIT 100');
+    $q->execute([$target, $now - 30 * 86400]);
+    $rows = $q->fetchAll();
+    foreach ($rows as &$r) {
+        $r['last_prompt'] = mb_substr($r['last_prompt'], 0, 200);
+        $r['last_summary'] = mb_substr($r['last_summary'], 0, 200);
+    }
+    unset($r);
+    json_out(['sessions' => $rows]);
+}
+
+if ($act === 'session') {                                         // bir sessiyanın hadisələri (köhnədən yeniyə, son 400)
+    $target = (string)($in['target'] ?? '');
+    $sid = (string)($in['session_id'] ?? '');
+    if (!can_see_sessions($pdo, $target, $name)) {
+        json_out(['error' => $target . ' sənə icazə verməyib'], 403);
+    }
+    $s = $pdo->prepare('SELECT session_id, project, cwd, status, last_prompt, last_summary, edits, tool_count, started_at, updated_at FROM sessions WHERE user = ? AND session_id = ?');
+    $s->execute([$target, $sid]);
+    $sess = $s->fetch();
+    if (!$sess) {
+        json_out(['error' => 'sessiya tapılmadı'], 404);
+    }
+    $sess['cwd'] = $target === $name ? $sess['cwd'] : '';                // tam yol yalnız sahibə
+    $e = $pdo->prepare('SELECT id, event, tool, summary, created_at FROM events WHERE session_id = ? AND user = ? ORDER BY id DESC LIMIT 400');
+    $e->execute([$sid, $target]);
+    json_out(['session' => $sess, 'events' => array_reverse($e->fetchAll())]);
+}
+
+if ($act === 'steps') {                                           // komanda icra olunarkən Claude-un addımları (hook hadisələri)
+    [$where, $args] = chat_scope($pdo, (string)($in['target'] ?? ''), $name);
+    $q = $pdo->prepare("SELECT user, project, started_at, finished_at FROM commands WHERE $where AND id = ?");
+    $q->execute([...$args, (int)($in['id'] ?? 0)]);
+    $c = $q->fetch();
+    if (!$c) {
+        json_out(['error' => 'komanda tapılmadı'], 404);
+    }
+    if (!(int)$c['started_at']) {
+        json_out(['steps' => []]);
+    }
+    $e = $pdo->prepare("SELECT id, event, tool, summary, created_at FROM events WHERE project = ? AND user = ? AND created_at >= ? AND created_at <= ? AND tool != '' ORDER BY id ASC LIMIT 150");
+    $e->execute([$c['project'], $c['user'], (int)$c['started_at'], (int)$c['finished_at'] ?: $now]);
+    json_out(['steps' => $e->fetchAll()]);
+}
+
 if ($act === 'approve' || $act === 'deny') {
     $q = $pdo->prepare("SELECT id FROM commands WHERE id = ? AND user = ? AND status = 'pending'");
     $q->execute([(int)($in['id'] ?? 0), $name]);                // yalnız kompüterin sahibi
