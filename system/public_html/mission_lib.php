@@ -15,7 +15,9 @@
 
 const MISSION_MAX_STEPS = 12;
 const MISSION_MAX_PROMPT = 4000;
-const AGENT_QUEUE_MAX = 5;
+if (!defined('AGENT_QUEUE_MAX')) {
+    define('AGENT_QUEUE_MAX', 5);   // db.php da təyin edir; ikiqat təyin xəbərdarlığı JSON cavabını pozurdu
+}
 
 /** Agentin bildirdiyi qovluqlar (agents.projects, sətir-sətir) */
 function agent_row(PDO $pdo, string $user): ?array
