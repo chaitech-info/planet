@@ -3,3 +3,4 @@ system/public_html/data/
 system/public_html/config.local.php
 system/dev/agent-local/
 .claude/
+__pycache__/
