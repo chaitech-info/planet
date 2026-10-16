@@ -1332,6 +1332,34 @@ function makeSession(sess) {
   n._r = { dot, proj, prompt, sum, a, e, t, stop };
   return n;
 }
+/* ====== Kimsə saytda onlayn olanda hamıya səs ====== */
+const JOIN_SOUND = 'media/online.mp3';
+const joinAudio = new Audio(JOIN_SOUND); joinAudio.preload = 'auto'; joinAudio.volume = 0.7;
+let joinPrev = null, joinHid = null, joinHidAt = 0; const joinLast = {};
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => addEventListener(ev, () => {   // brauzer səsə yalnız ilk toxunuşdan sonra icazə verir
+  if (joinAudio._ok) return; joinAudio._ok = true;
+  joinAudio.muted = true; joinAudio.play().then(() => { joinAudio.pause(); joinAudio.currentTime = 0; joinAudio.muted = false; }).catch(() => { joinAudio._ok = false; joinAudio.muted = false; });
+}, { passive: true }));
+document.addEventListener('visibilitychange', () => { joinPrev = null; });   // gizli tabda ürək döyüntüsü dayanır: qayıdanda baza yenilənsin
+function joinPlay(why) {
+  joinAudio.currentTime = 0;
+  joinAudio.play().then(() => console.log('[join-səs] çalındı:', why)).catch(e => console.warn('[join-səs] brauzer blokladı (səhifədə bir dəfə klik et):', e && e.name));
+}
+window.joinTest = () => joinPlay('test');
+function fireJoinSound() {
+  const cur = new Set((data.presence || []).filter(p => now() - p.last_seen < 25).map(p => p.user));
+  if (joinPrev) {
+    let fresh = false;
+    cur.forEach(u => { if (!joinPrev.has(u) && !(ME && u === ME.name) && Date.now() - (joinLast[u] || 0) > 120000) { joinLast[u] = Date.now(); fresh = true; } });
+    // student komandanın adlarını görmür: yalnız saydan istifadə edirik (görünməyən onlayn sayı artıbsa)
+    const hid = Math.max(0, (data.online_n || 0) - [...cur].filter(u => !(ME && u === ME.name)).length);
+    if (!fresh && joinHid !== null && hid > joinHid && Date.now() - joinHidAt > 20000) { fresh = true; joinHidAt = Date.now(); }
+    joinHid = hid;
+    if (fresh) joinPlay('giriş aşkarlandı');
+  }
+  else joinHid = Math.max(0, (data.online_n || 0) - [...cur].filter(u => !(ME && u === ME.name)).length);
+  joinPrev = cur;
+}
 function isOnline(u) { return (data.presence || []).some(p => p.user === u && now() - p.last_seen < 25); }
 function renderPeople() {
   sync($('people'), data.users, u => u, makePerson, (n, u) => {
@@ -1880,6 +1908,7 @@ async function load() {
     setMe(data.me);
     fireEvents();
     fireMessages();
+    fireJoinSound();
     offset = data.now - Date.now() / 1000;
     lastOk = Date.now();
     render();
