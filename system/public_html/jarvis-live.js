@@ -10,7 +10,7 @@
 
   /* ---------- Ayarlar (localStorage, try/catch) ---------- */
   const KEY = 'jv-live';
-  const S = { snd: true, cap: true, glow: true };
+  const S = { snd: true, cap: true, glow: true, txt: false, custom: [] };
   try { Object.assign(S, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) {}
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
 
@@ -71,6 +71,9 @@
 .jvl-in button { flex: none; width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07); color: #e9eef8; border-radius: 50%; cursor: pointer; font-size: 14px; padding: 0; }
 .jvl-in button[type=submit] { background: linear-gradient(135deg,#0284c7,#d97706); border-color: transparent; }
 .jvl-set { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 14px 2px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(125,211,252,.2); background: rgba(56,189,248,.06); font-size: 12.5px; }
+.jvl-cust { flex-basis: 100%; display: grid; gap: 6px; } .jvl-cust b { font-weight: 600; color: #bae6fd; } .jvl-cl { display: flex; flex-wrap: wrap; gap: 5px; }
+.jvl-cr { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 9px; border-radius: 999px; background: rgba(56,189,248,.14); border: 1px solid rgba(125,211,252,.3); } .jvl-cr button { border: 0; background: transparent; color: #94a3b8; cursor: pointer; font-size: 11px; padding: 0 4px; }
+.jvl-cf { display: flex; gap: 6px; } .jvl-cf input { flex: 1; min-width: 0; padding: 5px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9eef8; font: inherit; font-size: 12px; } .jvl-cf button { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.07); color: #e9eef8; border-radius: 8px; padding: 0 10px; cursor: pointer; }
 .jvl-set[hidden] { display: none; } .jvl-set label { display: flex; align-items: center; gap: 6px; cursor: pointer; } .jvl-set input { accent-color: #38bdf8; }
 .jvl-low { position: fixed; left: var(--jvl-x, 50%); bottom: var(--jvl-b, 22px); z-index: 60; width: var(--jvl-w, min(680px, calc(100vw - 32px))); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
 .jvl-tick { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
@@ -154,15 +157,30 @@
   go.type = 'submit'; go.title = 'Göndər'; go.setAttribute('aria-label', 'Göndər'); gear.type = 'button'; gear.title = 'Ayarlar'; gear.setAttribute('aria-label', 'Ayarlar'); gear.setAttribute('aria-expanded', 'false');
   form.append(inp, go, gear);
   const setBox = E('div', 'jvl-set'); setBox.hidden = true;
-  const OPTS = [['snd', '🔈 Səslər'], ['cap', '💬 Altyazılar'], ['glow', '✨ Kənar parıltısı']], chk = {};
+  const OPTS = [['snd', '🔈 Səslər'], ['cap', '💬 Altyazılar'], ['glow', '✨ Kənar parıltısı'], ['txt', '⌨️ Yalnız mətn (Jarvis susur, mikrofon bağlı)']], chk = {};
   for (const [k, l] of OPTS) { const lb = E('label'), c = E('input'); c.type = 'checkbox'; c.checked = !!S[k]; c.onchange = () => setOpt(k, c.checked); chk[k] = c; lb.append(c, l); setBox.append(lb); }
   function setOpt(k, v) {
     S[k] = !!v; save(); if (chk[k]) chk[k].checked = S[k]; paintSnd();
     if (k === 'cap' && !v) capHide(true);
+    if (k === 'txt' && JV.textMode) JV.textMode(S.txt);
     kick();
   }
   const paintSnd = () => { snd.textContent = S.snd ? '🔈' : '🔇'; snd.title = S.snd ? 'Səslər açıq' : 'Səslər bağlı'; snd.setAttribute('aria-label', snd.title); };
   snd.onclick = () => { setOpt('snd', !S.snd); if (S.snd) SFX.tick(); };
+  /* Öz sürətli əmrlərin: ad + Jarvis-ə deyiləcək söz; brauzerdə saxlanır, hər görünüşdə çıxır */
+  if (!Array.isArray(S.custom)) S.custom = [];
+  const cw = E('div', 'jvl-cust'), cl = E('div', 'jvl-cl'), cf = E('form', 'jvl-cf'), cn = E('input'), cs = E('input'), cb = E('button', null, '➕');
+  cn.placeholder = 'Düymə adı'; cn.maxLength = 24; cn.setAttribute('aria-label', 'Düymə adı'); cs.placeholder = 'Jarvis-ə nə desin'; cs.maxLength = 200; cs.setAttribute('aria-label', 'Jarvis-ə deyiləcək söz'); cb.type = 'submit'; cb.title = 'Əmr əlavə et';
+  cf.append(cn, cs, cb); cw.append(E('b', null, 'Öz əmrlərin'), cl, cf);
+  function paintCust() {
+    cl.textContent = '';
+    S.custom.forEach((c, i) => { const r = E('span', 'jvl-cr', c[0]), x = E('button', null, '✕'); x.type = 'button'; x.title = 'Sil'; x.setAttribute('aria-label', c[0] + ' əmrini sil'); x.onclick = () => { S.custom.splice(i, 1); save(); paintCust(); qcKey = ''; quick(); }; r.append(x); cl.append(r); });
+  }
+  cf.onsubmit = e => {
+    e.preventDefault(); const n = cn.value.trim().slice(0, 24), t = cs.value.trim().slice(0, 200); if (!n || !t || S.custom.length >= 8) return;
+    S.custom.push([n, t]); save(); cn.value = cs.value = ''; paintCust(); qcKey = ''; quick();
+  };
+  setBox.append(cw); paintCust();
   gear.onclick = () => { setBox.hidden = !setBox.hidden; gear.setAttribute('aria-expanded', String(!setBox.hidden)); };
   paintSnd();
   if (panel) {
@@ -208,6 +226,7 @@
     else if (view === 'board') L.push(['📌', 'Mənim tapşırıqlarım', 'Mənim açıq tapşırıqlarım hansılardır?'], lateL, ['☀️', 'Bugünkü xülasə', 'Bugünkü qısa xülasəni ver']);
     else L.push(['☀️', 'Bugünkü xülasə', 'Bugünkü qısa xülasəni ver'], lateL, ['🛰', 'Bizə tur et', 'Bizə planetlər üzrə qısa tur et']);
     L.push(['🚀', 'Missiyalar', 'Missiyaların vəziyyətini göstər'], ['🛡', 'Protokollar', 'Hansı protokollar var?']);
+    for (const c of S.custom || []) L.unshift(['⭐', c[0], c[1]]);   // öz əmrlərin ən başda
     const k = L.map(x => x[1] + x[2]).join('|'); if (k === qcKey) return; qcKey = k;
     qc.textContent = '';
     L.forEach(([ic, l, say], i) => {
@@ -466,6 +485,7 @@
     stop() { end(); paint(); },
   };
   for (const k of Object.keys(H)) JV.on(k, (...a) => H[k](...a));
+  JV.on('ready', () => { if (S.txt && JV.textMode) JV.textMode(true); });   // yalnız mətn rejimi: hər sessiyada təkrar tətbiq
 
   /* ---------- Klaviatura: Alt+M mikrofon, Esc altyazını bağlayır ---------- */
   addEventListener('keydown', e => {

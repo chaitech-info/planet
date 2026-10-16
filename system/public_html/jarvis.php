@@ -10,6 +10,17 @@ if ($me === null) {
     json_out(['error' => 'giriş lazımdır'], 401);
 }
 deny_student($me);
+// PHP fatal xəta boş 500 yerinə JSON olsun (panel səbəbi göstərsin); detal yalnız adminə, qalanlara ümumi mesaj
+register_shutdown_function(function () use ($me) {
+    $e = error_get_last();
+    if ($e && in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true) && !headers_sent()) {
+        error_log('jarvis.php fatal: ' . $e['message'] . ' @ ' . $e['file'] . ':' . $e['line']);
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(500);
+        $detail = ($me['role'] ?? '') === 'admin' ? ': ' . mb_substr($e['message'], 0, 200) . ' (' . basename($e['file']) . ':' . $e['line'] . ')' : '';
+        echo json_encode(['error' => 'Server xətası (PHP)' . $detail], JSON_UNESCAPED_UNICODE);
+    }
+});
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'fetch') {
     json_out(['error' => 'yanlış sorğu'], 400);
 }
@@ -97,6 +108,39 @@ if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude 
         ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0]);
     $id = (int)$pdo->lastInsertId();
     json_out(['ok' => true, 'id' => $id, 'agent_online' => $now - (int)$a['last_seen'] < 30, 'claude_login' => (bool)$a['claude_ok'], 'allowed' => $allowed]);
+}
+
+/* ---------- Yaddaş: Jarvis-in istifadəçi haqqında saxladığı qısa qeydlər (sessiyalar arası) ---------- */
+if ($act === 'memory_add') {
+    $note = trim(preg_replace('/\s+/u', ' ', (string)($in['note'] ?? '')));
+    if ($note === '') {
+        json_out(['error' => 'qeyd boşdur'], 400);
+    }
+    $note = mb_substr($note, 0, 300);
+    memory_table($pdo);
+    $id = substr(md5(mb_strtolower($note)), 0, 12);
+    $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $id]);   // eyni qeyd təkrarlanmasın, təzələnsin
+    $pdo->prepare('INSERT INTO jarvis_memory (user, id, note, created_at) VALUES (?,?,?,?)')->execute([$me['name'], $id, $note, $now]);
+    $ids = $pdo->prepare('SELECT id FROM jarvis_memory WHERE user = ? ORDER BY created_at DESC');   // limitdən artıq köhnələri sil
+    $ids->execute([$me['name']]);
+    foreach (array_slice($ids->fetchAll(PDO::FETCH_COLUMN), MEMORY_MAX) as $oid) {
+        $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $oid]);
+    }
+    json_out(['ok' => true, 'count' => count(memory_all($pdo, $me['name']))]);
+}
+if ($act === 'memory_forget') {          // yalnız istifadəçinin öz qeydləri; brauzer əvvəl təsdiq alır
+    $q = mb_strtolower(trim((string)($in['query'] ?? '')));
+    if (mb_strlen($q) < 2) {
+        json_out(['error' => 'nəyi unutmaq lazım olduğunu yaz'], 400);
+    }
+    $del = 0;
+    foreach (memory_all($pdo, $me['name']) as $n) {
+        if (str_contains(mb_strtolower($n['note']), $q)) {
+            $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $n['id']]);
+            $del++;
+        }
+    }
+    json_out(['ok' => true, 'deleted' => $del]);
 }
 
 if ($act !== 'session') {
@@ -206,7 +250,7 @@ Rules:
 - Any request to actually DO work in a project (code, bugs, tests, review, analysis of the code, docs) goes to Claude Code via run_claude_code. Write it a clear, complete prompt; do not try to do the work yourself. Afterwards tell the user it was sent and that you will report when it is done. When you receive a note that a Claude Code task finished, summarise the result in 1-2 spoken sentences (mention failures plainly).
 - If the agent is offline, say the task is queued and will start when the agent on their computer runs.
 - Every action that creates or changes something (tasks, statuses, deadlines, meetings, tests, messages, Claude Code tasks): first say in one short sentence exactly what you will do and ask "Edim?"/"Shall I?". Only after the user clearly agrees call the tool with confirmed=true. Never set confirmed=true on your own.
-- You cannot delete anything; say so if asked.
+- You cannot delete anything (except your own memory notes via forget, with confirmation); say so if asked.
 - If a tool returns an error, explain it briefly and suggest the fix.
 - Resolve relative dates ("sabah saat 3-də", "next Friday") into local ISO date-times yourself.
 - When the user says goodbye or asks you to stop, say a short farewell and call end_conversation.

@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 H=u131695581@77.37.71.174
 D=domains/development.chaitech.info/public_html
 KEY=$HOME/.ssh/hostinger
-PHPFILES="index feed db command agent ingest admin kit tasks report daily control message sound plans world remote jarvis cmdimg radio mission mission_lib"
+PHPFILES="selftest index feed db command agent ingest admin kit tasks report daily control message sound plans world remote jarvis cmdimg radio mission mission_lib"
 SSH="ssh -i $KEY -p 65002 $H"
 SCP="scp -i $KEY -P 65002 -q"
 RUN=".tmp-dash/run-$(date +%s)"
@@ -40,4 +40,5 @@ CHECK=""; for p in $PHPFILES; do CHECK="$CHECK $p.php"; done; CHECK="$CHECK kain
 LOCAL=$(cd public_html && for f in $CHECK; do echo "$f $(md5 -q "$f")"; done)
 SERVER=$($SSH "cd ~/$D && for f in $CHECK; do echo \"\$f \$(md5sum \"\$f\" | cut -d' ' -f1)\"; done")
 if [ "$LOCAL" = "$SERVER" ]; then echo "   hər şey serverdə lokal ilə eynidir"; else echo "   XƏBƏRDARLIQ: fərq var:"; diff <(echo "$LOCAL") <(echo "$SERVER") || true; fi
-echo DEPLOYED
+echo "5/5 serverdə özünü yoxlama (selftest.php)..."
+if $SSH "cd ~/$D && php selftest.php"; then echo DEPLOYED; else echo "XƏBƏRDARLIQ: selftest uğursuz oldu, yuxarıdakı xətalara bax (sayt əvəz olunub, amma Jarvis sınıq ola bilər)"; exit 1; fi

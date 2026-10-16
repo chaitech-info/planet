@@ -157,7 +157,8 @@
   /** JSON POST (bütün endpointlər eyni başlıqları istəyir) */
   async function post(url, body, opts) {
     const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body), ...opts });
-    return { status: r.status, d: await r.json().catch(() => ({})) };
+    const raw = await r.text().catch(() => ''); let d = {}; try { d = JSON.parse(raw) || {}; } catch (e) {}
+    return { status: r.status, d, raw };
   }
   const api = (action, extra, opts) => post('jarvis.php', { action, ...extra }, opts);
   const dueText = t => { const d = dueInfo(t); return d ? d.text : null; };
@@ -586,10 +587,10 @@
     if (!window.isSecureContext || !navigator.mediaDevices) { setState('error'); line('e', 'Mikrofon yalnız HTTPS və ya localhost-da işləyir.'); return; }
     setState('connecting'); J.ending = false; J.ready = false; endTurn(); emit('start');
     if (!prov.options.length) await loadProviders().catch(() => {});
-    const { status, d } = await api('session', prov.value ? { provider: prov.value } : {});
+    const { status, d, raw } = await api('session', prov.value ? { provider: prov.value } : {});
     if (status !== 200) {
       setState('error', status === 503 ? 'açar qurulmayıb' : 'xəta');
-      line('e', d.error || 'Sessiya alınmadı');
+      line('e', d.error || ('Sessiya alınmadı (server cavabı ' + status + (raw && !raw.trimStart().startsWith('<') ? ': ' + raw.trim().slice(0, 160) : ', cavab boşdur — serverdə PHP xətası ola bilər') + ')'));
       if (d.setup) line('i', d.setup);
       return;
     }
@@ -643,6 +644,12 @@
     const c = J.conn; J.conn = null; if (c) c.close();
   }
   function stop(msg) { if (J.state === 'off') return; J.state = 'off'; cleanup(); setState('off'); if (msg) line('i', msg); emit('stop'); }
+  /* Yalnız mətn rejimi: mikrofon bağlı, Jarvis-in səsi susdurulur (cavab jurnalda və altyazıda görünür) */
+  function applyText() {
+    if (J.outGain) J.outGain.gain.value = J.silent ? 0 : 1;
+    if (J.silent && !J.muted) toggleMute(); else if (!J.silent && J.muted && J.textMuted) toggleMute();
+    J.textMuted = J.silent;
+  }
   function toggleMute() {
     J.muted = !J.muted;
     $j('jv-mic').textContent = J.muted ? '🔇 Mikrofon bağlı' : '🎙 Mikrofon açıq'; $j('jv-mic').classList.toggle('on', J.muted);
@@ -676,6 +683,7 @@
     tools: TOOLS, state: () => J.state, ready: () => !!J.ready, level, since: () => J.t0 || 0, muted: () => J.muted,
     adapters: ADAPTERS, msgpack: MP,
     registerTool(name, fn) { TOOLS[name] = fn; },
+    textMode(on) { J.silent = !!on; applyText(); },
     on(ev, cb) { (EV[ev] = EV[ev] || []).push(cb); },
     watch(id, w) { J.watch.set(+id, { st: 'queued', ...w }); },
     panel: box, button: btn,

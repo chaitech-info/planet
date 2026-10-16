@@ -880,3 +880,27 @@ function json_out($data, int $code = 200): void
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }
+
+/* ---------- Jarvis yaddaşı: istifadəçi haqqında qısa qeydlər (jarvis.php, jarvis_modules/memory.php) ---------- */
+const MEMORY_MAX = 40;
+function memory_table(PDO $pdo): void
+{
+    static $done = false;
+    if (!$done) {
+        $done = true;
+        $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_memory (
+            user VARCHAR(64) NOT NULL,
+            id VARCHAR(16) NOT NULL,
+            note VARCHAR(400) NOT NULL,
+            created_at INT NOT NULL,
+            PRIMARY KEY (user, id)
+        )");
+    }
+}
+function memory_all(PDO $pdo, string $user): array
+{
+    memory_table($pdo);
+    $st = $pdo->prepare('SELECT id, note, created_at FROM jarvis_memory WHERE user = ? ORDER BY created_at DESC LIMIT ' . MEMORY_MAX);
+    $st->execute([$user]);
+    return $st->fetchAll();
+}
