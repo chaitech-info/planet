@@ -13,7 +13,7 @@
   /* ---------- UI ---------- */
   const css = `
 #jv-btn.on { background: linear-gradient(135deg,#0ea5e9,#f59e0b); border-color: transparent; color: #fff; }
-.jv { position: fixed; right: 18px; bottom: 18px; z-index: 70; width: min(370px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 36px)); display: flex; flex-direction: column;
+.jv { position: fixed; left: 18px; bottom: 18px; z-index: 70; width: min(370px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 36px)); display: flex; flex-direction: column;
   background: rgba(8,10,20,.86); -webkit-backdrop-filter: blur(18px) saturate(1.3); backdrop-filter: blur(18px) saturate(1.3); color: #e9eef8; border: 1px solid rgba(125,211,252,.28);
   border-radius: 20px; box-shadow: 0 18px 50px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.2); font-size: 13.5px; overflow: hidden; }
 .jv[hidden] { display: none; }
