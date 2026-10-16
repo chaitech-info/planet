@@ -168,6 +168,7 @@ if ($meetings) {
 
 json_out([
     'now' => $now,
+    'roadmap' => $pdo->query('SELECT id, parent_id, title, owners, done, sort, done_by, done_at FROM roadmap ORDER BY parent_id ASC, sort ASC, id ASC LIMIT 300')->fetchAll(),   // qalan işlər (yapışqan siyahı)
     'worlds' => $pdo->query('SELECT id, name, owner, surface, hue, ring, size, descr, created_at, updated_at FROM worlds ORDER BY id ASC')->fetchAll(),
     'ships' => $pdo->query('SELECT user, name, model, color, accent, deadline, mission, updated_at FROM ships')->fetchAll(),
     'mcp' => $pdo->query('SELECT id, name, project, descr, owner, created_at FROM mcp_sats ORDER BY id ASC LIMIT 200')->fetchAll(),
