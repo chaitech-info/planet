@@ -705,8 +705,19 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body
 .xd-lock { padding: 16px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); margin-top: 14px; text-align: center; }
 .xd-lock-t { font-weight: 600; font-size: 15px; margin-bottom: 4px; } .xd-lock .mnote { margin-bottom: 10px; }
 .xd-empty { color: var(--muted); font-size: 13px; padding: 14px 12px; border: 1px dashed rgba(255,255,255,.14); border-radius: 12px; text-align: center; }
-/* Söhbətlər zolağı: hər çip bir söhbət, üfüqi sürüşür (çox olanda axını aşağı itələməsin) */
+/* Söhbətlər zolağı: hər çip bir söhbət, üfüqi sürüşür (çox olanda axını aşağı itələməsin); panelin yuxarısına yapışır ki, aşağı sürüşəndə də keçid olsun */
 .xd-chatbar:empty { display: none; }
+.xd-chatbar { position: sticky; top: -14px; z-index: 2; margin: 0 -14px; padding: 6px 14px 0; background: rgba(9,10,20,.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,.08); }
+.xd-chatbar .lbl { margin: 6px 0 6px; }
+/* Söhbət siyahısı yazı qutusundan yuxarı açılır (yuxarı sürüşmədən keçid) */
+.xd-pop { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 6px); max-height: min(60vh, 440px); overflow: auto; background: rgba(14,15,28,.97); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; box-shadow: 0 -8px 30px rgba(0,0,0,.45); padding: 6px; z-index: 3; }
+.xd-pop[hidden] { display: none; }
+.xd-pop .xp { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; color: #ececf1; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.xd-pop .xp:hover { background: rgba(255,255,255,.07); } .xd-pop .xp.on { background: rgba(240,138,93,.16); }
+.xd-pop .xp .xt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.xd-pop .xp .xn { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.xd-pop .xp .xs { grid-column: 2 / 4; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xd-pop .xd-empty { margin: 4px; }
 .xd-chats { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 0 12px; padding-bottom: 2px; } .xd-chats::-webkit-scrollbar { display: none; }
 .xd-chats button { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 250px; padding: 5px 11px; }
 .xd-chats .xc-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -818,6 +829,7 @@ html { -webkit-text-size-adjust: 100%; }
   .dock { left: 8px; right: 8px; bottom: 8px; height: 70%; padding: 12px; transition: transform .5s var(--ease-out), opacity .3s ease, height .25s ease; }
   .dtitle { font-size: 22px; } .dtop .dtitle { font-size: 19px; }
   .xd-comp { margin: 12px -12px -12px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); bottom: -12px; }
+  .xd-chatbar { top: -12px; margin: 0 -12px; padding: 4px 12px 0; }
   /* Lövhə */
   .bbar { gap: 8px; } .bbar select { flex: 1; min-width: 0; } .bbar .sp { display: none; } .bbar #b-newtask { width: 100%; }
   .btoken { flex-direction: column; align-items: stretch; } .btoken input { min-width: 0; }
@@ -2966,7 +2978,8 @@ function renderDesktopPlanet(u) {
   const dock = $('xdock'), nearBottom = () => dock.scrollHeight - dock.scrollTop - dock.clientHeight < 120;
   if (!dock._xdBound) {                                                             // aşağı sürüşəndə "yeni mesaj" düyməsi sönür
     dock._xdBound = true;
-    dock.addEventListener('scroll', () => { const b = box.querySelector('.xd-down'); if (!b) return; const nb = nearBottom(); if (nb) box._unseen = false; b.hidden = nb; b.classList.toggle('new', !!box._unseen); }, { passive: true });
+    dock.addEventListener('scroll', () => { const b = box.querySelector('.xd-down'); if (!b) return; const nb = nearBottom(); if (nb) box._unseen = false; b.hidden = nb || !!box._chatsOpen; b.classList.toggle('new', !!box._unseen); }, { passive: true });
+    document.addEventListener('click', e => { if (box._chatsOpen && box._closePop && !box.querySelector('.xd-comp').contains(e.target)) box._closePop(); });   // kənara klik: söhbət siyahısı bağlanır
   }
   const g = mine ? null : myGrantOn(u);
   const grants = (data.grants || []).filter(x => x.owner === u);
@@ -3076,9 +3089,11 @@ function renderDesktopPlanet(u) {
         b.title = c.title + '\n' + c.n + ' mesaj · ' + ago(c.last_at) + (mine ? '' : '\nBu söhbətə qayıt: Claude onu yadında saxlayıb');
         b.onclick = () => xdPick(box, u, c.chat);
         strip.append(b);
+        if (box._chat === c.chat) requestAnimationFrame(() => { strip.scrollLeft = Math.max(0, b.offsetLeft - 24); });   // seçili çip görünsün
       }
       chatbar.append(strip);
     }
+    if (box._drawPop) box._drawPop();                                             // aşağıdakı söhbət siyahısı açıqdırsa onu da təzələ
   }
 
   /* 3b. Söhbət axını: seçilmiş söhbətin mesajları köhnədən yeniyə (serverdən gələn + feed-dəki təzə vəziyyət), ən sonuncusu yazı qutusunun üstündə */
@@ -3117,7 +3132,7 @@ function renderDesktopPlanet(u) {
       if (wasNear) requestAnimationFrame(() => dock.scrollTo({ top: 1e9, behavior: 'smooth' }));
       else box._unseen = true;
     }
-    const dn = comp.querySelector('.xd-down'); if (dn) { dn.hidden = nearBottom() && !box._unseen; dn.classList.toggle('new', !!box._unseen); setText(dn, box._unseen ? '↓ Yeni cavab' : '↓ Sona'); }
+    const dn = comp.querySelector('.xd-down'); if (dn) { dn.hidden = (nearBottom() && !box._unseen) || !!box._chatsOpen; dn.classList.toggle('new', !!box._unseen); setText(dn, box._unseen ? '↓ Yeni cavab' : '↓ Sona'); }
   }
 
   /* 4. Yazı qutusu (yalnız icazəsi olan qonaq üçün): proyekt çipləri, böyüyən sahə, şəkil, yeni söhbət, Enter göndərir */
@@ -3130,7 +3145,7 @@ function renderDesktopPlanet(u) {
     const prevTa = comp.querySelector('textarea'), dkey = 'xddraft:' + u;
     let prevTxt = prevTa ? prevTa.value : '';
     if (!prevTa) { try { prevTxt = localStorage.getItem(dkey) || ''; } catch (e) {} }   // yarımçıq yazı səhifə yenilənəndə də qalır
-    comp.replaceChildren(); comp.hidden = mine || !g; box._fill = null;
+    comp.replaceChildren(); comp.hidden = mine || !g; box._fill = null; box._drawPop = null; box._closePop = null; box._chatsOpen = false;
     if (!mine && g) {
       const key = 'xdprj:' + u; let prj = box._prj || ''; try { prj = prj || localStorage.getItem(key) || ''; } catch (e) {}
       if (!prjs.includes(prj)) prj = prjs[0] || '';
@@ -3162,10 +3177,31 @@ function renderDesktopPlanet(u) {
       fb.title = isNew ? 'Yeni söhbət açıqdır: ilk mesajda Claude sıfırdan başlayacaq. Yenidən basanda son söhbətə qayıdır' : 'Təzə söhbət aç: Claude əvvəlkini yadda saxlamadan sıfırdan başlayır. Köhnə söhbətlər yuxarıdakı siyahıda qalır';
       fb.onclick = () => { const txt = ta.value; xdPick(box, u, isNew ? (chats[0] ? chats[0].chat : 'new') : 'new'); const nt = comp.querySelector('textarea'); if (nt) { nt.value = txt; nt.focus(); } };
       fb.setAttribute('aria-pressed', isNew);
+      /* 💬 Söhbətlər: siyahı yazı qutusunun üstündən açılır, yuxarı sürüşmədən söhbət dəyişmək üçün */
+      const cb = el('button', 'xd-tb xd-cb', '💬 Söhbətlər' + (chats.length ? ' · ' + chats.length : '')); cb.type = 'button'; cb.title = 'Söhbətlər arasında keç';
+      const pop = el('div', 'xd-pop'); pop.hidden = true;
+      const closePop = () => { box._chatsOpen = false; pop.hidden = true; cb.classList.remove('on'); };
+      const drawPop = () => {
+        pop.replaceChildren();
+        const ls = box._chats || [];
+        const nb = el('button', 'xp' + (isNew ? ' on' : '')); nb.type = 'button';
+        nb.append(el('span', 'dot idle'), el('span', 'xt', '🆕 Yeni söhbət'), el('span', 'xn', ''), el('span', 'xs', 'Claude sıfırdan başlayır, köhnə söhbətlər qalır'));
+        nb.onclick = () => { closePop(); if (!isNew) fb.onclick(); }; pop.append(nb);
+        for (const c of ls) {
+          const [lbl, dc] = CMD_ST[c.status] || [c.status, 'offline'];
+          const b = el('button', 'xp' + (box._chat === c.chat ? ' on' : '')); b.type = 'button';
+          b.append(el('span', 'dot ' + dc), el('span', 'xt', '🪐 ' + c.project + ' · ' + (c.title || '…')), el('span', 'xn', ago(c.last_at)), el('span', 'xs', c.n + ' mesaj · ' + lbl));
+          b.onclick = () => { closePop(); const txt = ta.value; xdPick(box, u, c.chat); const nt = comp.querySelector('textarea') || ta; if (nt !== ta) nt.value = txt; nt.focus(); };
+          pop.append(b);
+        }
+        if (!ls.length) pop.append(el('div', 'xd-empty', 'Hələ söhbət yoxdur: ilk mesajı göndər'));
+      };
+      cb.onclick = () => { box._chatsOpen = !box._chatsOpen; if (box._chatsOpen) drawPop(); pop.hidden = !box._chatsOpen; cb.classList.toggle('on', box._chatsOpen); if (box._chatsOpen) down.hidden = true; };
+      box._drawPop = () => { if (box._chatsOpen) drawPop(); }; box._closePop = closePop;
       const bt = el('button', 'gbtn go xd-send', 'Göndər ➤'); bt.type = 'button';
       const hint = el('span', 'xd-hint', COARSE ? '' : 'Enter göndərir · Shift+Enter yeni sətir');
       const cnt = () => { const left = ta.maxLength - ta.value.length; const lim = left < 300; hint.classList.toggle('lim', lim); setText(hint, lim ? left + ' simvol qalıb' : COARSE ? '' : 'Enter göndərir · Shift+Enter yeni sətir'); };
-      tool.append(att, fb, el('span', 'sp'), hint, bt);
+      tool.append(cb, fb, att, el('span', 'sp'), hint, bt);
       const send = async () => {
         err.hidden = true; if (!prj) { err.hidden = false; err.textContent = 'Əvvəl proyekt seç'; return; } if (!ta.value.trim()) { ta.focus(); return; }
         bt.disabled = true; setText(bt, 'Göndərilir…');
@@ -3211,7 +3247,7 @@ function renderDesktopPlanet(u) {
       const warn = el('div', 'xd-warn');
       warn.textContent = !a.online ? '⚠ Kompüter oflayndır: komanda növbəyə düşür, onlayn olanda işləyəcək.' : g.mode !== 'auto' ? '✋ ' + u + ' komandanı təsdiqləyəndən sonra işə düşəcək.' : '';
       warn.hidden = !warn.textContent;
-      comp.append(down, chips, ta, strip, file, err, tool, warn); drawChips(); drawImgs(); upd(); cnt(); requestAnimationFrame(grow);
+      comp.append(down, pop, chips, ta, strip, file, err, tool, warn); drawChips(); drawImgs(); upd(); cnt(); requestAnimationFrame(grow);
     }
   }
   if (fresh) requestAnimationFrame(() => { $('xdock').scrollTop = $('xdock').scrollHeight; });   // söhbət kimi: ən yeni mesaj və yazı qutusu görünsün
