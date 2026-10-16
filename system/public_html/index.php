@@ -632,7 +632,7 @@ body.v-space::before { display: none; }
 @keyframes bwiggle { 0%, 100% { margin-top: 0; } 50% { margin-top: -4px; } }
 .dock.noproj .dtabs, .dock.noproj #pane-send, .dock.noproj #pane-live { display: none; }
 /* Student yalnız öz universini görür: komanda bölmələri gizlidir (server də bağlayır) */
-body.student #tab-panel, body.student #tab-board, body.student #b-plan, body.student #b-msg, body.student #b-rep,
+body.student #tab-panel, body.student #tab-board, body.student #b-plan, body.student #b-msg, body.student #b-rep, body.student #b-code,
 body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body.student #rd-btn { display: none; }
 .dinfo { display: grid; gap: 8px; margin: 10px 0 4px; }
 .dinfo:empty { display: none; }
@@ -697,6 +697,7 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body
 .xd-note { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.45; } .xd-note[hidden] { display: none; }
 .xd-lbl { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .xd-tb { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #ececf1; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; text-transform: none; letter-spacing: 0; }
+a.xd-tb { text-decoration: none; }
 .xd-tb.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .xd-tb.danger { color: #f87171; border-color: rgba(248,113,113,.35); }
 .xd-grant { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgba(255,255,255,.1); border-radius: 12px; background: rgba(255,255,255,.05); margin-bottom: 6px; font-size: 13.5px; flex-wrap: wrap; } .xd-grant .sp { flex: 1; }
@@ -872,7 +873,7 @@ html { -webkit-text-size-adjust: 100%; }
   <header>
     <div class="brand"><div class="logo">C</div><h1>Komanda Claude</h1></div>
     <nav class="tabs"><a id="tab-panel" href="#">Panel</a><a id="tab-space" href="#kainat">Kainat</a><a id="tab-board" href="#lovhe">Lövhə <span class="tbadge" id="tbadge" hidden></span></a></nav>
-    <div class="meta"><span class="live" id="live"><span class="dot"></span><span id="conn">qoşulur…</span></span><span class="who" id="who"></span><button class="gbtn" id="b-adm" hidden>İstifadəçilər</button><button class="gbtn" id="b-prj" hidden>Proyektlər</button><button class="gbtn" id="b-ntf" hidden>Bildirişlər</button><button class="gbtn" id="b-plan" title="Proyektlərin planları, scope-ları və tapşırıqları (kainatdakı uçan gəmi)">🛸 Plan</button><button class="gbtn" id="b-msg" title="Komanda yoldaşına və ya hamıya mesaj (raketlə çatır)">💬 Mesaj <span class="tbadge" id="mbadge" hidden></span></button><button class="gbtn" id="b-rep">📊 Hesabat</button><a class="gbtn" href="kit.php?doc=1" target="_blank" rel="noopener" title="Addım-addım başlanğıc təlimatı">📖 Təlimat</a><a class="gbtn" href="kit.php" title="Quraşdırma paketi (hook, agent, təlimat)">📦 Paket</a><button class="gbtn" id="b-acc">Hesab</button><a href="?logout=1">Çıxış</a></div>
+    <div class="meta"><span class="live" id="live"><span class="dot"></span><span id="conn">qoşulur…</span></span><span class="who" id="who"></span><button class="gbtn" id="b-adm" hidden>İstifadəçilər</button><button class="gbtn" id="b-prj" hidden>Proyektlər</button><button class="gbtn" id="b-ntf" hidden>Bildirişlər</button><button class="gbtn" id="b-plan" title="Proyektlərin planları, scope-ları və tapşırıqları (kainatdakı uçan gəmi)">🛸 Plan</button><button class="gbtn" id="b-msg" title="Komanda yoldaşına və ya hamıya mesaj (raketlə çatır)">💬 Mesaj <span class="tbadge" id="mbadge" hidden></span></button><button class="gbtn" id="b-rep">📊 Hesabat</button><a class="gbtn" id="b-code" href="code.php" title="Claude Code (tam səhifə): komanda yoldaşlarının kompüterlərindəki Claude Code ilə söhbətlər və sessiya tarixçəsi">⌨ Claude Code</a><a class="gbtn" href="kit.php?doc=1" target="_blank" rel="noopener" title="Addım-addım başlanğıc təlimatı">📖 Təlimat</a><a class="gbtn" href="kit.php" title="Quraşdırma paketi (hook, agent, təlimat)">📦 Paket</a><button class="gbtn" id="b-acc">Hesab</button><a href="?logout=1">Çıxış</a></div>
   </header>
 
   <div class="alerts" id="alerts" hidden></div>
@@ -2998,7 +2999,9 @@ function renderDesktopPlanet(u) {
     row.append(el('span', 'dot ' + (a.online ? (a.run.length ? 'working' : 'idle') : 'offline')),
       el('b', null, a.online ? (a.run.length ? 'Kompüter onlayn · Claude işləyir' : 'Kompüter onlayn') : a.ag ? 'Kompüter oflayn · son ' + ago(a.ag.last_seen) : 'Agent hələ qoşulmayıb'));
     const inf = el('button', 'xd-i', 'i'); inf.type = 'button'; inf.title = 'Bu necə işləyir?'; inf.setAttribute('aria-label', 'Məlumat');
-    row.append(el('span', 'sp'), inf); status.append(row);
+    const full = el('a', 'xd-tb', '⛶ Tam səhifə'); full.title = 'Claude Code kimi tam səhifədə aç: solda söhbət və sessiya tarixçəsi';   // code.php: açıq söhbətlə birlikdə
+    full.href = 'code.php#' + encodeURIComponent(u); full.onclick = () => { full.href = 'code.php#' + encodeURIComponent(u) + (typeof box._chat === 'number' && box._chat ? '/' + box._chat : box._chat === 'new' ? '/new' : ''); };
+    row.append(el('span', 'sp'), full, inf); status.append(row);
     const pills = el('div', 'xd-pills');
     if (a.online && !a.login) pills.append(el('span', 'xd-pill warn', '⚠ Claude girişi yoxdur: komandalar növbədə gözləyəcək'));
     if (mine) pills.append(el('span', 'xd-pill ' + (grants.length ? 'ok' : 'no'), grants.length ? '🔐 İcazə: ' + grants.map(x => x.grantee === '*' ? 'hamı' : x.grantee).join(', ') : '🔒 Heç kimə icazə verməmisən'));
