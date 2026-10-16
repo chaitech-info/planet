@@ -285,7 +285,7 @@ if ($act === 'overview') {                                        // bütün kom
             'name' => $u, 'me' => $u === $name, 'agent' => (bool)$a, 'online' => $a && $now - (int)$a['last_seen'] < 30,
             'last_seen' => $a ? (int)$a['last_seen'] : 0, 'login' => !$a || (int)$a['claude_ok'] === 1,
             'running' => $load[$u]['running'] ?? 0, 'queued' => $load[$u]['queued'] ?? 0, 'pending' => $load[$u]['pending'] ?? 0,
-            'grant' => $mine ? $mine['mode'] : null, 'projects' => $projects[$u] ?? [],
+            'grant' => $u === $name ? 'auto' : ($mine ? $mine['mode'] : null),   // öz kompüterinə həmişə avtomatik 'projects' => $projects[$u] ?? [],
             'granted' => $u === $name ? array_values(array_map(fn($x) => ['grantee' => $x['grantee'], 'mode' => $x['mode']], array_filter($grants, fn($x) => $x['owner'] === $name))) : [],
         ];
     }
