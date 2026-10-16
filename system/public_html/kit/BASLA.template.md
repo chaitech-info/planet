@@ -62,7 +62,7 @@ Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ 
 - Agent yalnız hook quraşdırdığın proyektlərə prompt qəbul edir.
 - Claude girişi yoxdursa, panel "Claude girişi yoxdur" xəbərdarlığı göstərir və promptlar növbədə gözləyir.
 
-**Agentın səlahiyyəti qəsdən məhduddur:** fayl oxuya və redaktə edə bilər. `git` üçün standart səviyyə **safe**-dir: oxuma əmrləri (`status`, `log`, `diff`, `show`, `branch`) + `fetch`, `pull` (həmişə yalnız sürətli irəli, birləşmə commit-i yaranmır), `add`, `commit`, `switch`, `stash`. `push`, `merge`, `checkout` üçün səviyyəni **full** et: `~/.claude-team-agent.env` faylına `CLAUDE_TEAM_GIT=full` yaz (yalnız oxuma üçün `read`). Zorla push (`--force`), `reset --hard`, `clean`, fayl silmə və digər terminal əmrləri hər halda **bloklanıb**. Bu seçimi yalnız kompüterin sahibi edir.
+**Agentın səlahiyyəti qəsdən məhduddur:** fayl oxuya və redaktə edə bilər. `git` üçün standart səviyyə **safe**-dir: oxuma əmrləri (`status`, `log`, `diff`, `show`, `branch`) + `fetch`, `pull` (həmişə yalnız sürətli irəli, birləşmə commit-i yaranmır), `add`, `commit`, `switch`, `stash`. `push`, `merge`, `checkout` üçün səviyyəni **full** et: `~/.claude-team-agent.env` faylına `CLAUDE_TEAM_GIT=full` yaz (yalnız oxuma üçün `read`). Zorla push (`--force`), `reset --hard`, `clean` hər halda **bloklanıb**; fayl silmə və digər terminal əmrləri standart (`basic`) profildə bloklanıb (aşağıda "Profil"). Bu seçimi yalnız kompüterin sahibi edir.
 
 **Canlı gedişat:** agent işləyərkən saytda Claude-un hazırkı addımı (məs. `Edit · app/scoring.py`), son toxunduğu fayllar və təxmini faiz görünür. Köhnə Claude CLI bunu bacarmırsa agent özü köhnə üsula keçir; söndürmək: `CLAUDE_TEAM_STREAM=0`.
 
@@ -72,6 +72,29 @@ Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ 
 - Dəyişiklik yoxdursa worktree avtomatik silinir.
 - Proyekt git deyilsə və ya git səviyyəsi `read`-dirsə, ikinci tapşırıq birincinin bitməsini gözləyir.
 - Worktree-də git-ə düşməyən fayllar (`.env`, `node_modules`) olmur və hook işləmir; belə işlər əvvəlki söhbəti davam etdirmir.
+
+**Profil (istəyə görə, yalnız kompüterin sahibi seçir):** standartda agent yuxarıdakı kimi məhduddur (`basic`). Claude-un test işlətməsini, build/deploy etməsini istəsən `~/.claude-team-agent.env` faylına bir sətir yaz və agenti yenidən başlat:
+
+| `CLAUDE_TEAM_PROFILE=` | Nə əlavə olunur | Git səviyyəsi |
+|---|---|---|
+| `basic` (standart) | Heç nə: fayl redaktəsi + git | `safe` |
+| `dev` | Terminal: `npm`/`pnpm`/`yarn`/`bun`, `node`, `npx`, `python`/`pytest`/`pip`, `cargo`, `go`, `make`, `php`, `composer`, `ls`/`cat`/`grep`/`find`/`head`/`tail`/`wc`/`jq`, `curl` (yalnız GET) + veb axtarış. İşdən sonra testləri/lint-i özü yoxlayır | ən azı `safe` |
+| `ops` | `dev` + `gh`, `vercel`, repodakı deploy skriptləri, bütün MCP serverləri | `full` |
+| `full` | Bütün terminal əmrləri (aşağıdakı qadağalardan başqa) | `full` |
+
+- `CLAUDE_TEAM_GIT` ayrıca yazılıbsa, profil onu dəyişmir (məs. `ops` + `CLAUDE_TEAM_GIT=safe`).
+- **Həmişə qadağandır** (`dev`/`ops`/`full`): zorla push, `reset --hard`, `clean`, `branch -D`, proyektdən kənar `rm -rf`, `sudo`, `.env*`, `*.pem`, SSH açarları və Claude giriş fayllarını oxumaq, `curl … | sh`.
+- **Yoxlama** (`dev`+): Claude faylları dəyişibsə və proyektdə test/lint varsa (`package.json`, `pyproject.toml`, `Makefile`…), eyni söhbətdə onları işlədir və nəticənin sonuna `— Yoxlama: ✅ …` / `❌ …` yazır. Söndürmək: `CLAUDE_TEAM_SELFCHECK=0`.
+- **Geri qaytarma:** hər redaktə edən tapşırıqdan əvvəl agent proyektin vəziyyətini (git HEAD + commit olunmamış dəyişikliklər) `~/.claude-team-snapshots.json`-a qeyd edir; Jarvis-in "son işi geri al" əmri onu bərpa edir. Proyekt git deyilsə snapşot olmur.
+
+**Sürət:**
+- Agent saytdan "gözləmə" rejimində soruşur: prompt göndərən kimi (yarım saniyədən tez) işə düşür.
+- **İsti sessiyalar:** agent son istifadə olunan proyektlər üçün Claude-u açıq saxlayır (ən çox 3, 10 dəqiqə boş qalanda bağlanır), növbəti prompt Claude-un yenidən açılmasını gözləmir. `dev`/`ops`/`full`-da standart açıqdır. `basic`-də açmaq üçün `CLAUDE_TEAM_WARM=1`, söndürmək üçün `CLAUDE_TEAM_WARM=0` yaz. Hər hansı xətada agent özü köhnə üsula keçir.
+
+**Başqa iş növləri** (Jarvis göndərir):
+- **Düşüncə (`think`):** Claude yalnız oxuyur və düşünür (opus, plan rejimi). Heç nəyi dəyişmir, söhbət saxlanmır, cavab nəticədə görünür.
+- **Əməliyyat (`ops`):** Claude promptu deyil. Agentin yanındakı `agent/claude_ops.py` kompüterdə yoxlama aparır (Claude versiyası, MCP, istifadə, proyektin git/CI vəziyyəti, PR-lar…). Riskli əməliyyatlar (PR birləşdirmə, MCP əlavə etmə və s.) yalnız profil icazə verəndə işləyir. `claude_ops.py` yoxdursa paketi yenidən endir.
+- Tapşırıqda model (`opus`/`sonnet`/`haiku`) və ya **plan rejimi** seçilə bilər; agent onu yalnız həmin tapşırıq üçün tətbiq edir.
 
 ## Tapşırıq lövhəsi
 

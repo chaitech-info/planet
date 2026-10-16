@@ -69,7 +69,8 @@ if ($act === 'dispatch') {
     foreach (array_values($tasks) as $i => $t) {
         $project = trim((string)($t['project'] ?? ''));
         $title = mb_substr(trim((string)($t['title'] ?? '')), 0, 120);
-        $r = is_array($t) ? queue_agent_command($pdo, $user, $project, (string)($t['prompt'] ?? ''), ['fresh' => 1]) : ['error' => 'yanlış format'];
+        $r = is_array($t) ? queue_agent_command($pdo, $user, $project, (string)($t['prompt'] ?? ''), ['fresh' => 1,   // model/mode/said_at: Jarvis defaults (jv-cc-defaults) və gecikmə ölçüsü
+            'model' => (string)($t['model'] ?? ''), 'mode' => (string)($t['mode'] ?? ''), 'said_at' => (int)($t['said_at'] ?? $in['said_at'] ?? 0)]) : ['error' => 'yanlış format'];
         $okN += !empty($r['ok']);
         $out[] = ['index' => $i, 'project' => $project, 'title' => $title] + (!empty($r['ok']) ? ['ok' => true, 'id' => $r['id']] : ['ok' => false, 'error' => $r['error']]);
     }

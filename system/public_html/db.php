@@ -8,7 +8,7 @@ date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 // Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
 // yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 6;
 
 function db(): PDO
 {
@@ -24,7 +24,18 @@ function db(): PDO
     ]);
     $sqlite = str_starts_with($c['dsn'], 'sqlite');
     if ($sqlite) {
-        $pdo->exec('PRAGMA busy_timeout = 3000');          // paralel sorğular (feed + agent + Jarvis) "database is locked" verməsin
+        $pdo->exec('PRAGMA busy_timeout = 3000');
+        // WAL yalnız config db.wal=true ilə: köhnə kodda açıq qalan oxuma kursorları WAL-da "database is locked" (köhnəlmiş snapshot) verir.
+        // Söndürülübsə və fayl WAL-dadırsa, klassik rejimə qaytar (journal_mode faylda saxlanır).
+        try {
+            $jm = strtolower((string)$pdo->query('PRAGMA journal_mode')->fetchColumn());
+            if (!empty($c['wal']) && $jm !== 'wal') {
+                $pdo->exec('PRAGMA journal_mode = WAL');
+            } elseif (empty($c['wal']) && $jm === 'wal') {
+                $pdo->exec('PRAGMA journal_mode = DELETE');
+            }
+        } catch (Throwable $e) {
+        }
     }
     try {
         $v = $pdo->query("SELECT v FROM settings WHERE k = 'schema'")->fetchColumn();
@@ -405,6 +416,73 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
             // indeks artıq var (MySQL-də IF NOT EXISTS yoxdur)
         }
     }
+    // ===== Jarvis Ultra (v5): real-time hadisə şini, gecikmə ölçüləri, icazə relesi, audit, cədvəllər =====
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rt_events (
+        id $id,
+        type VARCHAR(40) NOT NULL,
+        user VARCHAR(64) NOT NULL DEFAULT '',
+        project VARCHAR(128) NOT NULL DEFAULT '',
+        ref INT NOT NULL DEFAULT 0,
+        data TEXT NOT NULL,
+        created_at INT NOT NULL
+    )");
+    try { $pdo->exec('CREATE INDEX rt_events_user_id ON rt_events (user, id)'); } catch (Throwable $e) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_latency (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        kind VARCHAR(40) NOT NULL,
+        ref INT NOT NULL DEFAULT 0,
+        said_at BIGINT NOT NULL DEFAULT 0,
+        start_at BIGINT NOT NULL DEFAULT 0,
+        first_at BIGINT NOT NULL DEFAULT 0,
+        done_at BIGINT NOT NULL DEFAULT 0,
+        meta TEXT NOT NULL,
+        created_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS approvals (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        session_id VARCHAR(128) NOT NULL DEFAULT '',
+        project VARCHAR(128) NOT NULL DEFAULT '',
+        tool VARCHAR(128) NOT NULL DEFAULT '',
+        input TEXT NOT NULL,
+        status VARCHAR(16) NOT NULL,
+        decided_by VARCHAR(64) NOT NULL DEFAULT '',
+        reason TEXT NOT NULL,
+        created_at INT NOT NULL,
+        decided_at INT NOT NULL DEFAULT 0
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_audit (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        tool VARCHAR(64) NOT NULL,
+        tier VARCHAR(8) NOT NULL DEFAULT '',
+        args TEXT NOT NULL,
+        result TEXT NOT NULL,
+        ok INT NOT NULL DEFAULT 1,
+        created_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS schedules (
+        id $id,
+        owner VARCHAR(64) NOT NULL,
+        name VARCHAR(120) NOT NULL,
+        rule VARCHAR(60) NOT NULL,
+        protocol VARCHAR(100) NOT NULL DEFAULT '',
+        project VARCHAR(128) NOT NULL DEFAULT '',
+        prompt TEXT NOT NULL,
+        enabled INT NOT NULL DEFAULT 1,
+        last_run INT NOT NULL DEFAULT 0,
+        created_at INT NOT NULL
+    )");
+    foreach ([
+        "ALTER TABLE commands ADD COLUMN model VARCHAR(40) NOT NULL DEFAULT ''",      // '' = agentin default-u; opus | sonnet | haiku
+        "ALTER TABLE commands ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT ''",       // '' | plan (yalnız plan, kod dəyişmə)
+        "ALTER TABLE commands ADD COLUMN said_at BIGINT NOT NULL DEFAULT 0",          // ms: istifadəçi əmri dediyi an (gecikmə ölçüsü)
+        "ALTER TABLE agents ADD COLUMN profile VARCHAR(16) NOT NULL DEFAULT ''",      // agentin icazə profili: basic | dev | ops | full
+        "ALTER TABLE agents ADD COLUMN caps TEXT NOT NULL DEFAULT ''",                // JSON: claude versiyası, MCP serverləri, warm sessiyalar və s.
+    ] as $q) {
+        try { $pdo->exec($q); } catch (Throwable $e) { /* sütun artıq var */ }
+    }
     // İlk işə düşəndə config.php-dəki istifadəçiləri köçür (birinci admin olur, parolu köhnə ümumi paroldur)
     if ((int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() === 0 && !empty($config['users'])) {
         $first = true;
@@ -635,6 +713,7 @@ function start_review(PDO $pdo, array $t, string $implResult, int $now, bool $se
         $reviewer = $t['assignee'];
     }
     $cid = queue_command($pdo, $reviewer, $t['project'], review_prompt($t, $implResult, $t['assignee'], $remote), 'review', $now);
+    emit_event($pdo, 'command.queued', $reviewer, $t['project'], $cid, ['id' => $cid, 'project' => $t['project'], 'prompt' => 'Yoxlama: ' . mb_substr($t['title'], 0, 200), 'kind' => 'review']);
     $pdo->prepare("UPDATE tasks SET status = 'review', command_id = ?, updated_at = ?, verdict = '' WHERE id = ?")->execute([$cid, $now, $t['id']]);
     return $reviewer;
 }
@@ -663,6 +742,7 @@ function advance_task(PDO $pdo, int $cid, string $user, string $status, string $
             notify_later("✅ Yoxlamadan keçdi, bitdi: {$t['title']}\n$who · yoxladı: $user");
         } elseif ($v === 'fail' && (int)$t['rounds'] < REVIEW_ROUNDS) {
             $fid = queue_command($pdo, $t['assignee'], $t['project'], fix_prompt($t, $result, $user), 'task', $now);
+            emit_event($pdo, 'command.queued', $t['assignee'], $t['project'], $fid, ['id' => $fid, 'project' => $t['project'], 'prompt' => 'Düzəliş: ' . mb_substr($t['title'], 0, 200), 'kind' => 'task']);
             $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, rounds = rounds + 1, updated_at = ?, verdict = 'fail' WHERE id = ?")->execute([$fid, $now, $t['id']]);
             notify_later("🔁 Yoxlama keçmədi, düzəlişə göndərildi (" . ((int)$t['rounds'] + 1) . "/" . REVIEW_ROUNDS . "): {$t['title']}\n$who · yoxladı: $user");
         } elseif ($v === 'unsynced' && $user !== $t['assignee'] && start_review($pdo, $t, $result, $now, true) !== null) {
@@ -795,6 +875,25 @@ function notify(string $text): bool
 }
 
 /** Cavab istifadəçiyə qayıtdıqdan SONRA göndərir (gecikdirməsin). */
+/** Real-time hadisə şininə yaz (events.php SSE ilə brauzerə, agent.php long-poll ilə agentə dərhal çatır).
+ *  type: command.queued|command.started|command.progress|command.done|approval.new|approval.decided|ops.result|session.update|...
+ *  user: hadisə kimə aiddir ('' = hamıya). data: kiçik massiv (JSON, ≤ 8 KB). Səhv olsa susur: əsas iş pozulmamalıdır. */
+function emit_event(PDO $pdo, string $type, string $user = '', string $project = '', int $ref = 0, array $data = []): void
+{
+    try {
+        $j = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?: '{}';
+        if (strlen($j) > 8192) {
+            $j = json_encode(['truncated' => true] + array_intersect_key($data, array_flip(['id', 'status', 'step', 'pct', 'title'])), JSON_UNESCAPED_UNICODE) ?: '{}';
+        }
+        $pdo->prepare('INSERT INTO rt_events (type, user, project, ref, data, created_at) VALUES (?,?,?,?,?,?)')->execute([$type, $user, $project, $ref, $j, time()]);
+        if (random_int(1, 200) === 1) {                     // arabir köhnə hadisələri təmizlə (1 gündən köhnə)
+            $pdo->prepare('DELETE FROM rt_events WHERE created_at < ?')->execute([time() - 86400]);
+        }
+    } catch (Throwable $e) {
+        error_log('emit_event: ' . $e->getMessage());
+    }
+}
+
 function notify_later(string $text): void
 {
     register_shutdown_function(function () use ($text) {

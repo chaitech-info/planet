@@ -22,11 +22,11 @@ try {
 $list = $lines ? implode("\n", $lines) : '(empty)';
 return [
     'tools' => [
-        ['name' => 'get_roadmap', 'description' => 'Read the team\'s "Qalan işlər" (remaining work) list again, with sub-items, owners and done state. Use it if the list may have changed during the conversation.',
+        ['name' => 'get_roadmap', 'tier' => 'g', 'group' => 'core', 'description' => 'Read the team\'s "Qalan işlər" (remaining work) list again, with sub-items, owners and done state. Use it if the list may have changed during the conversation.',
             'parameters' => ['type' => 'object', 'properties' => new stdClass()]],
-        ['name' => 'add_roadmap_item', 'description' => 'Add an item to the "Qalan işlər" list (or a sub-item under a top-level item). Ask first, then call with confirmed=true.',
+        ['name' => 'add_roadmap_item', 'tier' => 'y', 'group' => 'core', 'description' => 'Add an item to the "Qalan işlər" list (or a sub-item under a top-level item). Ask first, then call with confirmed=true.',
             'parameters' => ['type' => 'object', 'properties' => ['title' => $S('item text, max 300 chars'), 'owners' => $S('comma-separated team member names, optional'), 'parent_id' => ['type' => 'integer', 'description' => 'id of a top-level item to add under; omit for a new top-level item'], 'confirmed' => $confirm], 'required' => ['title', 'confirmed']]],
-        ['name' => 'set_roadmap_done', 'description' => 'Mark a "Qalan işlər" item done or not done. Ask first, then call with confirmed=true.',
+        ['name' => 'set_roadmap_done', 'tier' => 'y', 'group' => 'core', 'description' => 'Mark a "Qalan işlər" item done or not done. Ask first, then call with confirmed=true.',
             'parameters' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer', 'description' => 'item id (the #number in the list)'], 'done' => ['type' => 'boolean', 'description' => 'true = done, false = reopen'], 'confirmed' => $confirm], 'required' => ['id', 'done', 'confirmed']]],
     ],
     'prompt' => <<<TXT

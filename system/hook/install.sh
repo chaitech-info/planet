@@ -23,18 +23,27 @@ printf 'URL=%q\nTOKEN=%q\n' "$URL" "$TOKEN" > "$CONF"
 chmod 600 "$CONF"
 
 [ -f "$SETTINGS" ] && cp "$SETTINGS" "$SETTINGS.bak-teamdash"
-python3 - "$SETTINGS" "$CLAUDE_DIR/hooks/claude-team-hook.sh" <<'PY'
+# PermissionRequest: icazə sorğusu panelə/Jarvis-ə gedir, hook qərarı ≤ 50 san gözləyir (timeout 55).
+# CLAUDE_TEAM_APPROVALS=0 ilə quraşdırsan bu hadisə yazılmır (hook da həmin dəyişənlə dərhal çıxır).
+python3 - "$SETTINGS" "$CLAUDE_DIR/hooks/claude-team-hook.sh" "${CLAUDE_TEAM_APPROVALS:-1}" <<'PY'
 import json, os, sys
-path, cmd = sys.argv[1], sys.argv[2]
+path, cmd, appr = sys.argv[1], sys.argv[2], sys.argv[3] not in ("0", "off", "no", "false")
 cfg = json.load(open(path)) if os.path.exists(path) else {}
 hooks = cfg.setdefault("hooks", {})
-for ev in ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]:
+evs = ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"] + (["PermissionRequest"] if appr else [])
+for ev in evs:
     groups = hooks.setdefault(ev, [])
-    if any("claude-team-hook.sh" in h.get("command", "") for g in groups for h in g.get("hooks", [])):
+    mine = [h for g in groups for h in g.get("hooks", []) if "claude-team-hook.sh" in h.get("command", "")]
+    if mine:
+        if ev == "PermissionRequest":
+            for h in mine:
+                h["timeout"] = 55
         continue
     entry = {"hooks": [{"type": "command", "command": cmd}]}
     if ev == "PostToolUse":
         entry["matcher"] = "*"
+    if ev == "PermissionRequest":
+        entry["hooks"][0]["timeout"] = 55
     groups.append(entry)
 os.makedirs(os.path.dirname(path), exist_ok=True)
 json.dump(cfg, open(path, "w"), indent=2, ensure_ascii=False)

@@ -648,7 +648,7 @@
   function tick() {
     if (typeof data === 'undefined' || !data || typeof ME === 'undefined' || !ME) return;
     const t = typeof now === 'function' ? now() : Date.now() / 1000;
-    const mine = (data.commands || []).filter(c => c.user === ME.name && !gone.has(+c.id) && (LIVE.has(c.status) || (+c.finished_at && t - c.finished_at < 60))).slice(0, 6);
+    const mine = (data.commands || []).filter(c => c.user === ME.name && c.kind !== 'ops' && !gone.has(+c.id) && (LIVE.has(c.status) || (+c.finished_at && t - c.finished_at < 60))).slice(0, 6);
     const seen = new Set();
     for (const c of mine) {
       const id = +c.id; seen.add(id);

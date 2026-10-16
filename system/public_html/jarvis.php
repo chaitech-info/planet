@@ -104,29 +104,67 @@ if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude 
     if (agent_queue_len($pdo, $me['name']) >= AGENT_QUEUE_MAX) {
         json_out(['error' => 'növbədə artıq ' . AGENT_QUEUE_MAX . ' tapşırıq var, gözlə'], 429);
     }
-    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?)")
-        ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0]);
+    // A: said_at (ms, istifadəçinin dediyi an; gecikmə ölçüsü), model, mode, kind (prompt | think)
+    $saidAt = is_numeric($in['said_at'] ?? null) ? (int)$in['said_at'] : 0;
+    $saidAt = abs($saidAt - (int)floor(microtime(true) * 1000)) < 86400000 ? $saidAt : 0;
+    $model = in_array($in['model'] ?? '', ['', 'opus', 'sonnet', 'haiku'], true) ? (string)($in['model'] ?? '') : '';
+    $cmode = in_array($in['mode'] ?? '', ['', 'plan'], true) ? (string)($in['mode'] ?? '') : '';
+    $kind = in_array($in['kind'] ?? '', ['prompt', 'think'], true) ? (string)$in['kind'] : 'prompt';
+    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, kind, model, mode, said_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0, $kind, $model, $cmode, $saidAt]);
     $id = (int)$pdo->lastInsertId();
+    emit_event($pdo, 'command.queued', $me['name'], $project, $id, ['id' => $id, 'project' => $project, 'prompt' => mb_substr($prompt, 0, 300), 'kind' => $kind]);
     json_out(['ok' => true, 'id' => $id, 'agent_online' => $now - (int)$a['last_seen'] < 30, 'claude_login' => (bool)$a['claude_ok'], 'allowed' => $allowed]);
 }
 
 /* ---------- Yaddaş: Jarvis-in istifadəçi haqqında saxladığı qısa qeydlər (sessiyalar arası) ---------- */
+// Yaddaş v2: növ/proyekt note-un əvvəlində prefiks kimi saxlanır (sxem dəyişmir): "[summary] …", "[project:neo] …", qalanı istifadəçi faktı.
+const MEMORY_SUMMARY_MAX = 20;           // sessiya xülasələri (14 gündən köhnələri silinir)
+/** İstifadəçinin bütün qeydləri (yeni → köhnə), növünə görə: ['facts' => [], 'project' => [ad => []], 'summary' => []] */
+function memory_split(PDO $pdo, string $user): array
+{
+    memory_table($pdo);
+    $st = $pdo->prepare('SELECT id, note, created_at FROM jarvis_memory WHERE user = ? ORDER BY created_at DESC LIMIT 200');
+    $st->execute([$user]);
+    $out = ['facts' => [], 'project' => [], 'summary' => [], 'rows' => []];
+    foreach ($st->fetchAll() as $r) {
+        $out['rows'][] = $r;
+        if (str_starts_with($r['note'], '[summary] ')) {
+            $out['summary'][] = $r + ['text' => substr($r['note'], 10)];
+        } elseif (preg_match('/^\[project:([^\]]{1,64})\] (.*)$/su', $r['note'], $m)) {
+            $out['project'][$m[1]][] = $r + ['text' => $m[2]];
+        } else {
+            $out['facts'][] = $r + ['text' => $r['note']];
+        }
+    }
+    return $out;
+}
 if ($act === 'memory_add') {
     $note = trim(preg_replace('/\s+/u', ' ', (string)($in['note'] ?? '')));
     if ($note === '') {
         json_out(['error' => 'qeyd boşdur'], 400);
     }
-    $note = mb_substr($note, 0, 300);
+    $kind = (string)($in['kind'] ?? '') === 'summary' ? 'summary' : 'fact';
+    $proj = mb_substr(trim(str_replace([']', '['], '', (string)($in['project'] ?? ''))), 0, 60);
+    $note = $kind === 'summary' ? '[summary] ' . date('Y-m-d H:i', $now) . ' · ' . mb_substr($note, 0, 360)
+        : ($proj !== '' ? "[project:$proj] " . mb_substr($note, 0, 300) : mb_substr($note, 0, 300));
     memory_table($pdo);
     $id = substr(md5(mb_strtolower($note)), 0, 12);
     $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $id]);   // eyni qeyd təkrarlanmasın, təzələnsin
     $pdo->prepare('INSERT INTO jarvis_memory (user, id, note, created_at) VALUES (?,?,?,?)')->execute([$me['name'], $id, $note, $now]);
-    $ids = $pdo->prepare('SELECT id FROM jarvis_memory WHERE user = ? ORDER BY created_at DESC');   // limitdən artıq köhnələri sil
-    $ids->execute([$me['name']]);
-    foreach (array_slice($ids->fetchAll(PDO::FETCH_COLUMN), MEMORY_MAX) as $oid) {
-        $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $oid]);
+    $m = memory_split($pdo, $me['name']);         // limitdən artıq köhnələri sil: faktlar MEMORY_MAX, xülasələr ayrıca
+    $facts = array_merge($m['facts'], ...array_values($m['project'] ?: [[]]));
+    usort($facts, fn($a, $b) => $b['created_at'] <=> $a['created_at']);
+    $drop = array_slice($facts, MEMORY_MAX);
+    foreach ($m['summary'] as $i => $s) {
+        if ($i >= MEMORY_SUMMARY_MAX || $s['created_at'] < $now - 14 * 86400) {
+            $drop[] = $s;
+        }
     }
-    json_out(['ok' => true, 'count' => count(memory_all($pdo, $me['name']))]);
+    foreach ($drop as $r) {
+        $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $r['id']]);
+    }
+    json_out(['ok' => true, 'kind' => $kind, 'count' => count($facts) - count(array_filter($drop, fn($r) => !str_starts_with($r['note'], '[summary] ')))]);
 }
 if ($act === 'memory_forget') {          // yalnız istifadəçinin öz qeydləri; brauzer əvvəl təsdiq alır
     $q = mb_strtolower(trim((string)($in['query'] ?? '')));
@@ -134,13 +172,53 @@ if ($act === 'memory_forget') {          // yalnız istifadəçinin öz qeydlər
         json_out(['error' => 'nəyi unutmaq lazım olduğunu yaz'], 400);
     }
     $del = 0;
-    foreach (memory_all($pdo, $me['name']) as $n) {
+    foreach (memory_split($pdo, $me['name'])['rows'] as $n) {
         if (str_contains(mb_strtolower($n['note']), $q)) {
             $pdo->prepare('DELETE FROM jarvis_memory WHERE user = ? AND id = ?')->execute([$me['name'], $n['id']]);
             $del++;
         }
     }
     json_out(['ok' => true, 'deleted' => $del]);
+}
+
+/* ---------- think: dərin düşünmə (kind=think, Opus, plan rejimi: heç nə dəyişmir). Yoxlamalar agent_send ilə eynidir ---------- */
+if ($act === 'think') {
+    $q = trim((string)($in['question'] ?? ''));
+    $ctx = mb_substr(trim((string)($in['context'] ?? '')), 0, 1200);
+    if ($q === '' || mb_strlen($q) > 2000) {
+        json_out(['error' => 'sual 1-2000 simvol olmalıdır'], 400);
+    }
+    $ag = $pdo->prepare('SELECT last_seen, claude_ok, projects FROM agents WHERE user = ?');
+    $ag->execute([$me['name']]);
+    $a = $ag->fetch();
+    if (!$a) {
+        json_out(['error' => 'Bu istifadəçinin Claude Code agenti hələ heç qoşulmayıb. Kompüterdə agenti işə sal (📦 Paket → BASLA.md).'], 409);
+    }
+    $allowed = array_values(array_filter(explode("\n", (string)$a['projects']), 'strlen'));
+    $project = trim((string)($in['project'] ?? ''));
+    if ($project === '' && $allowed) {           // proyekt deyilməyibsə: agentin ilk qovluğu (yalnız oxu konteksti)
+        $project = $allowed[0];
+    }
+    if ($project === '' || mb_strlen($project) > 128) {
+        json_out(['error' => 'proyekt adı lazımdır'], 400);
+    }
+    if ($allowed && !array_intersect(project_names($pdo, $project), $allowed)) {
+        json_out(['error' => "Claude Code-un bu kompüterdə \"$project\" üçün qovluğu yoxdur. İcazəli proyektlər: " . implode(', ', $allowed) . '.', 'allowed' => $allowed], 409);
+    }
+    if (agent_queue_len($pdo, $me['name']) >= AGENT_QUEUE_MAX) {
+        json_out(['error' => 'növbədə artıq ' . AGENT_QUEUE_MAX . ' tapşırıq var, gözlə'], 429);
+    }
+    // köhnə agent kind/mode-u tanımasa da prompt özü yalnız-oxu tələb edir
+    $prompt = "READ-ONLY THINKING TASK. Do not modify, create or delete any files, do not run commands that change anything, do not commit. "
+        . "Read code if useful, reason carefully, then answer concisely: first a 2-3 sentence conclusion, then key points / options with trade-offs (max ~25 lines).\n\n"
+        . "Question from {$me['name']} (via Jarvis voice): {$q}" . ($ctx !== '' ? "\n\nContext (dashboard state, may be partial):\n{$ctx}" : '');
+    $saidAt = is_numeric($in['said_at'] ?? null) ? (int)$in['said_at'] : 0;
+    $saidAt = abs($saidAt - (int)floor(microtime(true) * 1000)) < 86400000 ? $saidAt : 0;
+    $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, kind, model, mode, said_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$me['name'], $project, mb_substr($prompt, 0, 4000), 'queued', '', $now, 0, 0, 'think', 'opus', 'plan', $saidAt]);
+    $id = (int)$pdo->lastInsertId();
+    emit_event($pdo, 'command.queued', $me['name'], $project, $id, ['id' => $id, 'project' => $project, 'prompt' => mb_substr($q, 0, 300), 'kind' => 'think']);
+    json_out(['ok' => true, 'id' => $id, 'project' => $project, 'agent_online' => $now - (int)$a['last_seen'] < 30]);
 }
 
 if ($act !== 'session') {
@@ -203,17 +281,94 @@ $tools = [
 
 // Modullar (jarvis_modules/*.php): hər biri ['tools' => [...JSON Schema alətləri], 'prompt' => 'sistem təlimatına əlavə'] qaytarır.
 // Alətlərin icrası brauzerdə, uyğun jarvis-*.js modulundadır (Jarvis.registerTool). Hər modul faylı "defined('JARVIS_MODULE') || exit;" ilə başlayır.
+// Təsdiq səviyyələri (tier): g = təsdiqsiz, y = dərhal et + elan et (brauzerdə 2.5 s "Ləğv et" çipi), r = açıq təsdiq (confirmed=true).
+// Qruplar (group): core həmişə yüklənir; qalanları config jarvis_groups_default ilə və ya sessiya ərzində load_tools ilə.
+$coreTier = ['create_task' => 'y', 'set_task_status' => 'y', 'set_task_due' => 'y', 'set_ship_deadline' => 'y', 'schedule_meeting' => 'y',
+    'record_test_result' => 'y', 'send_message' => 'y', 'run_claude_code' => 'y'];
+foreach ($tools as &$t) {
+    $t += ['tier' => $coreTier[$t['name']] ?? 'g', 'group' => 'core'];
+}
+unset($t);
 define('JARVIS_MODULE', 1);
-$modPrompt = '';
+$mods = [];                                  // hər modul: alət adları + prompt
+$groupDesc = [];
+$metaFb = [];                                // tier/group yazmayan modulların alətləri üçün ehtiyat (brain.php 'meta')
 foreach (glob(__DIR__ . '/jarvis_modules/*.php') ?: [] as $mf) {
     $mod = require $mf;
-    if (is_array($mod)) {
-        $tools = array_merge($tools, array_values($mod['tools'] ?? []));
-        if (!empty($mod['prompt'])) {
-            $modPrompt .= "\n" . trim((string)$mod['prompt']);
+    if (!is_array($mod)) {
+        continue;
+    }
+    $names = [];
+    foreach (array_values($mod['tools'] ?? []) as $t) {
+        $t['_mod'] = basename($mf, '.php');
+        $tools[] = $t;
+        $names[] = $t['name'];
+    }
+    $groupDesc += (array)($mod['groups'] ?? []);
+    $metaFb += (array)($mod['meta'] ?? []);
+    $mods[] = ['names' => $names, 'prompt' => trim((string)($mod['prompt'] ?? ''))];
+}
+$tiers = [];
+$groupOf = [];
+$decl = [];                                  // qrup → ad → modelə gedən təmiz deklarasiya (tier/group/_mod yoxdur)
+foreach ($tools as $t) {
+    $n = (string)$t['name'];
+    $fb = $metaFb[$n] ?? [];
+    $p = $t['parameters'] ?? [];
+    $hasConf = is_array($p['properties'] ?? null) && isset($p['properties']['confirmed']);
+    $tier = $t['tier'] ?? $fb['tier'] ?? ($hasConf ? 'r' : 'g');      // naməlum + confirmed → ehtiyatla r
+    $tier = in_array($tier, ['g', 'y', 'r'], true) ? $tier : 'r';
+    $grp = (string)($t['group'] ?? $fb['group'] ?? ($t['_mod'] ?? 'core'));
+    unset($t['tier'], $t['group'], $t['_mod']);
+    if ($tier === 'r') {                     // confirmed yalnız r alətlərində qalır
+        if (!is_array($p['properties'] ?? null)) {
+            $p['properties'] = [];
+        }
+        $p['type'] = 'object';
+        $p['properties']['confirmed'] = $confirm;
+        $p['required'] = array_values(array_unique(array_merge($p['required'] ?? [], ['confirmed'])));
+    } elseif ($hasConf) {
+        unset($p['properties']['confirmed']);
+        $p['required'] = array_values(array_diff($p['required'] ?? [], ['confirmed']));
+        if (!$p['required']) {
+            unset($p['required']);
+        }
+        if (!$p['properties']) {
+            $p['properties'] = (object)[];
+        }
+    }
+    $t['parameters'] = $p ?: ['type' => 'object', 'properties' => (object)[]];
+    $tiers[$n] = $tier;
+    $groupOf[$n] = $grp;
+    $decl[$grp][$n] = $t;
+}
+$gd = $config['jarvis_groups_default'] ?? ['core', 'hud', 'ui', 'claude'];
+$loaded = array_values(array_intersect(array_unique(array_merge(['core'], is_array($gd) ? $gd : array_map('trim', explode(',', (string)$gd)))), array_keys($decl)));
+$active = [];
+foreach ($loaded as $g) {
+    $active = array_merge($active, array_values($decl[$g]));
+}
+// Modul təlimatı: aləti yüklənən qrupdadırsa (və ya aləti yoxdursa) indi; yoxsa load_tools cavabında (group_prompts)
+$modPrompt = '';
+$groupPrompts = [];
+foreach ($mods as $m) {
+    if ($m['prompt'] === '') {
+        continue;
+    }
+    $gs = array_values(array_unique(array_map(fn($n) => $groupOf[$n], $m['names'])));
+    if (!$gs || array_intersect($gs, $loaded)) {
+        $modPrompt .= "\n" . $m['prompt'];
+    } else {
+        foreach ($gs as $g) {
+            $groupPrompts[$g] = trim(($groupPrompts[$g] ?? '') . "\n" . $m['prompt']);
         }
     }
 }
+$groupLines = [];
+foreach ($decl as $g => $ts) {
+    $groupLines[] = "- {$g}" . (in_array($g, $loaded, true) ? ' (loaded)' : '') . ': ' . ($groupDesc[$g] ?? '') . ' [' . implode(', ', array_slice(array_keys($ts), 0, 16)) . ']';
+}
+$groupList = implode("\n", $groupLines);
 
 $users = $pdo->query("SELECT name FROM users WHERE role != 'student' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);   // komanda (feed.php ilə eyni)
 $langLine = $lang === 'az'
@@ -233,7 +388,7 @@ Personality and tone (very important):
 - In Azerbaijani use the casual "sən" form and everyday street-friendly speech. Greeting-style small talk gets a natural friendly answer first, then continue. Examples of the vibe (do not repeat them word for word, vary naturally):
   "Jarvis, necəsən, vəziyyət nətərdi?" -> "Sağ ol, salamatçılıqdır, sən necəsən? İş-güc necədi?"
   "Nə var nə yox?" -> "Heç nə, hamısı yerindədi, səndə nə var?"
-  "Sabah saat 3-də görüş qoy" -> "Aha, sabah 3-ə görüş qoyum də? Edim?" (changes still need the confirmation below)
+  "Sabah saat 3-də görüş qoy" -> "Oldu, sabah 3-ə görüş qoyuram." (then call the tool right away)
   Success: "Əla, hazırdı!", "Oldu, bitdi.", "Tamamdı." Problem: "Ay, bir problem çıxdı...", "Yox, alınmadı, bax belə oldu...".
 - React naturally to what the person says (surprise, congratulations, sympathy, a light joke). Short filler words are fine ("hə", "bəli", "yaxşı", "bax", "di gəl").
 - Match the user's language and energy; if they are casual, be casual. If they switch to Russian or English, stay equally friendly and informal in that language.
@@ -249,15 +404,25 @@ Rules:
 - Navigation and questions need no confirmation: just do them.
 - Any request to actually DO work in a project (code, bugs, tests, review, analysis of the code, docs) goes to Claude Code via run_claude_code. Write it a clear, complete prompt; do not try to do the work yourself. Afterwards tell the user it was sent and that you will report when it is done. When you receive a note that a Claude Code task finished, summarise the result in 1-2 spoken sentences (mention failures plainly).
 - If the agent is offline, say the task is queued and will start when the agent on their computer runs.
-- Every action that creates or changes something (tasks, statuses, deadlines, meetings, tests, messages, Claude Code tasks): first say in one short sentence exactly what you will do and ask "Edim?"/"Shall I?". Only after the user clearly agrees call the tool with confirmed=true. Never set confirmed=true on your own.
-- You cannot delete anything (except your own memory notes via forget, with confirmation); say so if asked.
+- Speed matters: act in the same turn. Reads, navigation and panels: just do them silently. Normal changes (tasks, statuses, deadlines, meetings, tests, messages, Claude Code tasks, dispatch): do NOT ask "Edim?"; say in a few words what you are doing ("Tapşırığı yaradıram") and call the tool immediately; the user gets a 2-second cancel chip and can say "ləğv et". If a tool result says canceled, just acknowledge it.
+- Only tools that have a "confirmed" parameter are dangerous (deploy, merge, delete, settings, mass runs): say in one short sentence exactly what will happen, ask "Edim?", and call with confirmed=true only after the user clearly agrees. Never set confirmed=true on your own.
+- Tool groups: core tools are always available; other groups load on demand. If you need a tool that you do not have, call load_tools {group} first (fast, no confirmation), then use it in the same turn. Groups:
+{$groupList}
+- Hard questions (architecture, trade-offs, debugging strategy, "what should we do about X", analysis that needs deep reasoning or reading code) → call think {question, project?}; say only "Düşünürəm…" and continue; the answer arrives later as a "[Think result]" note: summarise it in at most 3 sentences and offer the details as a panel (show_panel).
+- Current events, news, public facts, docs, prices, people outside the team → use your built-in web_search / x_search tools if available; say the source briefly.
+- Lines starting with [Situation] are silent context updates (running/queued Claude Code tasks, pending approvals, overdue tasks, burning planets, failures); never answer them directly, but use them and mention something urgent when it is relevant.
+- You cannot delete anything except through tools that explicitly allow it (with confirmation); say so if asked.
 - If a tool returns an error, explain it briefly and suggest the fix.
 - Resolve relative dates ("sabah saat 3-də", "next Friday") into local ISO date-times yourself.
 - When the user says goodbye or asks you to stop, say a short farewell and call end_conversation.
 {$modPrompt}
 TXT;
 
-$out = ['provider' => $provider, 'lang' => $lang, 'used' => $used, 'limit' => $limitSec];
+$out = ['provider' => $provider, 'lang' => $lang, 'used' => $used, 'limit' => $limitSec,
+    // brauzer üçün: tier xəritəsi (jv-tiers ilə üstələnə bilər), qruplar, bütün deklarasiyalar (load_tools), gec yüklənən qrup təlimatları
+    'tiers' => $tiers, 'loaded' => $loaded, 'group_prompts' => (object)$groupPrompts,
+    'groups' => (object)array_map(fn($g) => ['desc' => $groupDesc[$g] ?? '', 'tools' => array_keys($decl[$g])], array_combine(array_keys($decl), array_keys($decl))),
+    'all_tools' => (object)array_map('array_values', $decl)];
 
 /* ---------- Adapter: Grok Voice (xAI) fal.ai üzərindən ---------- */
 if ($provider === 'grok') {
@@ -288,12 +453,15 @@ if ($provider === 'grok') {
         'session' => [
             'instructions' => $sys,
             'voice' => $grokVoice,
-            'turn_detection' => ['type' => 'server_vad'],
+            'reasoning' => ['effort' => 'none'],                                    // səs agenti üçün sürət: düşünmə yox (dərin suallar → think aləti)
+            'turn_detection' => ['type' => 'server_vad', 'silence_duration_ms' => 450],
             'audio' => [
                 'input' => ['format' => $fmt, 'transcription' => ['language_hint' => $lang]],
                 'output' => ['format' => $fmt],
             ],
-            'tools' => array_map(fn($t) => ['type' => 'function'] + $t, $tools),
+            // daxili axtarış alətləri (xAI serverində icra olunur); rədd edilsə jarvis.js onlarsız təkrar session.update göndərir
+            'tools' => array_merge(array_map(fn($t) => ['type' => 'function'] + $t, $active),
+                ($config['jarvis_web_search'] ?? true) ? [['type' => 'web_search'], ['type' => 'x_search']] : []),
         ],
     ]);
 }
@@ -317,7 +485,7 @@ $setup = [
         'speechConfig' => ['voiceConfig' => ['prebuiltVoiceConfig' => ['voiceName' => $voice]]],
     ],
     'systemInstruction' => ['parts' => [['text' => $sys]]],
-    'tools' => [['functionDeclarations' => array_map('gemini_schema', $tools)]],
+    'tools' => [['functionDeclarations' => array_map('gemini_schema', $active)]],
     'inputAudioTranscription' => (object)[],
     'outputAudioTranscription' => (object)[],
     'contextWindowCompression' => ['slidingWindow' => (object)[]],

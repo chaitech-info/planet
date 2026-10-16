@@ -105,6 +105,10 @@ foreach ($cmds as $i => &$c) {
     $c['result'] = mb_substr($c['result'], 0, $i < 8 ? 8000 : 1500);   // ən yeni 8 cavab tam, köhnələr qısa (hər 3 saniyədə göndərilir)
     $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
     $c['progress'] = json_decode((string)$c['progress'], true) ?: null;   // canlı gedişat (Jarvis HUD agent kartları)
+    if ($c['kind'] === 'ops') {                          // ops əmri gizli dəyərlər daşıya bilər (mcp_add env): yalnız əməliyyatın adı
+        $op = json_decode((string)$c['prompt'], true);
+        $c['prompt'] = '⚙ ' . (is_array($op) ? (string)($op['op'] ?? 'ops') : 'ops');
+    }
 }
 unset($c);
 $agents = $pdo->query('SELECT user, last_seen, claude_ok, projects, auto_tasks FROM agents')->fetchAll();
