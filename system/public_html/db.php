@@ -8,7 +8,7 @@ date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 // Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
 // yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 function db(): PDO
 {

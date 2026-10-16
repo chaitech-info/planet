@@ -35,6 +35,11 @@ function user_sound(string $n): ?string
 
 $students = student_names($pdo);
 
+// Giriş səsi üçün: kimsə (adı açılmadan) neçə nəfər onlayndır; student komandanın adlarını görmür, yalnız sayı
+$onc = $pdo->prepare('SELECT COUNT(*) FROM presence WHERE last_seen > ? AND user <> ?');
+$onc->execute([$now - 25, $me['name']]);
+$onlineN = (int)$onc->fetchColumn();
+
 // Student yalnız Student universini görür: studentlərin planetləri, gəmiləri və onlayn olmaları; komandanın heç nəyi
 if (is_student($me)) {
     ensure_student_planet($pdo, $me['name']);
@@ -52,6 +57,7 @@ if (is_student($me)) {
     }
     json_out([
         'now' => $now,
+        'online_n' => $onlineN,
         'me' => $me,
         'users' => $students,
         'students' => $students,
