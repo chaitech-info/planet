@@ -35,7 +35,7 @@ if ($act === 'claim') {
     $pdo->prepare("UPDATE commands SET status = 'failed', result = ?, finished_at = ? WHERE user = ? AND status = 'running' AND started_at < ?")
         ->execute(['Vaxt bitdi: agent cavab vermədi', $now, $user, $now - 2400]);
     $pdo->beginTransaction();
-    $q = $pdo->prepare("SELECT id, project, prompt, creator, fresh, images FROM commands WHERE user = ? AND status = 'queued' ORDER BY id ASC LIMIT 1");
+    $q = $pdo->prepare("SELECT id, project, prompt, creator, fresh, images, chat FROM commands WHERE user = ? AND status = 'queued' ORDER BY id ASC LIMIT 1");
     $q->execute([$user]);
     $row = $q->fetch();
     if (!$row) {
@@ -50,7 +50,7 @@ if ($act === 'claim') {
     }
     $names = project_names($pdo, $row['project']);   // ilkin qovluq adları (ad dəyişibsə)
     $images = array_values(array_filter((array)json_decode((string)$row['images'], true), fn($f) => is_string($f) && cmdimg_name_ok($f)));
-    json_out(['id' => (int)$row['id'], 'project' => $row['project'], 'names' => $names, 'prompt' => $row['prompt'], 'creator' => $row['creator'], 'fresh' => (int)$row['fresh'], 'images' => $images]);   // şəkillər: cmdimg.php?f=<ad>
+    json_out(['id' => (int)$row['id'], 'project' => $row['project'], 'names' => $names, 'prompt' => $row['prompt'], 'creator' => $row['creator'], 'fresh' => (int)$row['fresh'], 'images' => $images, 'chat' => (int)$row['chat']]);   // şəkillər: cmdimg.php?f=<ad>; chat: söhbət (agent sessiyanı ona görə davam etdirir)
 }
 
 if ($act === 'finish') {

@@ -93,7 +93,7 @@ $projects->execute([$now - 30 * 86400]);
 // təsdiqi 1 saat gözlənilməyən uzaq komanda ləğv olunur
 $pdo->prepare("UPDATE commands SET status = 'canceled', result = ?, finished_at = ? WHERE status = 'pending' AND created_at < ?")
     ->execute(['Vaxt bitdi: təsdiq edilmədi', $now, $now - 3600]);
-$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind
+$cmds = $pdo->query('SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind, chat
     FROM commands ORDER BY id DESC LIMIT 40')->fetchAll();
 foreach ($cmds as $i => &$c) {
     $c['result'] = mb_substr($c['result'], 0, $i < 8 ? 8000 : 1500);   // ən yeni 8 cavab tam, köhnələr qısa (hər 3 saniyədə göndərilir)

@@ -150,8 +150,8 @@ def kill_group(proc):
             time.sleep(.1)
 
 
-SESSIONS = os.path.expanduser('~/.claude-team-sessions.json')   # proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
-SESSION_TTL = 24 * 3600
+SESSIONS = os.path.expanduser('~/.claude-team-sessions.json')   # söhbət ('chat:<id>') və ya proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
+SESSION_TTL = 30 * 24 * 3600                                     # köhnə söhbətə qayıtmaq olsun (Claude Code sessiyaları da ~30 gün saxlayır)
 
 
 def sess_load():
@@ -225,10 +225,14 @@ def parse_result(out):
 
 
 def run_claude(base, token, claude, cmd, path, extra_args=()):
-    """claude -p işlədir. Eyni proyekt və göndərən üçün əvvəlki söhbəti davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan."""
-    key = path + '|' + (cmd.get('creator') or '')
+    """claude -p işlədir. Söhbətin (chat) əvvəlki sessiyasını davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan.
+    Söhbətsiz komandalar (öz agentinə, lövhə) köhnə qayda ilə proyekt+göndərən açarı ilə davam edir."""
+    legacy = path + '|' + (cmd.get('creator') or '')
+    key = f"chat:{cmd['chat']}" if cmd.get('chat') else legacy
     store = sess_load()
-    sid = None if cmd.get('fresh') else (store.get(key) or {}).get('sid')
+    sid = None
+    if not cmd.get('fresh'):
+        sid = (store.get(key) or store.get(legacy) or {}).get('sid')   # legacy: söhbətlərdən əvvəl başlanmış söhbət (chat sütunu sonradan gəlib)
     base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
     out, err, rc = exec_claude(base, token, base_args + (['--resume', sid] if sid else []), cmd, path)
     if rc == 'end':

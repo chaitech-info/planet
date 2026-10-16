@@ -141,17 +141,99 @@ if ($act === 'send') {
     }
     $status = $grant['mode'] === 'auto' ? 'queued' : 'pending';
     $fresh = !empty($in['fresh']) && $in['fresh'] !== 'false' ? 1 : 0;
+    // Söhbət: fresh = yeni söhbət (id-si özü olur); chat verilibsə o söhbət davam edir (proyekti söhbətinkidir);
+    // heç biri yoxdursa bu proyektdəki ən son söhbət, o da yoxdursa yeni
+    $chat = 0;
+    if (!$fresh) {
+        $want = (int)($in['chat'] ?? 0);
+        if ($want > 0) {
+            $cq = $pdo->prepare('SELECT project FROM commands WHERE id = ? AND chat = id AND user = ? AND creator = ?');
+            $cq->execute([$want, $target, $name]);
+            $cp = $cq->fetchColumn();
+            if ($cp === false) {
+                json_out(['error' => 'söhbət tapılmadı'], 404);
+            }
+            $chat = $want;
+            $project = (string)$cp;
+        } else {
+            $lq = $pdo->prepare('SELECT chat FROM commands WHERE user = ? AND creator = ? AND project = ? AND chat > 0 ORDER BY id DESC LIMIT 1');
+            $lq->execute([$target, $name, $project]);
+            $chat = (int)$lq->fetchColumn();
+        }
+    }
     $images = remote_save_images($_FILES['images'] ?? null);
     $full = '[' . $name . ' uzaqdan göndərdi (Desktop Universe)]' . "\n" . $prompt;
-    $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '']);
+    $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images, chat) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '', $chat]);
+    $id = (int)$pdo->lastInsertId();
+    if ($chat === 0) {                                           // yeni söhbət: ilk komandanın id-si söhbətin nömrəsidir
+        $chat = $id;
+        $pdo->prepare('UPDATE commands SET chat = ? WHERE id = ?')->execute([$chat, $id]);
+    }
     if (random_int(1, 20) === 1) {
         cmdimg_cleanup($pdo);
     }
     if ($status === 'pending') {
         notify_later("🖥 $name komanda göndərdi → $target (təsdiq gözləyir)\nProyekt: $project");
     }
-    json_out(['ok' => true, 'id' => (int)$pdo->lastInsertId(), 'status' => $status, 'images' => $images]);
+    json_out(['ok' => true, 'id' => $id, 'status' => $status, 'images' => $images, 'chat' => $chat, 'project' => $project]);
+}
+
+/** Söhbətlərə baxış hüququ: sahib hamısını görür, qonaq yalnız özünün göndərdiklərini. */
+function chat_scope(PDO $pdo, string $target, string $name): array
+{
+    if ($target !== $name && !user_exists($pdo, $target)) {
+        json_out(['error' => 'hədəf istifadəçi yanlışdır'], 400);
+    }
+    return $target === $name ? ["user = ? AND creator != '' AND creator != ?", [$target, $target]] : ['user = ? AND creator = ?', [$target, $name]];
+}
+
+if ($act === 'chats') {                                           // söhbət siyahısı: ən son yazılan əvvəl
+    [$where, $args] = chat_scope($pdo, (string)($in['target'] ?? ''), $name);
+    $q = $pdo->prepare("SELECT chat, MIN(id) AS first_id, MAX(id) AS last_id, COUNT(*) AS n, MAX(created_at) AS last_at FROM commands WHERE $where AND chat > 0 GROUP BY chat ORDER BY last_at DESC LIMIT 60");
+    $q->execute($args);
+    $groups = $q->fetchAll();
+    $ids = [];
+    foreach ($groups as $g) {
+        $ids[] = (int)$g['first_id'];
+        $ids[] = (int)$g['last_id'];
+    }
+    $rows = [];
+    if ($ids) {
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $r = $pdo->prepare("SELECT id, project, creator, prompt, status FROM commands WHERE id IN ($ph)");
+        $r->execute($ids);
+        foreach ($r->fetchAll() as $row) {
+            $rows[(int)$row['id']] = $row;
+        }
+    }
+    $chats = [];
+    foreach ($groups as $g) {
+        $first = $rows[(int)$g['first_id']] ?? null;
+        $last = $rows[(int)$g['last_id']] ?? null;
+        if (!$first) {
+            continue;
+        }
+        $title = trim((string)preg_replace('/^\[[^\]]*\]\n/', '', $first['prompt']));
+        $title = preg_replace('/\s+/u', ' ', mb_substr($title, 0, 90));
+        $chats[] = ['chat' => (int)$g['chat'], 'project' => $first['project'], 'creator' => $first['creator'], 'title' => $title, 'n' => (int)$g['n'],
+            'last_at' => (int)$g['last_at'], 'status' => $last ? $last['status'] : ''];
+    }
+    json_out(['chats' => $chats]);
+}
+
+if ($act === 'chat') {                                            // bir söhbətin bütün komandaları (köhnədən yeniyə)
+    [$where, $args] = chat_scope($pdo, (string)($in['target'] ?? ''), $name);
+    $chat = (int)($in['chat'] ?? 0);
+    $q = $pdo->prepare("SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind, chat FROM commands WHERE $where AND chat = ? ORDER BY id ASC LIMIT 200");
+    $q->execute([...$args, $chat]);
+    $msgs = $q->fetchAll();
+    foreach ($msgs as &$c) {
+        $c['result'] = mb_substr($c['result'], 0, 8000);
+        $c['images'] = array_values(array_filter((array)json_decode((string)$c['images'], true), 'is_string'));
+    }
+    unset($c);
+    json_out(['chat' => $chat, 'messages' => $msgs]);
 }
 
 if ($act === 'approve' || $act === 'deny') {

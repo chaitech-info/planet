@@ -8,7 +8,7 @@ date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 // Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
 // yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function db(): PDO
 {
@@ -185,6 +185,17 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
         // sütun artıq var
     }
     try {
+        $pdo->exec('ALTER TABLE commands ADD COLUMN chat INT NOT NULL DEFAULT 0');   // söhbət: söhbətin ilk komandasının id-si (agent Claude sessiyasını söhbət üzrə saxlayır); 0 = söhbətsiz (öz agentinə / lövhə)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    // Köhnə uzaq komandalar söhbətlərə bölünür: eyni sahib + göndərən + proyekt = bir söhbət (agent sessiyanı əvvəl belə saxlayırdı)
+    $old = $pdo->query("SELECT user, creator, project, MIN(id) AS first FROM commands WHERE chat = 0 AND creator != '' GROUP BY user, creator, project")->fetchAll();
+    foreach ($old as $o) {
+        $pdo->prepare("UPDATE commands SET chat = ? WHERE chat = 0 AND user = ? AND creator = ? AND project = ?")
+            ->execute([(int)$o['first'], $o['user'], $o['creator'], $o['project']]);
+    }
+    try {
         $pdo->exec('ALTER TABLE tasks ADD COLUMN rounds INT NOT NULL DEFAULT 0');   // avtomatik yoxlama dövrələri (FAIL → düzəliş → yenidən yoxlama), limit var
     } catch (Throwable $e) {
         // sütun artıq var
@@ -308,6 +319,7 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
     // İndekslər: agent növbəsi (user+status), tapşırıq ↔ komanda, proyekt üzrə hadisələr (feed ?project=), açıq tapşırıqlar
     foreach ([
         'idx_cmd_user_status' => 'commands (user, status)',
+        'idx_cmd_chat' => 'commands (chat)',
         'idx_tasks_cmd' => 'tasks (command_id)',
         'idx_tasks_status' => 'tasks (status, updated_at)',
         'idx_events_project' => 'events (project, id)',
