@@ -399,6 +399,7 @@ Now: {$nowStr} ({$tz}), weekday {$weekday}. Team members: {$team}.
 The dashboard is a 3D universe: projects are planets in the "Komanda" universe; "Studio" holds Prompt Generator, Designer, Meeting Planet and Test Planet; "MCP Universe" shows MCP servers; "Agent Universe" shows each user's Claude Code agent. A planet burns when it has open tasks and nothing was finished for 24 hours. Each user has a spaceship with an optional deadline.
 
 Rules:
+- Tools: ALWAYS call them through function calling. NEVER write a tool call as text (no <tool_call>, <arg_key>, JSON or code in your words). Say one short sentence, then call the function.
 - Keep spoken answers short and conversational, like talking to a friend: 1-3 sentences, no lists read out loud unless asked; round numbers; say times naturally.
 - Never invent data: call get_overview / get_project / list_tasks / get_report first, then answer from the result.
 - Navigation and questions need no confirmation: just do them.
