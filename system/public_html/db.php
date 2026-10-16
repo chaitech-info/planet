@@ -329,6 +329,46 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
         created_at INT NOT NULL,
         updated_at INT NOT NULL
     )");
+    // Qalan işlər (yapışqan siyahı, bütün səhifələrdə): komandanın unudulmamalı iri işləri, alt bəndlərlə
+    $hadRoadmap = true;
+    try {
+        $pdo->query('SELECT 1 FROM roadmap LIMIT 1');
+    } catch (Throwable $e) {
+        $hadRoadmap = false;
+    }
+    $pdo->exec("CREATE TABLE IF NOT EXISTS roadmap (
+        id $id,
+        parent_id INT NOT NULL DEFAULT 0,
+        title VARCHAR(300) NOT NULL,
+        owners VARCHAR(200) NOT NULL DEFAULT '',
+        done INT NOT NULL DEFAULT 0,
+        sort INT NOT NULL DEFAULT 0,
+        creator VARCHAR(64) NOT NULL DEFAULT '',
+        done_by VARCHAR(64) NOT NULL DEFAULT '',
+        done_at INT NOT NULL DEFAULT 0,
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    if (!$hadRoadmap) {                      // ilk dəfə: komandanın başlanğıc siyahısı
+        $ins = $pdo->prepare('INSERT INTO roadmap (parent_id, title, owners, sort, creator, created_at, updated_at) VALUES (?,?,?,?,?,?,?)');
+        $t = time();
+        $add = function (int $parent, string $title, string $owners, int $sort) use ($ins, $pdo, $t): int {
+            $ins->execute([$parent, $title, $owners, $sort, 'system', $t, $t]);
+            return (int)$pdo->lastInsertId();
+        };
+        $add(0, 'Neo', 'Askar', 1);
+        $add(0, 'Students panel beautifying', 'Emil', 2);
+        $pl = $add(0, 'Planet', '', 3);
+        $add($pl, 'Education integration', 'Askar', 1);
+        $add($pl, 'Students integration', 'Emil', 2);
+        $add($pl, 'Jarvis', 'Emil', 3);
+        $add($pl, "Claude chat (Who's Claude, Project, Session)", 'Askar', 4);
+        $add(0, 'Trading with Claude Code sessions', 'Askar,Emil', 4);
+        $add(0, 'Organic AI Dropshipping (find a product or create one, make it viral with organic AI videos on social media)', 'Askar,Emil', 5);
+        $add(0, 'Social media management panel, also with video generation', 'Askar,Emil', 6);
+        $add(0, 'YouTube long and short videos automation', 'Askar,Emil', 7);
+        $add(0, 'Dopamine explosion projects that trigger users to buy with a strong buy rate', 'Askar,Emil', 8);
+    }
     // Test Planet: proyekt üzrə test ssenariləri (keçdi / xəta / yoxlanmayıb)
     $pdo->exec("CREATE TABLE IF NOT EXISTS tests (
         id $id,

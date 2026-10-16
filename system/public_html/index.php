@@ -3851,6 +3851,7 @@ addEventListener('kainat-ready', initGL);
 route();
 if (window.Kainat) initGL();
 </script>
+<script src="roadmap.js?v=<?= (int)@filemtime(__DIR__ . '/roadmap.js') ?>"></script>
 <script src="jarvis.js?v=<?= (int)@filemtime(__DIR__ . '/jarvis.js') ?>"></script>
 <script src="radio.js?v=<?= (int)@filemtime(__DIR__ . '/radio.js') ?>"></script>
 <?php foreach (glob(__DIR__ . '/jarvis-*.js') ?: [] as $jf): /* Jarvis modulları: HUD, UI idarəsi, missiyalar, donanma */ ?>
