@@ -36,7 +36,7 @@ function claim_one(PDO $pdo, string $user, int $now, array $skip): ?array
 {
     $pdo->beginTransaction();
     $not = $skip ? ' AND project NOT IN (' . implode(',', array_fill(0, count($skip), '?')) . ')' : '';
-    $q = $pdo->prepare("SELECT id, project, prompt, creator, fresh, images FROM commands WHERE user = ? AND status = 'queued'$not ORDER BY id ASC LIMIT 1");
+    $q = $pdo->prepare("SELECT id, project, prompt, creator, fresh, images, chat FROM commands WHERE user = ? AND status = 'queued'$not ORDER BY id ASC LIMIT 1");
     $q->execute(array_merge([$user], $skip));
     $row = $q->fetch();
     if (!$row) {
@@ -49,11 +49,9 @@ function claim_one(PDO $pdo, string $user, int $now, array $skip): ?array
     if ($u->rowCount() !== 1) {
         return null;
     }
-    $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');   // ilkin qovluq adları (ad dəyişibsə)
-    $al->execute([$row['project']]);
-    $names = array_merge([$row['project']], array_column($al->fetchAll(), 'src'));
+    $names = project_names($pdo, $row['project']);   // ilkin qovluq adları (ad dəyişibsə)
     $images = array_values(array_filter((array)json_decode((string)$row['images'], true), fn($f) => is_string($f) && cmdimg_name_ok($f)));
-    return ['id' => (int)$row['id'], 'project' => $row['project'], 'names' => $names, 'prompt' => $row['prompt'], 'creator' => $row['creator'], 'fresh' => (int)$row['fresh'], 'images' => $images];   // şəkillər: cmdimg.php?f=<ad>
+    return ['id' => (int)$row['id'], 'project' => $row['project'], 'names' => $names, 'prompt' => $row['prompt'], 'creator' => $row['creator'], 'fresh' => (int)$row['fresh'], 'images' => $images, 'chat' => (int)$row['chat']];   // şəkillər: cmdimg.php?f=<ad>
 }
 
 if ($act === 'claim') {

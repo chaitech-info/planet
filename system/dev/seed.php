@@ -106,5 +106,15 @@ $cm->execute(['Askar', 'neo', 'Scoring modelini yoxla və testləri yenilə', 'd
 $cm->execute(['Emil', 'flowcut', 'Render vaxtını ölç', 'running', '', $now - 300, $now - 280, 0]);
 $pdo->prepare('UPDATE tasks SET command_id = ? WHERE title = ?')->execute([(int)$pdo->lastInsertId(), 'Render vaxtını ölç']);
 $cm->execute(['Dost', 'sushi-date', 'Telegram botunu bərpa et', 'queued', '', $now - 600, 0, 0]);
+// Desktop Universe demo: Emil Askara icazə verib, Askar onun kompüterində iki söhbət aparıb (chat = söhbətin ilk komandasının id-si)
+$pdo->prepare('INSERT INTO remote_grants (owner, grantee, mode, created_at) VALUES (?,?,?,?)')->execute(['Emil', 'Askar', 'auto', $now - 3 * $H]);
+$rm = $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, chat) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
+$rm->execute(['Emil', 'flowcut', "[Askar uzaqdan göndərdi (Desktop Universe)]\nRender vaxtını ölç və qısa hesabat yaz", 'done', 'Orta render 1.8 san; darboğaz encode.py:40-dadır.', $now - 2 * $H, $now - 2 * $H, $now - 2 * $H + 300, 'Askar', 1, 0]);
+$c1 = (int)$pdo->lastInsertId();
+$pdo->prepare('UPDATE commands SET chat = ? WHERE id = ?')->execute([$c1, $c1]);
+$rm->execute(['Emil', 'flowcut', "[Askar uzaqdan göndərdi (Desktop Universe)]\nDarboğazı düzəlt", 'done', "↻ əvvəlki söhbət davam etdi\n\nencode.py-də buffer ölçüsünü artırdım, render 1.1 saniyəyə düşdü.", $now - $H, $now - $H, $now - $H + 240, 'Askar', 0, $c1]);
+$rm->execute(['Emil', 'flowcut', "[Askar uzaqdan göndərdi (Desktop Universe)]\nREADME-ni yenilə", 'queued', '', $now - 120, 0, 0, 'Askar', 1, 0]);
+$c2 = (int)$pdo->lastInsertId();
+$pdo->prepare('UPDATE commands SET chat = ? WHERE id = ?')->execute([$c2, $c2]);
 
 echo "Hazırdır: $file\n";

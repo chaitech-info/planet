@@ -46,17 +46,23 @@
   const meta = document.querySelector('header .meta'); if (meta) meta.insertBefore(btn, meta.firstChild.nextSibling);
 
   const ST = { off: 'hazırdır', connecting: 'qoşulur…', listening: 'dinləyirəm', speaking: 'danışır', tool: 'icra edir…', muted: 'mikrofon bağlıdır', error: 'xəta' };
+  const stEl = $j('jv-st'), goEl = $j('jv-go'), logEl = $j('jv-log');
   function setState(s, txt) {
-    J.state = s; $j('jv-st').textContent = txt || ST[s] || s;
+    const label = txt || ST[s] || s;
+    if (J.state === s && stEl.textContent === label) return;      // hər səs parçasında (saniyədə onlarla) DOM-a toxunmayaq
+    J.state = s; stEl.textContent = label;
     emit('state', s);
-    btn.classList.toggle('on', s !== 'off' && s !== 'error');
-    $j('jv-go').textContent = s === 'off' || s === 'error' ? '▶ Başla' : '■ Bitir';
-    $j('jv-go').classList.toggle('go', s === 'off' || s === 'error');
+    const off = s === 'off' || s === 'error';
+    btn.classList.toggle('on', !off);
+    goEl.textContent = off ? '▶ Başla' : '■ Bitir';
+    goEl.classList.toggle('go', off);
   }
+  let scrollQ = false;
+  const scrollLog = () => { if (scrollQ) return; scrollQ = true; requestAnimationFrame(() => { scrollQ = false; logEl.scrollTop = logEl.scrollHeight; }); };   // kadrda bir dəfə (layout)
   function line(kind, text) {
     const n = document.createElement('div'); n.className = 'jv-l ' + kind; n.textContent = text;
-    const log = $j('jv-log'); log.append(n); while (log.children.length > 80) log.firstChild.remove();
-    log.scrollTop = log.scrollHeight; return n;
+    logEl.append(n); while (logEl.children.length > 80) logEl.firstChild.remove();
+    scrollLog(); return n;
   }
   /** Canlı transkript: eyni növbədəki parçalar bir sətrə yığılır */
   function stream(who, text) {
@@ -64,19 +70,21 @@
     let n = J.cur[who];
     if (!n) { n = J.cur[who] = line(who === 'user' ? 'u' : 'j', ''); n._t = ''; }
     n._t += text; n.textContent = n._t.replace(/\s+/g, ' ').trim();
-    $j('jv-log').scrollTop = $j('jv-log').scrollHeight;
+    scrollLog();
   }
   const endTurn = () => { J.cur.user = null; J.cur.jarvis = null; };
 
-  /* Orb: səsə görə döyünən halqalar (dinləyəndə mavi, danışanda qızılı) */
-  let orbLv = 0, orbT = 0;
+  /* Orb: səsə görə döyünən halqalar (dinləyəndə mavi, danışanda qızılı). Yalnız panel görünəndə çəkilir. */
+  let orbLv = 0, orbT = 0, orbRaf = 0, orbBuf = null;
   function drawOrb(now) {
-    requestAnimationFrame(drawOrb);
-    if (box.hidden) return;
+    if (box.hidden) { orbRaf = 0; return; }
+    orbRaf = requestAnimationFrame(drawOrb);
     orbT = now / 1000;
     let lv = 0;
-    if (J.outAn && J.state === 'speaking') { const a = new Uint8Array(J.outAn.fftSize); J.outAn.getByteTimeDomainData(a); let s = 0; for (const v of a) s += ((v - 128) / 128) ** 2; lv = Math.sqrt(s / a.length) * 4; }
-    else if (J.state === 'listening') lv = J.micLv * 5;
+    if (J.outAn && J.state === 'speaking') {
+      if (!orbBuf || orbBuf.length !== J.outAn.fftSize) orbBuf = new Uint8Array(J.outAn.fftSize);
+      J.outAn.getByteTimeDomainData(orbBuf); let s = 0; for (let i = 0; i < orbBuf.length; i++) { const v = (orbBuf[i] - 128) / 128; s += v * v; } lv = Math.sqrt(s / orbBuf.length) * 4;
+    } else if (J.state === 'listening') lv = J.micLv * 5;
     orbLv += (Math.min(1, lv) - orbLv) * .25;
     const W = orb.width, c = W / 2;
     og.clearRect(0, 0, W, W);
@@ -93,17 +101,23 @@
     }
     og.fillStyle = 'rgba(255,255,255,.92)'; og.beginPath(); og.arc(c, c, 6 + orbLv * 8, 0, 6.2832); og.fill();
   }
-  requestAnimationFrame(drawOrb);
+  /** Paneli göstər/gizlə; görünəndə orb dövrəsi başlayır, gizlənəndə özü dayanır (rAF boş yerə işləmir) */
+  function showBox(on) { box.hidden = !on; if (on && !orbRaf) orbRaf = requestAnimationFrame(drawOrb); }
 
   /* ---------- Köməkçilər ---------- */
   const norm = s => String(s || '').toLocaleLowerCase('az').normalize('NFKD').replace(/[̀-ͯ]/g, '')
     .replace(/ə/g, 'e').replace(/ı/g, 'i').replace(/[^a-z0-9: ]+/g, ' ').replace(/\s+/g, ' ').trim();
+  /** Levenshtein məsafəsi (iki sətirli, matris ayrılmır) */
   function lev(a, b) {
     if (Math.abs(a.length - b.length) > 3) return 9;
-    const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-    for (let j = 1; j <= b.length; j++) d[0][j] = j;
-    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    return d[a.length][b.length];
+    let prev = new Array(b.length + 1), cur = new Array(b.length + 1);
+    for (let j = 0; j <= b.length; j++) prev[j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      cur[0] = i;
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      [prev, cur] = [cur, prev];
+    }
+    return prev[b.length];
   }
   /** Ən uyğun element (səslə deyilən ad dəqiq olmaya bilər): tam, başlanğıc, daxilində, söz və yazılış yaxınlığı */
   function best(items, q, key) {
@@ -123,48 +137,73 @@
   const when = ts => new Date(ts * 1000).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' });
   const parseWhen = v => { if (!v || /^(none|yox|sil)$/i.test(String(v).trim())) return 0; const t = new Date(String(v).trim()); return isNaN(t) ? NaN : Math.floor(t / 1000); };
   const userName = u => { if (!u || /^(me|men|mən|özüm|ozum)$/i.test(u)) return ME.name; const m = best(data.users || [], u, x => x); return m; };
+  /** Bütün planetlər (ad, etiket, univers). Eyni feed məlumatı üçün bir dəfə hesablanır: spaceList/buildProjects ağırdır, əvvəl hər univers üçün təkrar çağırılırdı. */
+  let pnData = null, pnList = [];
   const planetNames = () => {
-    const out = new Map();
-    for (const u of UNIVERSES) for (const p of uniList(spaceList(buildProjects()), u.id)) out.set(p.name, { name: p.name, label: (p.label || p.name).replace(/^\S+\s/, m => /\p{Extended_Pictographic}/u.test(m) ? '' : m), uni: u.id });
-    return [...out.values()];
+    if (pnData === data && pnList.length) return pnList;
+    const out = new Map(), full = spaceList(buildProjects());
+    for (const u of UNIVERSES) for (const p of uniList(full, u.id)) out.set(p.name, { name: p.name, label: (p.label || p.name).replace(/^\S+\s/, m => /\p{Extended_Pictographic}/u.test(m) ? '' : m), uni: u.id });
+    pnData = data; pnList = [...out.values()];
+    return pnList;
   };
+  const findPlanet = q => best(planetNames(), q, p => [p.name, p.label]);
+  const projectOf = q => { const pl = findPlanet(q); return pl ? pl.name : q; };     // səslə deyilən ad → planetin dəqiq adı (tapılmasa olduğu kimi)
   const pickTask = q => best((data.tasks || []).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done')), q, t => t.title);
   async function findTask(q) { let t = pickTask(q); if (!t) { await load(); t = pickTask(q); } return t; }   // yeni yaradılıbsa, məlumatı təzələ
   const need = (a, ...ks) => { for (const k of ks) if (a[k] === undefined || a[k] === null || a[k] === '') throw new Error('"' + k + '" lazımdır'); };
   const ok = (msg, extra) => { line('a', '✓ ' + msg); return { ok: true, result: msg, ...extra }; };
   function confirmed(a) { if (a.confirmed !== true) throw new Error('Not confirmed: describe the action to the user, ask for confirmation, then call again with confirmed=true.'); }
   const R = async res => { const { status, d } = await res; if (status !== 200) throw new Error(d.error || 'xəta ' + status); return d; };
+  /** JSON POST (bütün endpointlər eyni başlıqları istəyir) */
+  async function post(url, body, opts) {
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify(body), ...opts });
+    return { status: r.status, d: await r.json().catch(() => ({})) };
+  }
+  const api = (action, extra, opts) => post('jarvis.php', { action, ...extra }, opts);
+  const dueText = t => { const d = dueInfo(t); return d ? d.text : null; };
 
   /* ---------- Alətlər ---------- */
   const TOOLS = {
     get_overview() {
-      const all = buildProjects(), t = now();
+      const t = now(), tasks = data.tasks || [], sessions = data.sessions || [];
+      // Bir keçiddə proyekt üzrə sayğaclar (əvvəl hər proyekt üçün bütün tapşırıq/test siyahısı süzülürdü)
+      const openBy = new Map(), failBy = new Map(), myOpen = [], overdue = [];
+      for (const x of tasks) {
+        if (x.status === 'done') continue;
+        openBy.set(x.project, (openBy.get(x.project) || 0) + 1);
+        const d = dueInfo(x);
+        if (x.assignee === ME.name) myOpen.push({ title: x.title, project: x.project, status: x.status, due: d ? d.text : null });
+        if (d && d.left < 0) overdue.push({ title: x.title, assignee: x.assignee, project: x.project });
+      }
+      for (const x of data.tests || []) if (x.status === 'fail') failBy.set(x.project, (failBy.get(x.project) || 0) + 1);
+      const sessBy = new Map();
+      for (const s of sessions) { const st = eff(s); if (RANK[st] > 0) { if (!sessBy.has(s.user)) sessBy.set(s.user, []); sessBy.get(s.user).push({ ...s, st }); } }
       return {
         now: when(t), me: ME.name,
         users: (data.users || []).map(u => {
-          const ss = (data.sessions || []).filter(s => s.user === u).map(s => ({ ...s, st: eff(s) })).filter(s => RANK[s.st] > 0);
-          return { name: u, status: ss.length ? ss.sort((a, b) => RANK[b.st] - RANK[a.st])[0].st : isOnline(u) ? 'on dashboard' : 'offline', projects: ss.map(s => s.project), doing: ss.map(s => s.last_prompt).filter(Boolean).slice(0, 2) };
+          const ss = (sessBy.get(u) || []).sort((a, b) => RANK[b.st] - RANK[a.st]);
+          return { name: u, status: ss.length ? ss[0].st : isOnline(u) ? 'on dashboard' : 'offline', projects: ss.map(s => s.project), doing: ss.map(s => s.last_prompt).filter(Boolean).slice(0, 2) };
         }),
-        projects: all.map(p => ({ name: p.name, status: p.st, last_activity: ago(p.last), burning: burnOf(p.name) > 0, hours_without_finished_task: Math.floor(idleOf(p.name) / 3600) || 0,
-          open_tasks: (data.tasks || []).filter(x => x.project === p.name && x.status !== 'done').length, failing_tests: (data.tests || []).filter(x => x.project === p.name && x.status === 'fail').length })),
-        my_open_tasks: (data.tasks || []).filter(x => x.assignee === ME.name && x.status !== 'done').map(x => ({ title: x.title, project: x.project, status: x.status, due: dueInfo(x) ? dueInfo(x).text : null })),
-        overdue_tasks: (data.tasks || []).filter(x => dueInfo(x) && dueInfo(x).left < 0).map(x => ({ title: x.title, assignee: x.assignee, project: x.project })),
+        projects: buildProjects().map(p => { const idle = idleOf(p.name); return { name: p.name, status: p.st, last_activity: ago(p.last), burning: idle >= DAY, hours_without_finished_task: Math.floor(idle / 3600) || 0,
+          open_tasks: openBy.get(p.name) || 0, failing_tests: failBy.get(p.name) || 0 }; }),
+        my_open_tasks: myOpen,
+        overdue_tasks: overdue,
         meetings: (data.meetings || []).filter(m => +m.starts_at + m.minutes * 60 > t).slice(0, 5).map(m => ({ title: m.title, start: when(m.starts_at), minutes: +m.minutes, live: +m.starts_at <= t, attendees: m.attendees })),
-        agents: (data.users || []).map(u => { const a = agentInfo(u); return { user: u, online: a.online, running: a.run.length, queued: a.queued.length, projects: a.ag && a.ag.projects ? a.ag.projects.split('\n').filter(Boolean) : [] }; }),
+        agents: (data.users || []).map(u => { const a = agentInfo(u); return { user: u, online: a.online, running: a.run.length, queued: a.queued.length, projects: a.projects }; }),
         ship_deadlines: (data.ships || []).filter(s => +s.deadline).map(s => ({ user: s.user, mission: s.mission, due: when(s.deadline), overdue: s.deadline < t })),
       };
     },
     get_project(a) {
       need(a, 'name');
-      const pl = best(planetNames(), a.name, p => [p.name, p.label]);
+      const pl = findPlanet(a.name);
       if (!pl) throw new Error('Belə planet tapılmadı: ' + a.name);
-      const n = pl.name, p = buildProjects().find(x => x.name === n);
+      const n = pl.name, p = buildProjects().find(x => x.name === n), idle = idleOf(n);
       return {
         name: n, universe: pl.uni, status: p ? p.st : null, last_activity: p ? ago(p.last) : null, sessions: p ? p.sessions : 0, edits: p ? p.edits : 0,
-        burning: burnOf(n) > 0, hours_without_finished_task: Math.floor(idleOf(n) / 3600) || 0,
+        burning: idle >= DAY, hours_without_finished_task: Math.floor(idle / 3600) || 0,
         active_sessions: (data.sessions || []).filter(s => s.project === n).map(s => ({ user: s.user, status: eff(s), prompt: s.last_prompt, last: s.last_summary })).filter(s => RANK[s.status] > 0),
         recent_events: (data.events || []).filter(e => e.project === n).slice(0, 8).map(e => e.user + ': ' + e.summary + ' (' + ago(e.created_at) + ')'),
-        tasks: (data.tasks || []).filter(x => x.project === n).map(x => ({ title: x.title, status: x.status, assignee: x.assignee, due: dueInfo(x) ? dueInfo(x).text : null })),
+        tasks: (data.tasks || []).filter(x => x.project === n).map(x => ({ title: x.title, status: x.status, assignee: x.assignee, due: dueText(x) })),
         tests: (data.tests || []).filter(x => x.project === n).map(x => ({ title: x.title, result: x.status, note: x.note || undefined })),
         mcp_servers: satsOf(n).map(s => s.name),
       };
@@ -172,10 +211,10 @@
     list_tasks(a) {
       let ts = data.tasks || [];
       if (a.assignee) { const u = userName(a.assignee); ts = ts.filter(t => t.assignee === u); }
-      if (a.project) { const pl = best(planetNames(), a.project, p => [p.name, p.label]); ts = ts.filter(t => t.project === (pl ? pl.name : a.project)); }
+      if (a.project) { const n = projectOf(a.project); ts = ts.filter(t => t.project === n); }
       const st = a.status || 'open';
       if (st === 'open') ts = ts.filter(t => t.status !== 'done'); else if (st !== 'any') ts = ts.filter(t => t.status === st);
-      return { count: ts.length, tasks: ts.slice(0, 25).map(t => ({ title: t.title, project: t.project, assignee: t.assignee, status: t.status, due: dueInfo(t) ? dueInfo(t).text : null })) };
+      return { count: ts.length, tasks: ts.slice(0, 25).map(t => ({ title: t.title, project: t.project, assignee: t.assignee, status: t.status, due: dueText(t) })) };
     },
     async get_report(a) {
       const d = await R(REP('get', a.day === 'yesterday' ? 'yesterday' : 'today'));
@@ -189,18 +228,17 @@
       if (/^(panel|esas|ana sehife)$/.test(q)) { location.hash = '#'; return ok('Panel'); }
       if (/^(plan|plan gemisi|plan stansiyasi)$/.test(q)) { go(SHIPKEY); return ok('Plan stansiyası'); }
       const u = best(UNIVERSES, a.target, x => [x.name, x.id, x.name.replace(' Universe', '')]);
-      const pl = best(planetNames(), a.target, p => [p.name, p.label]);
+      const pl = findPlanet(a.target);
       if (u && (!pl || /univers|qalaktika|galaxy/.test(q) || norm(u.name) === q || u.id === q)) { location.hash = '#kainat/@' + u.id; return ok(u.name); }
       if (!pl) throw new Error('Belə yer tapılmadı: ' + a.target);
       go(pl.name); return ok(pl.label || pl.name);
     },
     async create_task(a) {
       need(a, 'title', 'project'); confirmed(a);
-      const pl = best(planetNames(), a.project, p => [p.name, p.label]);
       const assignee = a.assignee ? userName(a.assignee) : ME.name;
       if (!assignee) throw new Error('Belə istifadəçi yoxdur: ' + a.assignee);
       const due = parseWhen(a.due); if (Number.isNaN(due)) throw new Error('Tarix başa düşülmədi: ' + a.due);
-      const project = pl ? pl.name : a.project;
+      const project = projectOf(a.project);
       const d = await R(TSK('create', { title: a.title, details: a.details || '', project, assignee, due_at: due || 0 }));
       await load(); return ok(`Tapşırıq yaradıldı: “${a.title}” → ${assignee}, ${project}` + (due ? ', son tarix ' + when(due) : '') + (d.auto ? ' · 🤖 agentinə avtomatik göndərildi' : ''),
         { auto_sent_to_agent: !!d.auto });
@@ -234,7 +272,7 @@
     },
     async record_test_result(a) {
       need(a, 'project', 'test', 'result'); confirmed(a);
-      const pl = best(planetNames(), a.project, p => [p.name, p.label]); const project = pl ? pl.name : a.project;
+      const project = projectOf(a.project);
       let t = best((data.tests || []).filter(x => x.project === project), a.test, x => x.title);
       if (!t) { const d = await R(WLD('test_save', { project, title: a.test, steps: '' })); t = { id: d.id, title: a.test }; }
       await R(WLD('test_status', { id: t.id, status: a.result, note: a.note || '' })); await load();
@@ -244,21 +282,21 @@
       need(a, 'to', 'text'); confirmed(a);
       const to = /^(all|hami|hamiya|hamısı|hamıya|\*)$/i.test(norm(a.to)) ? '*' : userName(a.to);
       if (!to) throw new Error('Belə istifadəçi yoxdur: ' + a.to);
-      const r = await fetch('message.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'send', to, body: String(a.text).slice(0, 500) }) });
-      const d = await r.json().catch(() => ({})); if (r.status !== 200 || !d.message) throw new Error(d.error || 'Göndərilmədi');
+      const { status, d } = await post('message.php', { action: 'send', to, body: String(a.text).slice(0, 500) });
+      if (status !== 200 || !d.message) throw new Error(d.error || 'Göndərilmədi');
       msgSeen.add(+d.message.id); data.messages = [d.message, ...(data.messages || [])]; playMessage(d.message); load();
       return ok(`Mesaj raketlə göndərildi → ${to === '*' ? 'hamı' : to}`);
     },
     async run_claude_code(a) {
       need(a, 'prompt'); confirmed(a);
       let project = null;
-      if (a.project) { const pl = best(planetNames(), a.project, p => [p.name, p.label]); project = pl ? pl.name : a.project; }
+      if (a.project) project = projectOf(a.project);
       else if (curPlanet && !xKind(curPlanet)) project = curPlanet;                       // baxdığı planet
       else { const ps = buildProjects(); if (ps.length === 1) project = ps[0].name; }
       if (!project) throw new Error('Hansı proyektdə? Proyekt adını soruş.');
-      const r = await fetch('jarvis.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action: 'agent_send', project, prompt: a.prompt }) });
-      const d = await r.json().catch(() => ({})); if (r.status !== 200) throw new Error(d.error || 'Göndərilmədi');
-      J.watch.set(+d.id, { project, prompt: a.prompt, st: 'queued' });
+      const { status, d } = await api('agent_send', { project, prompt: a.prompt });
+      if (status !== 200) throw new Error(d.error || 'Göndərilmədi');
+      watchCmd(+d.id, { project, prompt: a.prompt, st: 'queued' });
       await load();
       line('a', `🤖 Claude Code-a göndərildi (#${d.id}, ${project})` + (d.agent_online ? '' : ' · agent oflayndır, növbədə gözləyir'));
       return { ok: true, task_id: d.id, project, agent_online: !!d.agent_online, claude_login: d.claude_login,
@@ -266,7 +304,7 @@
     },
     get_claude_tasks(a) {
       let cs = (data.commands || []).filter(c => c.user === ME.name);
-      if (a && a.project) { const pl = best(planetNames(), a.project, p => [p.name, p.label]); cs = cs.filter(c => c.project === (pl ? pl.name : a.project)); }
+      if (a && a.project) { const n = projectOf(a.project); cs = cs.filter(c => c.project === n); }
       return { tasks: cs.slice(0, 8).map(c => ({ id: +c.id, project: c.project, status: c.status, prompt: c.prompt.slice(0, 200), result: (c.result || '').slice(-600), created: ago(c.created_at) })) };
     },
     end_conversation() { J.ending = true; return { ok: true }; },
@@ -295,9 +333,12 @@
   }
   function waitAndStop() { if (J.outCtx && J.nextT > J.outCtx.currentTime + .05) return setTimeout(waitAndStop, 300); stop('Görüşənədək'); }
 
-  /* Claude Code tapşırıqlarını izlə: bitəndə Jarvis nəticəni səsli danışır */
-  setInterval(() => {
-    if (!J.watch.size || !data || !data.commands) return;   // data: index.php-dəki qlobal (let), window-da deyil
+  /* Claude Code tapşırıqlarını izlə: bitəndə Jarvis nəticəni səsli danışır. Taymer yalnız izlənən iş olanda işləyir. */
+  let watchTimer = null;
+  function watchCmd(id, w) { J.watch.set(id, w); if (!watchTimer) watchTimer = setInterval(checkWatch, 1500); }
+  function checkWatch() {
+    if (!J.watch.size) { clearInterval(watchTimer); watchTimer = null; return; }
+    if (!data || !data.commands) return;                     // data: index.php-dəki qlobal (let), window-da deyil
     for (const [id, w] of J.watch) {
       const c = data.commands.find(x => +x.id === id); if (!c || c.status === w.st) continue;
       w.st = c.status;
@@ -310,21 +351,22 @@
       if (J.ready) J.conn.note(
         `[System note, not spoken by the user] Claude Code task #${id} in project "${w.project}" finished with status "${c.status}". Task: ${w.prompt.slice(0, 300)}\nResult (may be truncated):\n${res.slice(-2500) || '(empty)'}\nTell the user the outcome in 1-2 short sentences.`);
     }
-  }, 1500);
+  }
 
 
   /* ---------- Səs ---------- */
-  // Mikrofon: brauzerin tezliyindən adapterin istədiyi tezliyə (16/24 kHz) çevrilmiş 16-bit PCM parçaları
+  // Mikrofon: brauzerin tezliyindən adapterin istədiyi tezliyə (16/24 kHz) çevrilmiş 16-bit PCM parçaları.
+  // Hazır parça kopyalanmır, sahibliyi (transfer) əsas axına keçir; səs səviyyəsi parça ilə bir göndərilir.
   const WORKLET = `class JvMic extends AudioWorkletProcessor {
-    constructor(o) { super(); const p = o.processorOptions; this.ratio = sampleRate / p.rate; this.t = 0; this.last = 0; this.out = new Int16Array(p.chunk); this.n = 0; this.lv = 0; }
+    constructor(o) { super(); const p = o.processorOptions; this.ratio = sampleRate / p.rate; this.t = 0; this.last = 0; this.chunk = p.chunk; this.out = new Int16Array(p.chunk); this.n = 0; }
     process(inputs) {
       const x = inputs[0] && inputs[0][0]; if (!x) return true;
-      let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * x[i]; this.lv = Math.sqrt(s / x.length);
+      let s = 0; for (let i = 0; i < x.length; i++) s += x[i] * x[i]; const lv = Math.sqrt(s / x.length);
       for (;;) {
         const i = Math.floor(this.t); if (i + 1 >= x.length) break;
         const v = i < 0 ? this.last + (x[0] - this.last) * (this.t + 1) : x[i] + (x[i + 1] - x[i]) * (this.t - i);
-        this.out[this.n++] = Math.max(-32768, Math.min(32767, v * 32767));
-        if (this.n === this.out.length) { this.port.postMessage({ pcm: this.out.buffer.slice(0), lv: this.lv }); this.n = 0; }
+        this.out[this.n++] = v <= -1 ? -32768 : v >= 1 ? 32767 : (v * 32767) | 0;
+        if (this.n === this.out.length) { const b = this.out.buffer; this.port.postMessage({ pcm: b, lv }, [b]); this.out = new Int16Array(this.chunk); this.n = 0; }
         this.t += this.ratio;
       }
       this.t -= x.length; this.last = x[x.length - 1];
@@ -332,6 +374,13 @@
     }
   } registerProcessor('jv-mic', JvMic);`;
   function b64(buf) { const u = new Uint8Array(buf); let s = ''; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); }
+  /** base64 → 16-bit PCM → float nümunələr (bir keçiddə; sətir üzərində charCodeAt ilə iki dəfə keçmirik) */
+  function pcmFloat(b64data) {
+    const bin = atob(b64data), n = bin.length >> 1; if (!n) return null;
+    const f = new Float32Array(n);
+    for (let i = 0, j = 0; i < n; i++, j += 2) { const v = bin.charCodeAt(j) | (bin.charCodeAt(j + 1) << 8); f[i] = (v >= 32768 ? v - 65536 : v) / 32768; }
+    return f;
+  }
   async function startMic(ad) {
     J.micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
     J.micCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -352,9 +401,8 @@
   }
   function play(b64data, rate) {
     if (!J.outCtx || !b64data) return;
-    const bin = atob(b64data), n = bin.length >> 1; if (!n) return;
-    const buf = J.outCtx.createBuffer(1, n, rate || 24000), ch = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) { let v = bin.charCodeAt(i * 2) | (bin.charCodeAt(i * 2 + 1) << 8); if (v >= 32768) v -= 65536; ch[i] = v / 32768; }
+    const f = pcmFloat(b64data); if (!f) return;
+    const buf = J.outCtx.createBuffer(1, f.length, rate || 24000); buf.copyToChannel(f, 0);
     const src = J.outCtx.createBufferSource(); src.buffer = buf; src.connect(J.outGain);
     const t = Math.max(J.nextT, J.outCtx.currentTime + .03); src.start(t); J.nextT = t + buf.duration;
     J.sources.add(src); src.onended = () => { J.sources.delete(src); if (!J.sources.size && J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); };
@@ -463,9 +511,12 @@
       connect(d, h) {
         const ws = new WebSocket(d.ws + '?fal_jwt_token=' + encodeURIComponent(d.token)); ws.binaryType = 'arraybuffer';
         const send = o => { if (ws.readyState === 1) ws.send(MP.encode(o)); };
-        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false;
-        // Cavab yaratmağı yalnız səs bitəndə istə (üst-üstə danışmasın)
-        const create = () => { if (playing()) { waitCreate = true; return setTimeout(create, 250); } waitCreate = false; send({ type: 'response.create' }); };
+        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null;
+        // Cavab yaratmağı yalnız səs bitəndə istə (üst-üstə danışmasın). Bir gözləyən taymer olur: alət nəticəsi + qeyd eyni anda gəlsə iki response.create getməsin.
+        const create = () => {
+          if (playing()) { waitCreate = true; if (!createT) createT = setTimeout(() => { createT = null; create(); }, 250); return; }
+          waitCreate = false; send({ type: 'response.create' });
+        };
         ws.onopen = () => send({ type: 'session.update', session: d.session });
         ws.onmessage = ev => {
           let m; try { m = typeof ev.data === 'string' ? JSON.parse(ev.data) : MP.decode(ev.data); } catch (e) { return; }
@@ -512,17 +563,13 @@
           },
           context: text => send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }),
           mute: () => {},
-          close: () => { if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
+          close: () => { clearTimeout(createT); createT = null; if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
         };
       },
     },
   };
 
   /* ---------- Sessiya (təminatçıdan asılı deyil) ---------- */
-  async function api(action, extra) {
-    const r = await fetch('jarvis.php', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ action, ...extra }) });
-    return { status: r.status, d: await r.json().catch(() => ({})) };
-  }
   const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} } };
   const prov = $j('jv-prov');
   async function loadProviders() {
@@ -585,7 +632,8 @@
   }
   function cleanup() {
     clearInterval(J.usageTimer); J.usageTimer = null;
-    if (J.ready && J.lastUsage) { const s = Math.round((Date.now() - J.lastUsage) / 1000); if (s > 0) api('usage', { seconds: s }); }
+    // son istifadə hissəsi: səhifə bağlananda da çatsın (keepalive)
+    if (J.ready && J.lastUsage) { const s = Math.round((Date.now() - J.lastUsage) / 1000); if (s > 0) api('usage', { seconds: s }, { keepalive: true }).catch(() => {}); }
     J.ready = false; J.lastUsage = 0; prov.disabled = false;
     stopPlayback();
     if (J.micStream) J.micStream.getTracks().forEach(t => t.stop());
@@ -602,12 +650,12 @@
     if (J.ready && J.state !== 'speaking' && J.state !== 'tool') setState(J.muted ? 'muted' : 'listening');
   }
 
-  btn.onclick = async () => { box.hidden = !box.hidden; if (!box.hidden && J.state === 'off') { await loadProviders().catch(() => {}); start(); } };
-  $j('jv-close').onclick = () => { stop(); box.hidden = true; };
-  $j('jv-go').onclick = () => (J.state === 'off' || J.state === 'error') ? start() : stop('Sessiya bitdi');
+  btn.onclick = async () => { showBox(box.hidden); if (!box.hidden && J.state === 'off') { await loadProviders().catch(() => {}); start(); } };
+  $j('jv-close').onclick = () => { stop(); showBox(false); };
+  goEl.onclick = () => (J.state === 'off' || J.state === 'error') ? start() : stop('Sessiya bitdi');
   $j('jv-mic').onclick = toggleMute;
   addEventListener('keydown', e => {
-    if (e.altKey && (e.code === 'KeyJ')) { e.preventDefault(); if (box.hidden) { box.hidden = false; start(); } else if (J.state === 'off' || J.state === 'error') start(); else stop('Sessiya bitdi'); }
+    if (e.altKey && (e.code === 'KeyJ')) { e.preventDefault(); if (box.hidden) { showBox(true); start(); } else if (J.state === 'off' || J.state === 'error') start(); else stop('Sessiya bitdi'); }
   });
   addEventListener('beforeunload', () => cleanup());
   /** Səs səviyyəsi 0..1 (danışanda Jarvis-in səsi, dinləyəndə mikrofon) — HUD/kainat effektləri üçün */

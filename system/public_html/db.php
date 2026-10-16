@@ -6,6 +6,10 @@ if (is_file(__DIR__ . '/config.local.php')) {
 }
 date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
+// Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
+// yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
+const SCHEMA_VERSION = 3;
+
 function db(): PDO
 {
     static $pdo = null;
@@ -19,6 +23,23 @@ function db(): PDO
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
     $sqlite = str_starts_with($c['dsn'], 'sqlite');
+    if ($sqlite) {
+        $pdo->exec('PRAGMA busy_timeout = 3000');          // paralel sorğular (feed + agent + Jarvis) "database is locked" verməsin
+    }
+    try {
+        $v = $pdo->query("SELECT v FROM settings WHERE k = 'schema'")->fetchColumn();
+    } catch (Throwable $e) {
+        $v = false;                                          // settings cədvəli hələ yoxdur: ilk işə düşmə
+    }
+    if ((string)$v !== (string)SCHEMA_VERSION) {
+        db_migrate($pdo, $sqlite, $config);
+    }
+    return $pdo;
+}
+
+/** Bütün cədvəllər, sütunlar və indekslər (idempotent). Sonda settings.schema = SCHEMA_VERSION yazılır. */
+function db_migrate(PDO $pdo, bool $sqlite, array $config): void
+{
     $id = $sqlite ? 'INTEGER PRIMARY KEY AUTOINCREMENT' : 'BIGINT AUTO_INCREMENT PRIMARY KEY';
     $key = $sqlite ? '' : ', KEY idx_created (created_at)';
     $pdo->exec("CREATE TABLE IF NOT EXISTS events (
@@ -162,6 +183,17 @@ function db(): PDO
         $pdo->exec("ALTER TABLE commands ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'prompt'");   // prompt | task (lövhə tapşırığının icrası) | review (başqa agentin yoxlaması)
     } catch (Throwable $e) {
         // sütun artıq var
+    }
+    try {
+        $pdo->exec('ALTER TABLE commands ADD COLUMN chat INT NOT NULL DEFAULT 0');   // söhbət: söhbətin ilk komandasının id-si (agent Claude sessiyasını söhbət üzrə saxlayır); 0 = söhbətsiz (öz agentinə / lövhə)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    // Köhnə uzaq komandalar söhbətlərə bölünür: eyni sahib + göndərən + proyekt = bir söhbət (agent sessiyanı əvvəl belə saxlayırdı)
+    $old = $pdo->query("SELECT user, creator, project, MIN(id) AS first FROM commands WHERE chat = 0 AND creator != '' GROUP BY user, creator, project")->fetchAll();
+    foreach ($old as $o) {
+        $pdo->prepare("UPDATE commands SET chat = ? WHERE chat = 0 AND user = ? AND creator = ? AND project = ?")
+            ->execute([(int)$o['first'], $o['user'], $o['creator'], $o['project']]);
     }
     try {
         $pdo->exec('ALTER TABLE tasks ADD COLUMN rounds INT NOT NULL DEFAULT 0');   // avtomatik yoxlama dövrələri (FAIL → düzəliş → yenidən yoxlama), limit var
@@ -318,6 +350,20 @@ function db(): PDO
         body TEXT NOT NULL,
         created_at INT NOT NULL
     )");
+    // İndekslər: agent növbəsi (user+status), tapşırıq ↔ komanda, proyekt üzrə hadisələr (feed ?project=), açıq tapşırıqlar
+    foreach ([
+        'idx_cmd_user_status' => 'commands (user, status)',
+        'idx_cmd_chat' => 'commands (chat)',
+        'idx_tasks_cmd' => 'tasks (command_id)',
+        'idx_tasks_status' => 'tasks (status, updated_at)',
+        'idx_events_project' => 'events (project, id)',
+    ] as $name => $on) {
+        try {
+            $pdo->exec("CREATE INDEX " . ($sqlite ? 'IF NOT EXISTS ' : '') . "$name ON $on");
+        } catch (Throwable $e) {
+            // indeks artıq var (MySQL-də IF NOT EXISTS yoxdur)
+        }
+    }
     // İlk işə düşəndə config.php-dəki istifadəçiləri köçür (birinci admin olur, parolu köhnə ümumi paroldur)
     if ((int)$pdo->query('SELECT COUNT(*) FROM users')->fetchColumn() === 0 && !empty($config['users'])) {
         $first = true;
@@ -329,7 +375,13 @@ function db(): PDO
             $first = false;
         }
     }
-    return $pdo;
+    $e = $pdo->prepare("SELECT 1 FROM settings WHERE k = 'schema'");
+    $e->execute();
+    if ($e->fetchColumn()) {
+        $pdo->prepare("UPDATE settings SET v = ? WHERE k = 'schema'")->execute([(string)SCHEMA_VERSION]);
+    } else {
+        $pdo->prepare("INSERT INTO settings (k, v) VALUES ('schema', ?)")->execute([(string)SCHEMA_VERSION]);
+    }
 }
 
 function token_user(): ?string
@@ -410,23 +462,37 @@ function task_command_prompt(array $t): string
         . "Bu tapşırığı bu proyektdə yerinə yetir. Fayl dəyişikliyi və əsas git əmrləri (status, pull, add, commit) icazəlidir. Qalan terminal əmrləri (test, quraşdırma, push) bloklana bilər: lazım olsa, əl ilə nəyi işlətmək lazım olduğunu sonda yaz. İşi bitirəndə nə etdiyini qısa yaz.";
 }
 
-/** İstifadəçinin agenti bu proyektin qovluğunu bildiribmi? (panel adı → qovluq adı alias-ları da sayılır). Agent siyahı göndərməyibsə false. */
-function agent_has_project(PDO $pdo, string $user, string $project): bool
+/** Agentin bildirdiyi proyekt qovluqları (ping ilə gəlir; sətir-sətir saxlanır). Agent heç qoşulmayıbsa null. */
+function agent_projects(PDO $pdo, string $user): ?array
 {
     $st = $pdo->prepare('SELECT projects FROM agents WHERE user = ?');
     $st->execute([$user]);
     $raw = $st->fetchColumn();
-    if ($raw === false) {
-        return false;
-    }
-    $allowed = array_values(array_filter(explode("\n", (string)$raw), 'strlen'));
-    if (!$allowed) {
-        return false;
-    }
+    return $raw === false ? null : array_values(array_filter(explode("\n", (string)$raw), 'strlen'));
+}
+
+/** Proyektin panel adı və onun köhnə qovluq adları (aliases: ad dəyişibsə). */
+function project_names(PDO $pdo, string $project): array
+{
     $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');
     $al->execute([$project]);
-    $names = array_merge([$project], $al->fetchAll(PDO::FETCH_COLUMN));
-    return (bool)array_intersect($names, $allowed);
+    return array_merge([$project], $al->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/** Agentin növbəsindəki işlərin sayı (təsdiq gözləyən + növbədə + işləyən). Limit: AGENT_QUEUE_MAX. */
+const AGENT_QUEUE_MAX = 5;
+function agent_queue_len(PDO $pdo, string $user): int
+{
+    $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('pending','queued','running')");
+    $c->execute([$user]);
+    return (int)$c->fetchColumn();
+}
+
+/** İstifadəçinin agenti bu proyektin qovluğunu bildiribmi? (panel adı → qovluq adı alias-ları da sayılır). Agent siyahı göndərməyibsə false. */
+function agent_has_project(PDO $pdo, string $user, string $project): bool
+{
+    $allowed = agent_projects($pdo, $user);
+    return $allowed ? (bool)array_intersect(project_names($pdo, $project), $allowed) : false;
 }
 
 /**
@@ -445,9 +511,7 @@ function auto_run_task(PDO $pdo, array $t, int $now): ?int
     if ($auto === false || (int)$auto !== 1 || !agent_has_project($pdo, $t['assignee'], $t['project'])) {
         return null;
     }
-    $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('pending','queued','running')");
-    $c->execute([$t['assignee']]);
-    if ((int)$c->fetchColumn() >= 5) {
+    if (agent_queue_len($pdo, $t['assignee']) >= AGENT_QUEUE_MAX) {
         return null;
     }
     $cid = queue_command($pdo, $t['assignee'], $t['project'], task_command_prompt($t), 'task', $now);
@@ -477,10 +541,8 @@ function pick_reviewer(PDO $pdo, string $project, string $exclude): ?string
         if ($a['user'] === $exclude || $now - (int)$a['last_seen'] > 30 || !agent_has_project($pdo, $a['user'], $project)) {
             continue;
         }
-        $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('pending','queued','running')");
-        $c->execute([$a['user']]);
-        $load = (int)$c->fetchColumn();
-        if ($load < 5 && $load < $bestLoad) {
+        $load = agent_queue_len($pdo, $a['user']);
+        if ($load < AGENT_QUEUE_MAX && $load < $bestLoad) {
             $best = $a['user'];
             $bestLoad = $load;
         }

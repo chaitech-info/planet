@@ -179,8 +179,8 @@ def kill_group(proc):
             time.sleep(.1)
 
 
-SESSIONS = os.environ.get('CLAUDE_TEAM_SESSIONS', os.path.expanduser('~/.claude-team-sessions.json'))   # proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
-SESSION_TTL = 24 * 3600
+SESSIONS = os.environ.get('CLAUDE_TEAM_SESSIONS', os.path.expanduser('~/.claude-team-sessions.json'))   # söhbət ('chat:<id>') və ya proyekt+göndərən → claude sessiya nömrəsi (söhbət davam etsin)
+SESSION_TTL = 30 * 24 * 3600                                     # köhnə söhbətə qayıtmaq olsun (Claude Code sessiyaları da ~30 gün saxlayır)
 SESS_LOCK = threading.Lock()   # paralel işçilər faylı eyni anda yazmasın
 
 
@@ -361,12 +361,16 @@ def parse_result(out):
 
 
 def run_claude(base, token, claude, cmd, path, extra_args=(), cwd=None):
-    """claude -p işlədir. Eyni proyekt və göndərən üçün əvvəlki söhbəti davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan.
+    """claude -p işlədir. Söhbətin (chat) və ya proyekt+göndərənin əvvəlki sessiyasını davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan.
     cwd: paralel iş üçün git worktree (onda söhbət davam etdirilmir və saxlanmır, çünki sessiya qovluğa bağlıdır)."""
     wt = bool(cwd and cwd != path)
     run_dir = cwd or path
-    key = path + '|' + (cmd.get('creator') or '')
-    sid = None if (cmd.get('fresh') or wt) else (sess_load().get(key) or {}).get('sid')
+    legacy = path + '|' + (cmd.get('creator') or '')
+    key = f"chat:{cmd['chat']}" if cmd.get('chat') else legacy
+    sid = None
+    if not (cmd.get('fresh') or wt):
+        store = sess_load()
+        sid = (store.get(key) or store.get(legacy) or {}).get('sid')   # legacy: söhbətlərdən əvvəl başlanmış söhbət
     mode = ['stream' if STREAM else 'json']
     tail = ['--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
 
@@ -604,13 +608,17 @@ def main():
         single_instance()
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGINT, on_signal)
-    last_auth, logged_in, warned, threads = 0, True, False, []
+    last_ping, last_auth, logged_in, warned, threads = 0, 0, True, False, []
     print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}' + (f'  |  {n} paralel işçi' if n > 1 else ''), flush=True)
     while not STOP.is_set():
         try:
-            if time.time() - last_auth > 10:                   # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
-                last_auth = time.time()
-                logged_in = auth_ok(claude)
+            now = time.time()
+            if now - last_ping > 10:                           # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
+                last_ping = now
+                # `claude auth status` ayrıca proses açır (ağırdır): girişlidirsə 60 saniyədən bir, deyilsə 10 saniyədən bir yoxla
+                if now - last_auth > (60 if logged_in else 10):
+                    last_auth = now
+                    logged_in = auth_ok(claude)
                 call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects()), 'workers': n})
                 if not logged_in and not warned:
                     warned = True

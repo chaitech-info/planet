@@ -38,28 +38,35 @@ $lang = ($config['jarvis_language'] ?? 'az') === 'en' ? 'en' : 'az';
 $limitSec = max(1, (int)($config['jarvis_daily_minutes'] ?? 60)) * 60;
 $today = date('Y-m-d');
 
-function used_today(PDO $pdo, string $user, string $day): int
+/** Bu günün istifadəsi (saniyə); sətir yoxdursa null. */
+function used_today(PDO $pdo, string $user, string $day): ?int
 {
     $st = $pdo->prepare('SELECT seconds FROM jarvis_usage WHERE user = ? AND day = ?');
     $st->execute([$user, $day]);
-    return (int)$st->fetchColumn();
+    $v = $st->fetchColumn();
+    return $v === false ? null : (int)$v;
 }
 
 if ($act === 'status') {
-    $used = used_today($pdo, $me['name'], $today);
+    $used = (int)used_today($pdo, $me['name'], $today);
     json_out(['configured' => (bool)$providers, 'providers' => $providers, 'provider' => $defProvider, 'model' => $defProvider === 'grok' ? 'Grok Voice · fal.ai' : $model, 'used' => $used, 'limit' => $limitSec, 'admin' => $me['role'] === 'admin']);
 }
 
 if ($act === 'usage') {                 // brauzer sessiya zamanı hər ~30 saniyədən bir bildirir
     $sec = max(0, min(120, (int)($in['seconds'] ?? 0)));
-    if ($sec > 0) {
-        $up = $pdo->prepare('UPDATE jarvis_usage SET seconds = seconds + ? WHERE user = ? AND day = ?');
-        $up->execute([$sec, $me['name'], $today]);
-        if ($up->rowCount() === 0) {
-            $pdo->prepare('INSERT INTO jarvis_usage (user, day, seconds) VALUES (?,?,?)')->execute([$me['name'], $today, $sec]);
+    $cur = used_today($pdo, $me['name'], $today);
+    if ($sec > 0) {                     // bir SELECT + bir yazı (əvvəl UPDATE → INSERT → SELECT idi)
+        if ($cur === null) {
+            try {
+                $pdo->prepare('INSERT INTO jarvis_usage (user, day, seconds) VALUES (?,?,?)')->execute([$me['name'], $today, $sec]);
+            } catch (Throwable $e) {    // iki tab eyni anda: sətri o biri yaradıb
+                $pdo->prepare('UPDATE jarvis_usage SET seconds = seconds + ? WHERE user = ? AND day = ?')->execute([$sec, $me['name'], $today]);
+            }
+        } else {
+            $pdo->prepare('UPDATE jarvis_usage SET seconds = seconds + ? WHERE user = ? AND day = ?')->execute([$sec, $me['name'], $today]);
         }
     }
-    $used = used_today($pdo, $me['name'], $today);
+    $used = (int)$cur + $sec;
     json_out(['ok' => true, 'used' => $used, 'limit' => $limitSec, 'over' => $used >= $limitSec]);
 }
 
@@ -79,19 +86,12 @@ if ($act === 'agent_send') {           // Jarvis → istifadəçinin öz Claude 
         json_out(['error' => 'Bu istifadəçinin Claude Code agenti hələ heç qoşulmayıb. Kompüterdə agenti işə sal (📦 Paket → BASLA.md).'], 409);
     }
     $allowed = array_values(array_filter(explode("\n", (string)$a['projects']), 'strlen'));
-    if ($allowed) {                       // agent qovluq siyahısını bildiribsə: yalnız onlarda işləyə bilər (qovluq adı → panel adı alias-ları da)
-        $names = [$project];
-        $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');
-        $al->execute([$project]);
-        $names = array_merge($names, $al->fetchAll(PDO::FETCH_COLUMN));
-        if (!array_intersect($names, $allowed)) {
-            json_out(['error' => "Claude Code-un bu kompüterdə \"$project\" üçün qovluğu yoxdur (bu planet kod proyekti deyil və ya agentə əlavə olunmayıb). İcazəli proyektlər: " . implode(', ', $allowed) . '.', 'allowed' => $allowed], 409);
-        }
+    // agent qovluq siyahısını bildiribsə: yalnız onlarda işləyə bilər (qovluq adı → panel adı alias-ları da, db.php ilə eyni qayda)
+    if ($allowed && !array_intersect(project_names($pdo, $project), $allowed)) {
+        json_out(['error' => "Claude Code-un bu kompüterdə \"$project\" üçün qovluğu yoxdur (bu planet kod proyekti deyil və ya agentə əlavə olunmayıb). İcazəli proyektlər: " . implode(', ', $allowed) . '.', 'allowed' => $allowed], 409);
     }
-    $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('queued','running')");
-    $c->execute([$me['name']]);
-    if ((int)$c->fetchColumn() >= 5) {
-        json_out(['error' => 'növbədə artıq 5 tapşırıq var, gözlə'], 429);
+    if (agent_queue_len($pdo, $me['name']) >= AGENT_QUEUE_MAX) {
+        json_out(['error' => 'növbədə artıq ' . AGENT_QUEUE_MAX . ' tapşırıq var, gözlə'], 429);
     }
     $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at) VALUES (?,?,?,?,?,?,?,?)")
         ->execute([$me['name'], $project, $prompt, 'queued', '', $now, 0, 0]);
@@ -114,7 +114,8 @@ if (!in_array($provider, $providers, true)) {
     $what = $provider === 'grok' ? 'fal_key (fal.ai)' : 'gemini_api_key';
     json_out(['error' => ($provider === 'grok' ? 'fal.ai' : 'Gemini') . ' açarı qurulmayıb', 'setup' => "system/public_html/config.local.php faylına $what yaz (nümunə: config.local.example.php)."], 503);
 }
-if (used_today($pdo, $me['name'], $today) >= $limitSec) {
+$used = (int)used_today($pdo, $me['name'], $today);
+if ($used >= $limitSec) {
     json_out(['error' => 'Bu günün Jarvis limiti bitib (' . intdiv($limitSec, 60) . ' dəqiqə). Sabah yenidən.'], 429);
 }
 
@@ -170,7 +171,7 @@ foreach (glob(__DIR__ . '/jarvis_modules/*.php') ?: [] as $mf) {
     }
 }
 
-$users = array_column($pdo->query('SELECT name FROM users ORDER BY name')->fetchAll(), 'name');
+$users = $pdo->query("SELECT name FROM users WHERE role != 'student' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);   // komanda (feed.php ilə eyni)
 $langLine = $lang === 'az'
     ? 'Speak Azerbaijani (Azərbaycan dili) by default, naturally and correctly; if the user switches to another language, follow them.'
     : 'Speak English by default; if the user switches to another language, follow them.';
@@ -202,7 +203,7 @@ Rules:
 {$modPrompt}
 TXT;
 
-$out = ['provider' => $provider, 'lang' => $lang, 'used' => used_today($pdo, $me['name'], $today), 'limit' => $limitSec];
+$out = ['provider' => $provider, 'lang' => $lang, 'used' => $used, 'limit' => $limitSec];
 
 /* ---------- Adapter: Grok Voice (xAI) fal.ai üzərindən ---------- */
 if ($provider === 'grok') {
