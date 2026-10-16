@@ -5,7 +5,8 @@
    index.php-dəki qlobal funksiyalardan istifadə edir: data, TSK, WLD, cmdApi, go, load, ME və s. */
 (() => {
   const J = { watch: new Map(), conn: null, ready: false, state: 'off', micCtx: null, micNode: null, micStream: null, outCtx: null, outGain: null, outAn: null, micLv: 0,
-    nextT: 0, sources: new Set(), muted: false, t0: 0, lastUsage: 0, usageTimer: null, ending: false, lines: [], cur: { user: null, jarvis: null }, session: null };
+    nextT: 0, sources: new Set(), muted: false, t0: 0, lastUsage: 0, usageTimer: null, ending: false, lines: [], cur: { user: null, jarvis: null }, session: null,
+    curTool: '', loaded: new Set(['core']) };
 
   /* Modullar üçün hadisələr: state, ready, stop, user, bot, tool (alət icra olundu), command (Claude Code tapşırığının statusu dəyişdi) */
   const EV = {};
@@ -152,7 +153,26 @@
   async function findTask(q) { let t = pickTask(q); if (!t) { await load(); t = pickTask(q); } return t; }   // yeni yaradılıbsa, məlumatı təzələ
   const need = (a, ...ks) => { for (const k of ks) if (a[k] === undefined || a[k] === null || a[k] === '') throw new Error('"' + k + '" lazımdır'); };
   const ok = (msg, extra) => { line('a', '✓ ' + msg); return { ok: true, result: msg, ...extra }; };
-  function confirmed(a) { if (a.confirmed !== true) throw new Error('Not confirmed: describe the action to the user, ask for confirmation, then call again with confirmed=true.'); }
+  /* Təsdiq səviyyələri: g (təsdiqsiz), y (dərhal + 2.5 s "Ləğv et" çipi, runTools-da), r (confirmed=true lazımdır).
+     Mənbə: sessiya cavabındakı tiers; istifadəçi üstələməsi localStorage jv-tiers = {"alət":"g|y|r"}. */
+  const tierMap = () => { try { const o = JSON.parse(localStorage.getItem('jv-tiers') || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } };
+  function tierOf(name) {
+    const o = tierMap()[name]; if (o === 'g' || o === 'y' || o === 'r') return o;
+    const t = J.session && J.session.tiers && J.session.tiers[name];
+    return t === 'g' || t === 'y' || t === 'r' ? t : 'g';
+  }
+  /** confirmed(args, name?) — name verilməsə hazırda icra olunan alət. Yalnız r tələb edir: y/g üçün səsli "Edim?" yoxdur (y-ni runTools çiplə saxlayır). */
+  function confirmed(a, name) {
+    if (tierOf(name || J.curTool || '') === 'r' && (!a || a.confirmed !== true)) throw new Error('Not confirmed: describe the action to the user, ask for confirmation, then call again with confirmed=true.');
+  }
+  /** Üstələnmiş səviyyəyə görə deklarasiyadakı confirmed parametrini əlavə et / çıxar (server yalnız öz tier-inə görə qoyur) */
+  function declFor(t) {
+    const want = tierOf(t.name) === 'r', p = t.parameters || {}, props = p.properties && typeof p.properties === 'object' ? p.properties : {};
+    const has = !!props.confirmed; if (want === has) return t;
+    const np = { ...props }, req = (p.required || []).filter(x => x !== 'confirmed');
+    if (want) { np.confirmed = { type: 'boolean', description: 'true only after the user has explicitly confirmed this exact action in this conversation' }; req.push('confirmed'); } else delete np.confirmed;
+    return { ...t, parameters: { ...p, type: 'object', properties: np, required: req.length ? req : undefined } };
+  }
   const R = async res => { const { status, d } = await res; if (status !== 200) throw new Error(d.error || 'xəta ' + status); return d; };
   /** JSON POST (bütün endpointlər eyni başlıqları istəyir) */
   async function post(url, body, opts) {
@@ -295,7 +315,7 @@
       else if (curPlanet && !xKind(curPlanet)) project = curPlanet;                       // baxdığı planet
       else { const ps = buildProjects(); if (ps.length === 1) project = ps[0].name; }
       if (!project) throw new Error('Hansı proyektdə? Proyekt adını soruş.');
-      const { status, d } = await api('agent_send', { project, prompt: a.prompt });
+      const { status, d } = await api('agent_send', { project, prompt: a.prompt, said_at: saidAt() });
       if (status !== 200) throw new Error(d.error || 'Göndərilmədi');
       watchCmd(+d.id, { project, prompt: a.prompt, st: 'queued' });
       await load();
@@ -309,23 +329,109 @@
       return { tasks: cs.slice(0, 8).map(c => ({ id: +c.id, project: c.project, status: c.status, prompt: c.prompt.slice(0, 200), result: (c.result || '').slice(-600), created: ago(c.created_at) })) };
     },
     end_conversation() { J.ending = true; return { ok: true }; },
+    /* Qrupu sessiya ərzində yüklə: brauzerdə bütün deklarasiyalar var (all_tools), adapter session.update ilə birləşmiş siyahını göndərir */
+    load_tools(a) {
+      need(a, 'group');
+      const s = J.session || {}, all = s.all_tools || {}, g = norm(a.group).replace(/ /g, '_');
+      if (!all[g]) throw new Error('Belə qrup yoxdur: ' + a.group + '. Qruplar: ' + Object.keys(all).join(', '));
+      const names = all[g].map(t => t.name);
+      if (J.loaded.has(g)) return { ok: true, group: g, already_loaded: true, tools: names };
+      if (!J.conn || !J.conn.updateTools) return { ok: false, error: 'This voice provider cannot add tools mid-session; tell the user to restart Jarvis.' };
+      J.loaded.add(g);
+      J.conn.updateTools([...J.loaded].flatMap(x => all[x] || []).map(declFor));
+      line('i', '🧩 Alətlər yükləndi: ' + g + ' (' + names.length + ')');
+      const ins = (s.group_prompts || {})[g];
+      return { ok: true, group: g, tools: names, instructions: ins || undefined };
+    },
   };
+
+  /* ---------- Sürət: oxu alətlərinin 5 s keşi + danışarkən get_overview-u əvvəlcədən hazırla ---------- */
+  const READ = new Set(['get_overview', 'get_project', 'list_tasks', 'get_report', 'get_claude_tasks', 'claude_sessions', 'list_approvals', 'mission_status', 'list_missions', 'list_protocols', 'audit_log', 'schedule_list']);
+  const LOCAL = new Set(['get_overview', 'get_project', 'list_tasks', 'get_claude_tasks']);   // index.php data-sından hesablananlar: data dəyişsə köhnəlir
+  const cache = new Map(), CACHE_MS = 5000;
+  const dataRef = () => { try { return typeof data !== 'undefined' ? data : null; } catch (e) { return null; } };
+  const ckey = (n, a) => n + ':' + JSON.stringify(a || {});
+  function cacheGet(n, a) {
+    const e = cache.get(ckey(n, a));
+    if (!e || Date.now() - e.t > CACHE_MS || (LOCAL.has(n) && e.d !== dataRef())) return undefined;
+    return e.v;
+  }
+  function cachePut(n, a, v) { if (cache.size > 60) cache.clear(); cache.set(ckey(n, a), { t: Date.now(), d: dataRef(), v }); }
+  let preT = 0;
+  async function prefetch() {
+    if (Date.now() - preT < 4000 || !TOOLS.get_overview) return; preT = Date.now();
+    try { if (typeof load === 'function' && (!dataRef() || cacheGet('get_overview', {}) === undefined)) await load(); } catch (e) {}
+    try { if (dataRef() && cacheGet('get_overview', {}) === undefined) cachePut('get_overview', {}, await TOOLS.get_overview({})); } catch (e) {}
+  }
+
+  /* ---------- y alətləri: "⏳ 2s · Ləğv et" çipi. Klik, Esc və ya "ləğv et / dayan / yox" desə icra olunmur ---------- */
+  const HOLD_MS = 2500, CANCEL_RE = /(l[əe]ğv|legv|dayan|stop|cancel|vaz ?ke[çc]|lazım deyil|lazim deyil|etm[əe]|^\s*yox\b|отмен|не надо)/i;
+  let hold = null;
+  const holdCss = `.jv-hold { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 72; display: flex; gap: 10px; align-items: center; max-width: min(460px, calc(100vw - 32px));
+  padding: 8px 8px 8px 14px; border-radius: 999px; background: rgba(8,10,20,.92); color: #e9eef8; border: 1px solid rgba(251,191,36,.5); box-shadow: 0 10px 30px rgba(0,0,0,.5); font-size: 13px; }
+.jv-hold span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; } .jv-hold b { color: #fcd34d; font-variant-numeric: tabular-nums; }
+.jv-hold button { flex: none; border: 0; border-radius: 999px; padding: 6px 12px; background: rgba(248,113,113,.22); color: #fecaca; font: inherit; font-weight: 600; cursor: pointer; }`;
+  document.head.append(Object.assign(document.createElement('style'), { textContent: holdCss }));
+  const descr = c => { const a = c.args || {}, v = a.title || a.task || a.text || a.prompt || a.name || a.to || ''; return c.name + (v ? ' · ' + String(v).slice(0, 60) : ''); };
+  function holdFor(calls) {
+    return new Promise(res => {
+      const el = document.createElement('div'); el.className = 'jv-hold'; el.setAttribute('role', 'status');
+      const tx = document.createElement('span'), b = document.createElement('b'), btnC = document.createElement('button');
+      btnC.type = 'button'; btnC.textContent = 'Ləğv et'; tx.textContent = ' · ' + calls.map(descr).join(', ');
+      tx.prepend(b); el.append(tx, btnC); document.body.append(el);
+      const t0 = Date.now(); let done = false, iv = 0;
+      const fin = go => { if (done) return; done = true; clearInterval(iv); el.remove(); hold = null; res(go); };
+      const tickH = () => { const left = HOLD_MS - (Date.now() - t0); if (left <= 0) return fin(true); b.textContent = '⏳ ' + Math.ceil(left / 1000) + 's'; };
+      btnC.onclick = () => fin(false);
+      hold = { cancel: () => fin(false) }; tickH(); iv = setInterval(tickH, 100);
+    });
+  }
+  addEventListener('keydown', e => { if (hold && e.key === 'Escape') hold.cancel(); });
+
+  /* ---------- Audit (audit.php) və gecikmə ölçüləri (RT.mark → latency.php) ---------- */
+  const js = (v, n) => { try { return JSON.stringify(v === undefined ? null : v).slice(0, n); } catch (e) { return ''; } };
+  function audit(tool, tier, args, okay, res) { post('audit.php', { action: 'log', tool, tier, args: js(args, 2000), ok: okay, result_head: js(res, 500) }, { keepalive: true }).catch(() => {}); }
+  const LT = { on: false, said: 0, vad: false, tool: 0, first: 0, tools: [] };
+  const saidAt = () => LT.said || Date.now();
+  function ltUser() { if (!LT.on) { Object.assign(LT, { on: true, said: 0, vad: false, tool: 0, first: 0, tools: [] }); prefetch(); } if (!LT.vad) LT.said = Date.now(); }
+  function ltDone() {
+    if (!LT.on) return; LT.on = false;
+    const R = window.RT; if (!R || typeof R.mark !== 'function' || !LT.said) return;
+    try { R.mark('voice_turn', { ref: 0, said_at: LT.said, start_at: LT.tool || 0, first_at: LT.first || 0, done_at: Date.now(), meta: { tools: LT.tools.slice(0, 8), provider: J.session && J.session.provider } }); } catch (e) {}
+  }
 
   async function runTools(calls) {
     setState('tool');
+    if (LT.on && !LT.tool) LT.tool = Date.now();
     const out = [];
     if (!data) { try { await load(); } catch (e) {} }           // məlumat hələ yüklənməyibsə
+    // y alətləri bir çiplə (bir neçəsi birdən gəlsə də bir dəfə gözləyir); r alətləri confirmed olmadan heç icra olunmur
+    const ys = calls.filter(c => TOOLS[c.name] && tierOf(c.name) === 'y');
+    const go = ys.length ? await holdFor(ys) : true;
+    if (!go) line('i', '↩︎ Ləğv edildi: ' + ys.map(c => c.name).join(', '));
     for (const fc of calls) {
-      let response;
+      const args = fc.args || {}, tier = tierOf(fc.name);
+      LT.tools.push(fc.name);
+      let response, hit;
       try {
         const fn = TOOLS[fc.name]; if (!fn) throw new Error('naməlum alət: ' + fc.name);
-        response = { result: await fn(fc.args || {}) };
-        emit('tool', fc.name, fc.args || {}, response.result);
+        if (tier === 'y' && !go) { out.push({ id: fc.id, name: fc.name, response: { result: { ok: false, canceled: true, note: 'The user canceled this action before it ran. Acknowledge briefly; do not retry unless asked.' } } }); audit(fc.name, tier, args, false, 'canceled'); continue; }
+        if (tier === 'r' && args.confirmed !== true) confirmed(args, fc.name);
+        if (READ.has(fc.name) && (hit = cacheGet(fc.name, args)) !== undefined) response = { result: hit };
+        else {
+          J.curTool = fc.name;
+          response = { result: await fn(tier === 'r' ? args : { ...args, confirmed: true }) };   // y/g: köhnə modullardakı confirmed(a) yoxlaması keçsin
+          if (READ.has(fc.name)) cachePut(fc.name, args, response.result); else if (tier !== 'g') cache.clear();
+        }
+        emit('tool', fc.name, args, response.result);
+        audit(fc.name, tier, args, !(response.result && response.result.ok === false), response.result);
       } catch (e) {
         const msg = String(e && e.message || e);
         if (!/^Not confirmed/.test(msg)) line('e', '✗ ' + msg);
         response = { error: msg };
+        audit(fc.name, tier, args, false, msg);
       }
+      J.curTool = '';
       out.push({ id: fc.id, name: fc.name, response });
     }
     if (J.conn) J.conn.toolResults(out);
@@ -348,11 +454,29 @@
       if (c.status === 'queued') continue;
       J.watch.delete(id);
       const res = (c.result || '').trim();
+      if (w.think) {                                         // think: Opus-un cavabı → qısa səsli xülasə + panel təklifi
+        line(c.status === 'done' ? 'a' : 'e', `🧠 Düşüncə ${c.status === 'done' ? 'hazırdır' : 'alınmadı'} (#${id})`);
+        if (J.ready) J.conn.note(`[Think result] (system note, not spoken by the user) Deep-thinking task #${id} finished with status "${c.status}". Question: ${String(w.prompt || '').slice(0, 300)}\nAnswer (may be truncated):\n${res.slice(-3000) || '(empty)'}\n`
+          + (c.status === 'done' ? 'Summarise the conclusion for the user in at most 3 short spoken sentences, then offer to put the details on screen; if they agree, or the answer has lists/code/options, call show_panel with the key points.' : 'Tell the user briefly that thinking failed and why.'));
+        continue;
+      }
       line(c.status === 'done' ? 'a' : 'e', `🤖 Claude Code ${c.status === 'done' ? 'bitirdi' : c.status === 'canceled' ? 'dayandırıldı' : 'xəta verdi'} (#${id}, ${w.project})`);
       if (J.ready) J.conn.note(
         `[System note, not spoken by the user] Claude Code task #${id} in project "${w.project}" finished with status "${c.status}". Task: ${w.prompt.slice(0, 300)}\nResult (may be truncated):\n${res.slice(-2500) || '(empty)'}\nTell the user the outcome in 1-2 short sentences.`);
     }
   }
+  /* Real-time hadisə şini (realtime.js, window.RT): olmaya da bilər, sonra yüklənə bilər → abunələr növbədə gözləyir */
+  const rtQ = [];
+  function bindRT() { const R = window.RT; if (!R || typeof R.on !== 'function') return; while (rtQ.length) { const [t, c] = rtQ.shift(); try { R.on(t, c); } catch (e) {} } }
+  function onRT(type, cb) { rtQ.push([type, cb]); bindRT(); }
+  addEventListener('load', bindRT); setTimeout(bindRT, 3000);
+  onRT('command.done', e => {                                 // izlənən tapşırıq bitdi: 1.5 s taymeri gözləmədən dərhal
+    cache.clear();
+    const id = +((e && e.data && e.data.id) || (e && e.ref) || 0);
+    if (!J.watch.has(id)) return;
+    Promise.resolve(typeof load === 'function' ? load() : 0).catch(() => {}).then(checkWatch);
+  });
+  ['approval.new', 'approval.decided', 'command.queued', 'command.started'].forEach(t => onRT(t, () => cache.clear()));
 
 
   /* ---------- Səs ---------- */
@@ -513,12 +637,15 @@
         const ws = new WebSocket(d.ws + '?fal_jwt_token=' + encodeURIComponent(d.token)); ws.binaryType = 'arraybuffer';
         const send = o => { if (ws.readyState === 1) ws.send(MP.encode(o)); };
         let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null;
+        // Sürət sahələri (reasoning none, silence_duration_ms, web_search/x_search) rədd edilsə: bir dəfə onlarsız session.update
+        let sess = d.session, retried = false;
+        const plain = s => ({ ...s, reasoning: undefined, turn_detection: { type: 'server_vad' }, tools: (s.tools || []).filter(t => t.type === 'function') });
         // Cavab yaratmağı yalnız səs bitəndə istə (üst-üstə danışmasın). Bir gözləyən taymer olur: alət nəticəsi + qeyd eyni anda gəlsə iki response.create getməsin.
         const create = () => {
           if (playing()) { waitCreate = true; if (!createT) createT = setTimeout(() => { createT = null; create(); }, 250); return; }
           waitCreate = false; send({ type: 'response.create' });
         };
-        ws.onopen = () => send({ type: 'session.update', session: d.session });
+        ws.onopen = () => send({ type: 'session.update', session: sess });
         ws.onmessage = ev => {
           let m; try { m = typeof ev.data === 'string' ? JSON.parse(ev.data) : MP.decode(ev.data); } catch (e) { return; }
           if (!m || typeof m !== 'object') return;
@@ -526,8 +653,16 @@
           if (m.type === 'x-fal-message') return;
           switch (m.type) {
             case 'session.updated': if (!isReady) { isReady = true; h.ready(); } break;
-            case 'error': h.info('Grok: ' + ((m.error && (m.error.message || m.error.code)) || JSON.stringify(m).slice(0, 200))); break;
+            case 'error': {
+              const msg = (m.error && (m.error.message || m.error.code)) || JSON.stringify(m).slice(0, 200);
+              if (!retried && /reasoning|effort|turn_detection|silence|web_search|x_search|tool|unknown|unsupported|invalid|session/i.test(String(msg))) {
+                retried = true; sess = plain(sess); console.warn('Jarvis grok: sessiya sahəsi rədd edildi, sadə rejim:', msg);
+                if (h.log) h.log('Grok sürət ayarlarını qəbul etmədi, sadə rejimə keçdim'); send({ type: 'session.update', session: sess }); break;
+              }
+              h.info('Grok: ' + msg); break;
+            }
             case 'input_audio_buffer.speech_started': h.interrupted(); userTxt = ''; break;
+            case 'input_audio_buffer.speech_stopped': if (h.speechEnd) h.speechEnd(); break;
             case 'conversation.item.input_audio_transcription.delta': if (m.delta) h.user(m.delta); break;
             case 'conversation.item.input_audio_transcription.updated':
             case 'conversation.item.input_audio_transcription.completed': {
@@ -563,6 +698,8 @@
             if (!inResp && !waitCreate) create();
           },
           context: text => send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }),
+          // load_tools: funksiya alətlərini dəyiş, daxili (web_search…) alətlər qalsın; tam sessiya obyekti göndərilir (təlimat itməsin)
+          updateTools: list => { sess = { ...sess, tools: [...list.map(t => ({ type: 'function', ...t })), ...(sess.tools || []).filter(t => t.type !== 'function')] }; send({ type: 'session.update', session: sess }); },
           mute: () => {},
           close: () => { clearTimeout(createT); createT = null; if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
         };
@@ -596,7 +733,8 @@
     }
     const ad = ADAPTERS[d.provider];
     if (!ad) { setState('error'); line('e', 'Naməlum səs təminatçısı: ' + d.provider); return; }
-    J.session = d; prov.disabled = true;
+    J.session = d; prov.disabled = true; J.loaded = new Set(d.loaded || ['core']); cache.clear(); LT.on = false;
+    if (d.session && Array.isArray(d.session.tools)) d.session.tools = d.session.tools.map(t => t.type === 'function' ? declFor(t) : t);   // jv-tiers üstələmələri
     try { startOut(); await startMic(ad); }
     catch (e) { cleanup(); setState('error'); line('e', 'Mikrofona icazə verilmədi: ' + (e.message || e)); return; }
     J.conn = ad.connect(d, {
@@ -606,15 +744,19 @@
         J.usageTimer = setInterval(reportUsage, 30000);
         emit('ready', d);
       },
-      audio: (data, rate) => play(data, rate),
+      audio: (data, rate) => { if (LT.on && !LT.first) LT.first = Date.now(); play(data, rate); },
+      speechEnd() { if (!LT.on) ltUser(); LT.said = Date.now(); LT.vad = true; },
+      log: msg => line('i', msg),
       user(text, replace) {
+        if (!LT.on || !LT.vad) ltUser();
+        if (hold && CANCEL_RE.test(String(text || ''))) hold.cancel();   // y çipi gözləyərkən "ləğv et"
         J.cur.jarvis = null;
         if (replace && J.cur.user) { J.cur.user._t = ''; }
         stream('user', text); emit('user', text, !!replace);   // replace: Grok tam transkripti göndərir (parça deyil)
       },
       bot: text => { stream('jarvis', text); emit('bot', text); },
-      interrupted() { stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); emit('interrupted'); },
-      turnDone() { endTurn(); emit('turn'); },
+      interrupted() { if (!LT.on) ltUser(); stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); emit('interrupted'); },
+      turnDone() { endTurn(); ltDone(); emit('turn'); },
       tools: calls => { endTurn(); runTools(calls); },
       info: msg => { line('e', msg); emit('error', msg); },
       closed(code, reason) {
@@ -635,7 +777,8 @@
     clearInterval(J.usageTimer); J.usageTimer = null;
     // son istifadə hissəsi: səhifə bağlananda da çatsın (keepalive)
     if (J.ready && J.lastUsage) { const s = Math.round((Date.now() - J.lastUsage) / 1000); if (s > 0) api('usage', { seconds: s }, { keepalive: true }).catch(() => {}); }
-    J.ready = false; J.lastUsage = 0; prov.disabled = false;
+    J.ready = false; J.lastUsage = 0; prov.disabled = false; LT.on = false;
+    if (hold) hold.cancel();                                  // sessiya bitdi: gözləyən y əməliyyatı icra olunmasın
     stopPlayback();
     if (J.micStream) J.micStream.getTracks().forEach(t => t.stop());
     if (J.micCtx) J.micCtx.close().catch(() => {});
@@ -685,8 +828,13 @@
     registerTool(name, fn) { TOOLS[name] = fn; },
     textMode(on) { J.silent = !!on; applyText(); },
     on(ev, cb) { (EV[ev] = EV[ev] || []).push(cb); },
-    watch(id, w) { J.watch.set(+id, { st: 'queued', ...w }); },
+    watch(id, w) { watchCmd(+id, { st: 'queued', prompt: '', ...w }); },     // taymeri də başladır (əvvəl yalnız Map-ə yazırdı)
+    watching: id => J.watch.has(+id),
+    rt: onRT,                                                                // RT.on, realtime.js gec yüklənsə də
+    session: () => J.session, tierOf, loaded: () => [...(J.loaded || [])],
+    loadGroup: g => { try { return TOOLS.load_tools({ group: g }); } catch (e) { return { ok: false, error: e.message }; } },
+    cache: { get: cacheGet, put: cachePut, clear: () => cache.clear() },
     panel: box, button: btn,
-    util: { line, best, norm, planetNames, need, ok, confirmed, R, when, parseWhen, userName, api, findTask },
+    util: { line, best, norm, planetNames, need, ok, confirmed, R, when, parseWhen, userName, api, findTask, projectOf, post, saidAt, tierOf },
   };
 })();

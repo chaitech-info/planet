@@ -17,7 +17,7 @@
   /* ---- donanma ---- */
   function fleetList() {
     const d = D(), t = NOW(), out = [];
-    const cs = ((d && d.commands) || []).concat(demo ? demo.items() : []);
+    const cs = ((d && d.commands) || []).filter(c => c.kind !== 'ops').concat(demo ? demo.items() : []);
     for (const c of cs) {
       const id = String(c.id), live = LIVE.has(c.status);
       if (live) sent.set(id, 0);

@@ -3873,7 +3873,7 @@ addEventListener('keydown', e => {
   else if (e.key === 'ArrowLeft' && !$('pprev').hidden) $('pprev').click();
   else if (e.key === 'ArrowRight' && !$('pnext').hidden) $('pnext').click();
 });
-setInterval(load, 3000);
+(function tick() { setTimeout(() => { load(); tick(); }, window.LOAD_EVERY || 3000); })();   // realtime.js şin sağlamdırsa 10 s, yoxsa 3 s
 setInterval(pulse, 1000);
 document.addEventListener('visibilitychange', load);
 addEventListener('kainat-ready', initGL);
@@ -3881,6 +3881,7 @@ route();
 if (window.Kainat) initGL();
 </script>
 <script src="roadmap.js?v=<?= (int)@filemtime(__DIR__ . '/roadmap.js') ?>"></script>
+<script src="realtime.js?v=<?= (int)@filemtime(__DIR__ . '/realtime.js') ?>"></script>
 <script src="jarvis.js?v=<?= (int)@filemtime(__DIR__ . '/jarvis.js') ?>"></script>
 <script src="radio.js?v=<?= (int)@filemtime(__DIR__ . '/radio.js') ?>"></script>
 <?php foreach (glob(__DIR__ . '/jarvis-*.js') ?: [] as $jf): /* Jarvis modulları: HUD, UI idarəsi, missiyalar, donanma */ ?>

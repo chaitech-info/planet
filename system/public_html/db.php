@@ -8,7 +8,7 @@ date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 // Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
 // yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 function db(): PDO
 {
@@ -24,7 +24,18 @@ function db(): PDO
     ]);
     $sqlite = str_starts_with($c['dsn'], 'sqlite');
     if ($sqlite) {
-        $pdo->exec('PRAGMA busy_timeout = 3000');          // paralel sorğular (feed + agent + Jarvis) "database is locked" verməsin
+        $pdo->exec('PRAGMA busy_timeout = 3000');
+        // WAL yalnız config db.wal=true ilə: köhnə kodda açıq qalan oxuma kursorları WAL-da "database is locked" (köhnəlmiş snapshot) verir.
+        // Söndürülübsə və fayl WAL-dadırsa, klassik rejimə qaytar (journal_mode faylda saxlanır).
+        try {
+            $jm = strtolower((string)$pdo->query('PRAGMA journal_mode')->fetchColumn());
+            if (!empty($c['wal']) && $jm !== 'wal') {
+                $pdo->exec('PRAGMA journal_mode = WAL');
+            } elseif (empty($c['wal']) && $jm === 'wal') {
+                $pdo->exec('PRAGMA journal_mode = DELETE');
+            }
+        } catch (Throwable $e) {
+        }
     }
     try {
         $v = $pdo->query("SELECT v FROM settings WHERE k = 'schema'")->fetchColumn();
@@ -405,7 +416,7 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
         }
     }
     // ===== Jarvis Ultra (v5): real-time hadisə şini, gecikmə ölçüləri, icazə relesi, audit, cədvəllər =====
-    $pdo->exec("CREATE TABLE IF NOT EXISTS events (
+    $pdo->exec("CREATE TABLE IF NOT EXISTS rt_events (
         id $id,
         type VARCHAR(40) NOT NULL,
         user VARCHAR(64) NOT NULL DEFAULT '',
@@ -414,7 +425,7 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
         data TEXT NOT NULL,
         created_at INT NOT NULL
     )");
-    try { $pdo->exec('CREATE INDEX events_id_user ON events (user, id)'); } catch (Throwable $e) {}
+    try { $pdo->exec('CREATE INDEX rt_events_user_id ON rt_events (user, id)'); } catch (Throwable $e) {}
     $pdo->exec("CREATE TABLE IF NOT EXISTS jarvis_latency (
         id $id,
         user VARCHAR(64) NOT NULL,
@@ -701,6 +712,7 @@ function start_review(PDO $pdo, array $t, string $implResult, int $now, bool $se
         $reviewer = $t['assignee'];
     }
     $cid = queue_command($pdo, $reviewer, $t['project'], review_prompt($t, $implResult, $t['assignee'], $remote), 'review', $now);
+    emit_event($pdo, 'command.queued', $reviewer, $t['project'], $cid, ['id' => $cid, 'project' => $t['project'], 'prompt' => 'Yoxlama: ' . mb_substr($t['title'], 0, 200), 'kind' => 'review']);
     $pdo->prepare("UPDATE tasks SET status = 'review', command_id = ?, updated_at = ?, verdict = '' WHERE id = ?")->execute([$cid, $now, $t['id']]);
     return $reviewer;
 }
@@ -729,6 +741,7 @@ function advance_task(PDO $pdo, int $cid, string $user, string $status, string $
             notify_later("✅ Yoxlamadan keçdi, bitdi: {$t['title']}\n$who · yoxladı: $user");
         } elseif ($v === 'fail' && (int)$t['rounds'] < REVIEW_ROUNDS) {
             $fid = queue_command($pdo, $t['assignee'], $t['project'], fix_prompt($t, $result, $user), 'task', $now);
+            emit_event($pdo, 'command.queued', $t['assignee'], $t['project'], $fid, ['id' => $fid, 'project' => $t['project'], 'prompt' => 'Düzəliş: ' . mb_substr($t['title'], 0, 200), 'kind' => 'task']);
             $pdo->prepare("UPDATE tasks SET status = 'doing', command_id = ?, rounds = rounds + 1, updated_at = ?, verdict = 'fail' WHERE id = ?")->execute([$fid, $now, $t['id']]);
             notify_later("🔁 Yoxlama keçmədi, düzəlişə göndərildi (" . ((int)$t['rounds'] + 1) . "/" . REVIEW_ROUNDS . "): {$t['title']}\n$who · yoxladı: $user");
         } elseif ($v === 'unsynced' && $user !== $t['assignee'] && start_review($pdo, $t, $result, $now, true) !== null) {
@@ -871,9 +884,9 @@ function emit_event(PDO $pdo, string $type, string $user = '', string $project =
         if (strlen($j) > 8192) {
             $j = json_encode(['truncated' => true] + array_intersect_key($data, array_flip(['id', 'status', 'step', 'pct', 'title'])), JSON_UNESCAPED_UNICODE) ?: '{}';
         }
-        $pdo->prepare('INSERT INTO events (type, user, project, ref, data, created_at) VALUES (?,?,?,?,?,?)')->execute([$type, $user, $project, $ref, $j, time()]);
+        $pdo->prepare('INSERT INTO rt_events (type, user, project, ref, data, created_at) VALUES (?,?,?,?,?,?)')->execute([$type, $user, $project, $ref, $j, time()]);
         if (random_int(1, 200) === 1) {                     // arabir köhnə hadisələri təmizlə (1 gündən köhnə)
-            $pdo->prepare('DELETE FROM events WHERE created_at < ?')->execute([time() - 86400]);
+            $pdo->prepare('DELETE FROM rt_events WHERE created_at < ?')->execute([time() - 86400]);
         }
     } catch (Throwable $e) {
         error_log('emit_event: ' . $e->getMessage());

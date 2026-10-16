@@ -9,7 +9,7 @@ Every workstream builds against these interfaces. Change a contract only by tell
 - Never read, print or send secrets: tokens, keys, `.env` files, or Claude login data.
 
 ## 1. Real-time event bus (workstream A)
-- **Table** `events(id, type, user, project, ref, data JSON, created_at)`, written with `emit_event($pdo, $type, $user, $project, $ref, $data)` from `db.php`.
+- **Table** `rt_events(id, type, user, project, ref, data JSON, created_at)`. (The name `events` is already taken by the hook log.), written with `emit_event($pdo, $type, $user, $project, $ref, $data)` from `db.php`.
 - **Browser:** `events.php` is an SSE stream for the logged-in user. It emits rows where `user IN (me, '')`, plus team-wide types for admins.
   - Resume with `?since=<id>` or the `Last-Event-ID` header.
   - Send a heartbeat comment every 15 s and reconnect after about 55 s (PHP time limits).

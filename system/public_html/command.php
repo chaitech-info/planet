@@ -43,6 +43,7 @@ if ($act === 'send') {
     $pdo->prepare("INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, images) VALUES (?,?,?,?,?,?,?,?,?)")
         ->execute([$user, $project, $prompt, 'queued', '', $now, 0, 0, $images ? json_encode($images) : '']);
     $id = (int)$pdo->lastInsertId();
+    emit_event($pdo, 'command.queued', $user, $project, $id, ['id' => $id, 'project' => $project, 'prompt' => mb_substr($prompt, 0, 300), 'kind' => 'prompt']);
     if (random_int(1, 20) === 1) {
         cmdimg_cleanup($pdo);
     }

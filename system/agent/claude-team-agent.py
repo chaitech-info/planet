@@ -21,10 +21,27 @@ Canlı gedişat: claude `--output-format stream-json` ilə işləyir, agent haz�
 Dayandırmaq: Ctrl+C / SIGTERM → yeni tapşırıq götürülmür, işləyənlər CLAUDE_TEAM_GRACE (30) san gözlənilir,
   bitməyənlər dayandırılıb "alınmadı" kimi qeyd olunur. İkinci Ctrl+C — dərhal.
 
+Profil (kompüterin sahibi seçir; CLAUDE_TEAM_PROFILE mühitdə və ya ~/.claude-team-agent.env, standart basic):
+  basic : bugünkü kimi (fayl redaktəsi + git səviyyəsi)
+  dev   : + Bash: paket menecerləri, testlər, linterlər, build, lokal server (npm/pnpm/yarn/bun, node, npx, python/pytest/pip,
+          cargo, go, make, php, composer, ls/cat/grep/find/head/tail/wc/jq, curl yalnız GET) + WebFetch/WebSearch; git ən azı safe
+  ops   : dev + gh, vercel, repodakı deploy skriptləri, bütün MCP serverlərinin alətləri; git full
+  full  : hər şey (Bash tam), qadağa siyahısından başqa
+  Qadağa (dev/ops/full, həmişə): zorla push, reset --hard, clean, branch -D, layihədən kənar rm -rf, sudo, .env*/*.pem/açarlar/
+  ~/.claude girişini oxumaq, curl | sh. CLAUDE_TEAM_GIT açıq yazılıbsa profil onu dəyişmir.
+  dev+ : redaktə edən prompt/task-dan sonra eyni sessiyada test/lint yoxlaması (CLAUDE_TEAM_SELFCHECK=0 ilə söndürülür).
+İsti sessiyalar (CLAUDE_TEAM_WARM=1; dev/ops/full-da standart açıq, basic-də bağlı): proyekt başına davamlı
+  `claude -p --input-format stream-json` prosesi saxlanır, növbəti tapşırıq ona yazılır (başlanğıc gözləməsi yoxdur).
+  10 dəq boş qalan bağlanır, ən çox 3. İstənilən xətada köhnə bir dəfəlik üsula keçir.
+Növlər: prompt/task/review (redaktə), think (yalnız oxuyan düşüncə, opus, plan rejimi, sessiya saxlanmır),
+  ops (prompt = {op, args} JSON, claude_ops.py işlədir, nəticə JSON). model / mode=plan tapşırıq başına.
+Snapşot: redaktə edən hər tapşırıqdan əvvəl git HEAD + `git stash create` ~/.claude-team-snapshots.json-a yazılır (undo_last üçün).
+Növbə: claim `wait` (long-poll) ilə; köhnə server dərhal cavab verirsə köhnə 3 san-lıq dövrə qalır.
+
 İstifadə:  python3 claude-team-agent.py          (davamlı işləyir, Ctrl+C ilə dayandır)
            python3 claude-team-agent.py --once   (bir tapşırıq götürüb çıxır, həmişə 1 işçi)
 """
-import atexit, json, os, shlex, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
+import atexit, collections, hashlib, json, os, queue, re, shlex, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 
 CONF = os.environ.get('CLAUDE_TEAM_CONF', os.path.expanduser('~/.claude-team-dash.conf'))
 PROJECTS = os.environ.get('CLAUDE_TEAM_PROJECTS', os.path.expanduser('~/.claude-team-projects'))
@@ -52,11 +69,49 @@ GIT_SAFE = ['Bash(git fetch:*)', 'Bash(git pull:*)', 'Bash(git add:*)', 'Bash(gi
 GIT_FULL = ['Bash(git push:*)', 'Bash(git merge:*)', 'Bash(git checkout:*)']
 GIT_DENY = ','.join(['Bash(git push --force:*)', 'Bash(git push -f:*)', 'Bash(git push --force-with-lease:*)', 'Bash(git reset --hard:*)', 'Bash(git clean:*)',
                      'Bash(git push --delete:*)', 'Bash(git branch -D:*)', 'Bash(git checkout -- :*)'])
+PROFILES = ('basic', 'dev', 'ops', 'full')
+# dev: paket menecerləri, testlər, linterlər, build, lokal server, oxuma əmrləri (curl yalnız GET: yazma bayraqları qadağada)
+DEV_BASH = ['npm', 'pnpm', 'yarn', 'bun', 'node', 'npx', 'python', 'python3', 'pytest', 'pip', 'pip3', 'uv', 'ruff', 'mypy', 'tsc', 'eslint',
+            'prettier', 'vitest', 'jest', 'phpunit', 'cargo', 'go', 'make', 'php', 'composer', 'ls', 'cat', 'grep', 'rg', 'find', 'head', 'tail',
+            'wc', 'jq', 'curl', 'pwd', 'which', 'sort', 'uniq', 'diff']
+DEV_TOOLS = [f'Bash({c}:*)' for c in DEV_BASH] + ['WebFetch', 'WebSearch']
+OPS_TOOLS = ['Bash(gh:*)', 'Bash(vercel:*)', 'Bash(./*deploy*)', 'Bash(bash *deploy*)', 'Bash(sh *deploy*)']   # + MCP serverləri (mcp_rules)
+# Gizli fayllar heç vaxt oxunmasın (dev/ops/full və think)
+SECRET_DENY = ['Read(**/.env*)', 'Read(**/*.pem)', 'Read(~/.ssh/**)', 'Read(**/id_rsa*)', 'Read(**/id_ed25519*)', 'Read(**/id_ecdsa*)',
+               'Read(**/id_dsa*)', 'Read(~/.claude.json)', 'Read(~/.claude/.credentials.json)', 'Read(~/.claude-team-dash.conf)',
+               'Read(~/.claude-team-agent.env)'] + [f'Bash({c} *{f}*)' for c in ('cat', 'head', 'tail', 'less', 'more', 'grep', 'source', '.')
+                                                     for f in ('.env', '.pem', 'id_rsa', 'id_ed25519', '.claude.json', '.credentials.json', '.claude-team-')]
+# Həmişə qadağan (dev/ops/full): GIT_DENY + aşağıdakılar. `:*` köhnə CLI üçün, `*` yeni sintaksis (istənilən yerdə).
+DENY_ALWAYS = (GIT_DENY.split(',') + [
+    'Bash(git push * --force*)', 'Bash(git push * -f*)', 'Bash(git push * +*)', 'Bash(git reset * --hard*)', 'Bash(git branch * -D*)',
+    'Bash(sudo:*)', 'Bash(sudo *)', 'Bash(sh)', 'Bash(bash)', 'Bash(zsh)', 'Bash(sh -s*)', 'Bash(bash -s*)',
+    'Bash(curl * | sh*)', 'Bash(curl * | bash*)', 'Bash(wget * | sh*)', 'Bash(wget * | bash*)',
+] + [f'Bash(rm {fl} {t}:*)' for fl in ('-rf', '-fr', '-Rf', '-rF', '-r -f', '-f -r') for t in ('/', '~', '..', '$HOME')] + SECRET_DENY)
+# dev/ops: curl yalnız GET; find ilə silmə/icra yox (full-da Bash tamdır, bunlar ona aid deyil)
+DENY_DEV = ['Bash(curl -X:*)', 'Bash(curl -d:*)', 'Bash(curl --data:*)', 'Bash(curl -F:*)', 'Bash(curl -T:*)', 'Bash(curl --json:*)'] + [
+    f'Bash(curl * {o}*)' for o in ('-X', '--request', '-d', '--data', '--json', '-F', '--form', '-T', '--upload-file')] + [
+    'Bash(find * -delete*)', 'Bash(find * -exec*)', 'Bash(find * -ok*)']
+SELF_CHECK = ("Run this project's test and lint commands if they exist (detect from package.json/pyproject/Makefile); report only a one-line summary. "
+              "Start the line with ✅ if everything passed or ❌ if something failed. Do not edit any files.")
+CAPS = {'claude_version': '', 'mcp': []}   # ping-də göstərilir; discover() doldurur
+DISCOVERED = threading.Event()             # ilk `claude mcp list` bitdi (ops/full ilk tapşırıqda MCP-siz qalmasın)
+
+
+def env_opt(k):
+    """Mühit dəyişəni və ya ~/.claude-team-agent.env (mühit üstündür). Yoxdursa ''."""
+    return (os.environ.get(k) or load_env().get(k) or '').strip()
+
+
+def profile():
+    v = env_opt('CLAUDE_TEAM_PROFILE').lower()
+    return v if v in PROFILES else 'basic'
 
 
 def git_level():
-    v = (os.environ.get('CLAUDE_TEAM_GIT') or load_env().get('CLAUDE_TEAM_GIT') or 'safe').strip().lower()
-    return v if v in ('read', 'safe', 'full') else 'safe'
+    v = env_opt('CLAUDE_TEAM_GIT').lower()
+    if v in ('read', 'safe', 'full'):        # açıq seçim həmişə üstündür
+        return v
+    return 'full' if profile() in ('ops', 'full') else 'safe'
 
 
 def workers():
@@ -68,9 +123,82 @@ def workers():
     return max(1, min(WORKERS_MAX, n))
 
 
-def allowed_tools():
+def allowed_tools(prof='basic', d=None):
+    """--allowedTools: basic-də bugünkü kimi (yalnız git), dev/ops/full-da genişlənir. d: proyekt qovluğu (.mcp.json üçün)."""
     lv = git_level()
-    return ','.join([READONLY_GIT] + (GIT_SAFE if lv in ('safe', 'full') else []) + (GIT_FULL if lv == 'full' else []))
+    parts = [READONLY_GIT] + (GIT_SAFE if lv in ('safe', 'full') else []) + (GIT_FULL if lv == 'full' else [])
+    if prof in ('dev', 'ops', 'full'):
+        parts += DEV_TOOLS
+    if prof in ('ops', 'full'):
+        parts += OPS_TOOLS + mcp_rules(d)
+    if prof == 'full':
+        parts.append('Bash')
+    return ','.join(parts)
+
+
+def denied_tools(prof='basic'):
+    if prof == 'basic':
+        return GIT_DENY                              # bugünkü kimi
+    return ','.join(DENY_ALWAYS + (DENY_DEV if prof in ('dev', 'ops') else []))
+
+
+def cmd_kind(cmd):
+    return str(cmd.get('kind') or 'prompt').strip().lower()
+
+
+def model_of(cmd):
+    m = str(cmd.get('model') or '').strip()
+    return m if re.fullmatch(r'[A-Za-z0-9._\[\]-]{1,64}', m) else ''
+
+
+def perm_args(cmd, d):
+    """İcazə bayraqları + model/rejim. basic və model/rejimsiz tapşırıqda bugünkü argv-nin eynisi."""
+    prof = profile()
+    a = ['--permission-mode', 'plan' if cmd.get('mode') == 'plan' else 'acceptEdits',
+         '--allowedTools', allowed_tools(prof, d), '--disallowedTools', denied_tools(prof)]
+    if model_of(cmd):
+        a += ['--model', model_of(cmd)]
+    return a
+
+
+def mcp_names(d=None):
+    """MCP server adları: `claude mcp list` (discover) + proyektin .mcp.json-u."""
+    DISCOVERED.wait(30)
+    names = list(CAPS['mcp'])
+    if d:
+        try:
+            with open(os.path.join(d, '.mcp.json'), encoding='utf-8') as f:
+                names += [str(k) for k in (json.load(f).get('mcpServers') or {})]
+        except Exception:  # noqa
+            pass
+    return sorted(set(names))
+
+
+def mcp_rules(d=None):
+    """`mcp__*` hamısı üçün işləmir: hər server üçün `mcp__<ad>` (alət adlarındakı kimi normallaşdırılmış)."""
+    return ['mcp__' + re.sub(r'[^A-Za-z0-9_-]', '_', n) for n in mcp_names(d)]
+
+
+def discover(claude, loop):
+    """Claude versiyası və MCP serverləri (ping caps + ops profili üçün). `claude mcp list` ağırdır: ops/full-da 30 dəq-dən bir."""
+    env = {**os.environ, **load_env()}
+    while True:
+        try:
+            p = subprocess.run([claude, '--version'], capture_output=True, text=True, timeout=30, env=env)
+            CAPS['claude_version'] = (p.stdout.strip().split() or [''])[0][:40]
+        except Exception:  # noqa
+            pass
+        try:
+            p = subprocess.run([claude, 'mcp', 'list'], capture_output=True, text=True, timeout=120, env=env, cwd=os.path.expanduser('~'),
+                               stdin=subprocess.DEVNULL)
+            if p.returncode == 0:
+                CAPS['mcp'] = sorted({ln.split(': ', 1)[0].strip()[:80] for ln in p.stdout.splitlines()
+                                      if ': ' in ln and not ln.lower().startswith(('checking', 'no mcp'))})[:50]
+        except Exception:  # noqa
+            pass
+        DISCOVERED.set()
+        if not loop or STOP.wait(1800):
+            return
 
 
 def git_env():
@@ -100,7 +228,8 @@ def load_env():
                 line = line.strip()
                 if '=' in line and not line.startswith('#'):
                     k, v = line.split('=', 1)
-                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT', 'CLAUDE_TEAM_WORKERS'):
+                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT', 'CLAUDE_TEAM_WORKERS',
+                                     'CLAUDE_TEAM_PROFILE', 'CLAUDE_TEAM_WARM', 'CLAUDE_TEAM_SELFCHECK'):
                         out[k.strip()] = v.strip().strip('"\'')
     except FileNotFoundError:
         pass
@@ -171,7 +300,7 @@ def kill_group(proc):
     for sig in (signal.SIGTERM, signal.SIGKILL):
         try:
             os.killpg(proc.pid, sig)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):   # macOS: qrupda yalnız zombi qalıbsa EPERM
             return
         for _ in range(30):
             if proc.poll() is not None:
@@ -218,6 +347,7 @@ class Progress:
         self.cwd = cwd.rstrip('/') + '/'
         self.step, self.files, self.msgs, self.text = step, [], set(), ''
         self.sid, self.result, self.events, self.dirty, self.last = None, None, 0, True, 0.0
+        self.edited = False      # Edit/Write aləti işlədibmi (yoxlama üçün)
 
     def rel(self, p):
         p = str(p)
@@ -228,6 +358,8 @@ class Progress:
 
     def tool(self, name, inp):
         inp = inp if isinstance(inp, dict) else {}
+        if name in ('Edit', 'Write', 'MultiEdit', 'NotebookEdit'):
+            self.edited = True
         f = inp.get('file_path') or inp.get('notebook_path')
         if f:
             f = self.rel(f)[:200]
@@ -280,7 +412,29 @@ def post_progress(base, token, cmd, prog):
         pass
 
 
-def exec_claude(base, token, args, cmd, path, prog=None):
+class Watch:
+    """İşləyən tapşırığı nə vaxt dayandırmaq lazımdır: vaxt limiti, agentin dayanması, saytda "Dayandır" (3 san-dan bir soruşulur)."""
+
+    def __init__(self, base, token, cmd, timeout=TIMEOUT):
+        self.base, self.token, self.cmd, self.timeout, self.t0, self.last = base, token, cmd, timeout, time.time(), 0.0
+
+    def why(self):
+        now = time.time()
+        if now - self.t0 > self.timeout:
+            return f'Vaxt bitdi ({self.timeout} san).'
+        if stopping_hard():
+            return STOP_MSG
+        if now - self.last >= 3:
+            self.last = now
+            try:
+                if call(self.base, self.token, 'poll', {'id': self.cmd['id']}).get('cancel'):
+                    return 'Dayandırıldı.'
+            except Exception:  # noqa
+                pass
+        return None
+
+
+def exec_claude(base, token, args, cmd, path, prog=None, timeout=TIMEOUT):
     """Bir claude prosesini işlədir; "Dayandır", vaxt limiti və agentin dayanması izlənir. prog verilibsə stdout sətir-sətir
     oxunur və gedişat ən azı 2 san aralıqla serverə göndərilir. Qaytarır: (out, err, returncode) və ya (None, mesaj, 'end')."""
     env = {**os.environ, **load_env(), **git_env(), 'CLAUDE_TEAM_RUN': str(cmd['id'])}
@@ -324,26 +478,15 @@ def exec_claude(base, token, args, cmd, path, prog=None):
             box['exc'] = e
     th = threading.Thread(target=work_stream if prog else work, daemon=True)
     th.start()
-    t0, last = time.time(), 0.0
+    w = Watch(base, token, cmd, timeout)
     while th.is_alive():
         th.join(1)
-        now = time.time()
-        if now - t0 > TIMEOUT:
+        why = w.why() if th.is_alive() else None
+        if why:
             kill_group(proc); th.join(5)
-            return None, f'Vaxt bitdi ({TIMEOUT} san).', 'end'
-        if stopping_hard():
-            kill_group(proc); th.join(5)
-            return None, STOP_MSG, 'end'
-        if prog and prog.dirty and now - prog.last >= 2 and th.is_alive():
+            return None, why, 'end'
+        if prog and prog.dirty and time.time() - prog.last >= 2 and th.is_alive():
             post_progress(base, token, cmd, prog)
-        if now - last >= 3:
-            last = now
-            try:
-                if call(base, token, 'poll', {'id': cmd['id']}).get('cancel'):
-                    kill_group(proc); th.join(5)
-                    return None, 'Dayandırıldı.', 'end'
-            except Exception:  # noqa
-                pass
     if 'exc' in box:
         return None, f"Agent xətası: {box['exc']}", 'end'
     return (box.get('out') or ''), (box.get('err') or ''), proc.returncode
@@ -360,9 +503,333 @@ def parse_result(out):
     return None, None, False
 
 
+# ---- İsti sessiyalar: proyekt başına davamlı `claude -p --input-format stream-json` prosesi ----
+# Yalnız əsas qovluqda (worktree yox), prompt/task, şəkilsiz. Proses söhbətin sessiyasını (sid) və icazə bayraqlarını
+# yadda saxlayır; növbəti tapşırıq eyni sid + eyni bayraqlarla gəlirsə ona yazılır, yoxsa yenisi açılır (--resume sid).
+# CLAUDE_TEAM_RUN prosesin açıldığı tapşırığın nömrəsidir (hook yalnız boş olub-olmadığına baxır).
+WARM_MAX, WARM_IDLE = 3, 600
+WARM, WARM_LOCK, WARM_ON = {}, threading.Lock(), [False]
+
+
+def warm_enabled():
+    v = env_opt('CLAUDE_TEAM_WARM')
+    if v in ('0', '1'):
+        return v == '1'
+    return profile() != 'basic'          # basic: bugünkü kimi (bir dəfəlik), sahibi CLAUDE_TEAM_WARM=1 ilə açır
+
+
+class Warm:
+    def __init__(self, claude, path, tail, sid, cid):
+        self.path, self.tail, self.sid, self.used, self.busy = path, list(tail), sid, time.time(), True
+        self.q, self.err = queue.Queue(), collections.deque(maxlen=200)
+        env = {**os.environ, **load_env(), **git_env(), 'CLAUDE_TEAM_RUN': str(cid)}
+        args = [claude, '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'] + self.tail + (['--resume', sid] if sid else [])
+        self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8',
+                                     errors='replace', bufsize=1, cwd=path, env=env, start_new_session=True)
+        threading.Thread(target=self._out, daemon=True).start()
+        threading.Thread(target=self._err, daemon=True).start()
+
+    def _out(self):
+        try:
+            for line in self.proc.stdout:
+                self.q.put(line)
+        except Exception:  # noqa
+            pass
+        self.q.put(None)                     # EOF: proses öldü
+
+    def _err(self):
+        try:
+            for line in self.proc.stderr:
+                self.err.append(line)
+        except Exception:  # noqa
+            pass
+
+    def alive(self):
+        return self.proc.poll() is None
+
+    def send(self, obj):
+        self.proc.stdin.write(json.dumps(obj) + '\n')
+        self.proc.stdin.flush()
+
+    def kill(self):
+        try:
+            self.proc.stdin.close()
+        except Exception:  # noqa
+            pass
+        kill_group(self.proc)
+
+
+def warm_get(claude, path, tail, sid, cid):
+    """Uyğun isti proses (eyni sid + bayraqlar) → (w, True); yoxdursa yenisi → (w, False); limit dolubsa (None, False)."""
+    old = []
+    try:
+        with WARM_LOCK:
+            w = WARM.get(path)
+            if w and not w.busy and w.alive() and sid and w.sid == sid and w.tail == list(tail):
+                w.busy = True
+                return w, True
+            if w and not w.busy:
+                old.append(WARM.pop(path))
+            elif w:
+                return None, False
+            idle = sorted((x for x in WARM.values() if not x.busy), key=lambda x: x.used)
+            while len(WARM) >= WARM_MAX and idle:
+                x = idle.pop(0)
+                old.append(WARM.pop(x.path))
+            if len(WARM) >= WARM_MAX:
+                return None, False
+            try:
+                w = WARM[path] = Warm(claude, path, tail, sid, cid)
+            except Exception:  # noqa
+                return None, False
+            return w, False
+    finally:
+        for x in old:
+            x.kill()
+
+
+def warm_release(w):
+    with WARM_LOCK:
+        w.busy, w.used = False, time.time()
+
+
+def warm_drop(path, w=None):
+    with WARM_LOCK:
+        x = WARM.get(path)
+        if x is None or (w is not None and x is not w):
+            x = None
+        else:
+            WARM.pop(path)
+    if x:
+        x.kill()
+    if w is not None and w is not x:
+        w.kill()
+
+
+def warm_reap():
+    """10 dəq boş qalan və ya ölmüş prosesləri bağla."""
+    now, dead = time.time(), []
+    with WARM_LOCK:
+        for p, w in list(WARM.items()):
+            if not w.busy and (not w.alive() or now - w.used > WARM_IDLE):
+                dead.append(WARM.pop(p))
+    for w in dead:
+        w.kill()
+
+
+def warm_kill_all():
+    with WARM_LOCK:
+        ws = list(WARM.values())
+        WARM.clear()
+    for w in ws:
+        w.kill()
+
+
+def warm_names():
+    inv = {v: k for k, v in read_projects().items()}
+    with WARM_LOCK:
+        return sorted(inv.get(p, os.path.basename(p)) for p in WARM)
+
+
+def warm_turn(base, token, w, cmd, prompt, prog, timeout=TIMEOUT):
+    """İsti prosesə bir istifadəçi mesajı yaz, `result` hadisəsinə qədər oxu.
+    Qaytarır: ('ok', None) | ('dead', None) — proses öldü | ('end', səbəb) — dayandırıldı/vaxt bitdi (çağıran prosesi öldürür)."""
+    while True:                                   # əvvəlki növbədən qalan hadisələr
+        try:
+            x = w.q.get_nowait()
+        except queue.Empty:
+            break
+        if x is None:
+            return 'dead', None
+    if not w.alive():
+        return 'dead', None
+    try:
+        w.send({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'text', 'text': prompt}]}, 'parent_tool_use_id': None})
+    except Exception:  # noqa
+        return 'dead', None
+    wd = Watch(base, token, cmd, timeout)
+    while True:
+        try:
+            line = w.q.get(timeout=1)
+        except queue.Empty:
+            line = ''
+        if line is None:
+            return 'dead', None
+        if line.strip():
+            try:
+                ev = json.loads(line)
+            except Exception:  # noqa
+                ev = None
+            if isinstance(ev, dict) and ev.get('type') == 'control_request':   # icazə sorğusu: bir dəfəlik -p kimi rədd et
+                rq = ev.get('request') if isinstance(ev.get('request'), dict) else {}
+                rid = ev.get('request_id')
+                resp = ({'subtype': 'success', 'request_id': rid, 'response': {
+                    'behavior': 'deny', 'message': 'Agent profili bu aləti icazə vermir (sahibi CLAUDE_TEAM_PROFILE ilə genişləndirə bilər).'}}
+                        if rq.get('subtype') == 'can_use_tool' else {'subtype': 'error', 'request_id': rid, 'error': 'agent dəstəkləmir'})
+                try:
+                    w.send({'type': 'control_response', 'response': resp})
+                except Exception:  # noqa
+                    return 'dead', None
+            else:
+                try:
+                    prog.feed(line)
+                except Exception:  # noqa
+                    pass
+                if prog.result is not None:
+                    return 'ok', None
+        why = wd.why()
+        if why:
+            return 'end', why
+        if prog.dirty and time.time() - prog.last >= 2:
+            post_progress(base, token, cmd, prog)
+
+
+def warm_run(base, token, claude, cmd, path, perm, sid, progs):
+    """Tapşırığı isti prosesdə işlət. Qaytarır: (w | None, (out, err, rc, mətn, sessiya, xəta) | None). None → köhnə üsul."""
+    w, reused = warm_get(claude, path, perm, sid, cmd['id'])
+    if not w:
+        return None, None
+    prog = Progress(path, 'Claude başlayır (isti sessiya)' if reused else 'Claude başlayır')
+    progs.append(prog)
+    state, why = warm_turn(base, token, w, cmd, cmd['prompt'], prog)
+    if state == 'end':
+        warm_drop(path, w)
+        return None, (None, why, 'end', None, None, False)
+    r = prog.result
+    if state == 'dead' or (r is not None and r.get('is_error') and not prog.msgs):
+        err = ''.join(w.err).strip()[-2000:]
+        warm_drop(path, w)
+        if not prog.msgs:                         # heç nə etməmişdi: köhnə üsulla bir də (--resume / sıfırdan)
+            print(f"   #{cmd['id']} isti sessiya alınmadı, bir dəfəlik üsula keçir", flush=True)
+            return None, None
+        return None, (prog.text, err, 1, None, prog.sid, False)   # yarımçıq qırıldı: təkrar etmə (dəyişikliklər ola bilər)
+    w.sid = r.get('session_id') or prog.sid or w.sid
+    return w, ('', '', 0, str(r.get('result') or ''), w.sid, bool(r.get('is_error')))
+
+
+# ---- Snapşot (undo_last üçün) ----
+# ~/.claude-team-snapshots.json (CLAUDE_TEAM_SNAPSHOTS), hər proyekt üçün yalnız sonuncu:
+#   {"<proyekt adı>": {"path": "/abs/qovluq", "sha": "<HEAD>", "stash": "<`git stash create` commit-i və ya ''>",
+#                      "untracked": ["<o an izlənməyən fayllar>", ...], "at": <unix san>, "cmd_id": <tapşırıq nömrəsi>}}
+# stash: o anki izlənən dəyişikliklər (index + iş qovluğu), heç nə dəyişdirmədən yaradılır; '' = qovluq təmiz idi.
+# Bərpa (D2 undo_last): izlənən faylları `sha`-ya qaytar, stash boş deyilsə onu tətbiq et (`git stash apply <stash>`),
+# `untracked`-də olmayan yeni izlənməyən fayllar tapşırığın yaratdıqlarıdır.
+SNAPS = os.environ.get('CLAUDE_TEAM_SNAPSHOTS', os.path.expanduser('~/.claude-team-snapshots.json'))
+SNAP_LOCK = threading.Lock()
+
+
+def snapshot(cmd, path):
+    if not os.path.exists(os.path.join(path, '.git')):
+        return
+    try:
+        sha = git(path, 'rev-parse', 'HEAD', timeout=20).stdout.strip()
+        if not sha:
+            return
+        st = git(path, 'stash', 'create', timeout=60)
+        un = git(path, 'ls-files', '--others', '--exclude-standard', timeout=30).stdout.splitlines()[:500]
+        rec = {'path': path, 'sha': sha, 'stash': st.stdout.strip() if st.returncode == 0 else '', 'untracked': un,
+               'at': int(time.time()), 'cmd_id': cmd['id']}
+        with SNAP_LOCK:
+            try:
+                with open(SNAPS, encoding='utf-8') as f:
+                    d = json.load(f)
+                d = d if isinstance(d, dict) else {}
+            except Exception:  # noqa
+                d = {}
+            d[cmd['project']] = rec
+            tmp = SNAPS + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(d, f, ensure_ascii=False)
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, SNAPS)
+    except Exception as e:  # noqa
+        print(f"   #{cmd['id']} snapşot alınmadı: {e}", flush=True)
+
+
+# ---- Özünü yoxlama (profil ≥ dev): redaktədən sonra eyni sessiyada test/lint ----
+def selfcheck_on(cmd):
+    return (profile() != 'basic' and cmd_kind(cmd) in ('prompt', 'task') and cmd.get('mode') != 'plan'
+            and env_opt('CLAUDE_TEAM_SELFCHECK') != '0')
+
+
+def git_state(d):
+    """HEAD + status + diff izi: tapşırıq faylları dəyişdibmi? git deyilsə None."""
+    if not os.path.exists(os.path.join(d, '.git')):
+        return None
+    try:
+        return (git(d, 'rev-parse', 'HEAD', timeout=20).stdout + git(d, 'status', '--porcelain', timeout=30).stdout
+                + hashlib.sha1(git(d, 'diff', 'HEAD', timeout=30).stdout.encode('utf-8', 'replace')).hexdigest())
+    except Exception:  # noqa
+        return None
+
+
+def has_tests(d):
+    """Test/lint əmri tez tapılırmı? (package.json scripts, pyproject, Makefile, ...)"""
+    try:
+        pj = os.path.join(d, 'package.json')
+        if os.path.isfile(pj):
+            with open(pj, encoding='utf-8') as f:
+                sc = json.load(f).get('scripts') or {}
+            if any(k in sc for k in ('lint', 'typecheck', 'check')) or ('test' in sc and 'no test specified' not in str(sc['test'])):
+                return True
+        if any(os.path.isfile(os.path.join(d, f)) for f in ('pyproject.toml', 'pytest.ini', 'tox.ini', 'Cargo.toml', 'go.mod', 'phpunit.xml', 'phpunit.xml.dist')):
+            return True
+        if any(os.path.isdir(os.path.join(d, f)) for f in ('tests', 'test')):
+            return True
+        mk = os.path.join(d, 'Makefile')
+        if os.path.isfile(mk):
+            with open(mk, encoding='utf-8', errors='replace') as f:
+                if re.search(r'^(test|lint|check)\s*:', f.read(200000), re.M):
+                    return True
+        cj = os.path.join(d, 'composer.json')
+        if os.path.isfile(cj):
+            with open(cj, encoding='utf-8') as f:
+                if 'test' in (json.load(f).get('scripts') or {}):
+                    return True
+    except Exception:  # noqa
+        pass
+    return False
+
+
+def self_check(base, token, claude, cmd, run_dir, tail, sid, w):
+    """Eyni sessiyada (isti proses və ya --resume) test/lint. Qaytarır: (bir sətir, yeni sessiya | None)."""
+    c2, limit = {**cmd, 'prompt': SELF_CHECK}, min(TIMEOUT, 600)
+    prog = Progress(run_dir, 'Yoxlama: testlər və lint')
+    post_progress(base, token, cmd, prog)
+    r, err = None, ''
+    if w is not None and w.alive():
+        state, why = warm_turn(base, token, w, c2, SELF_CHECK, prog, limit)
+        if state == 'end':
+            warm_drop(w.path, w)
+            return f'dayandırıldı ({why})', None
+        if state == 'dead':
+            warm_drop(w.path, w)
+        r = prog.result
+        if r is not None:
+            w.sid = r.get('session_id') or w.sid
+    elif sid:
+        if STREAM:
+            out, err, rc = exec_claude(base, token, [claude, '-p', '--output-format', 'stream-json', '--verbose'] + list(tail) + ['--resume', sid],
+                                       c2, run_dir, prog, timeout=limit)
+            r = prog.result
+        else:
+            out, err, rc = exec_claude(base, token, [claude, '-p', '--output-format', 'json'] + list(tail) + ['--resume', sid], c2, run_dir, timeout=limit)
+            t, s2, e2 = parse_result(out or '') if rc != 'end' else (None, None, False)
+            r = {'result': t, 'session_id': s2, 'is_error': e2} if t is not None else None
+        if rc == 'end':
+            return f'dayandırıldı ({err})', None
+    else:
+        return '', None
+    if r is None:
+        return '❌ yoxlama alınmadı' + (f": {str(err).strip().splitlines()[-1][:200]}" if str(err).strip() else ''), None
+    line = next((x.strip() for x in str(r.get('result') or '').splitlines() if x.strip()), '')[:300]
+    return (('❌ yoxlama alınmadı: ' if r.get('is_error') else '') + (line or '(boş cavab)')), r.get('session_id') or prog.sid
+
+
 def run_claude(base, token, claude, cmd, path, extra_args=(), cwd=None):
     """claude -p işlədir. Söhbətin (chat) və ya proyekt+göndərənin əvvəlki sessiyasını davam etdirir (--resume); "Yeni söhbət" seçilibsə sıfırdan.
-    cwd: paralel iş üçün git worktree (onda söhbət davam etdirilmir və saxlanmır, çünki sessiya qovluğa bağlıdır)."""
+    cwd: paralel iş üçün git worktree (onda söhbət davam etdirilmir və saxlanmır, çünki sessiya qovluğa bağlıdır).
+    İsti sessiya açıqdırsa (əsas qovluq, prompt/task, şəkilsiz) tapşırıq davamlı prosesə yazılır; alınmasa köhnə üsul."""
     wt = bool(cwd and cwd != path)
     run_dir = cwd or path
     legacy = path + '|' + (cmd.get('creator') or '')
@@ -372,7 +839,11 @@ def run_claude(base, token, claude, cmd, path, extra_args=(), cwd=None):
         store = sess_load()
         sid = (store.get(key) or store.get(legacy) or {}).get('sid')   # legacy: söhbətlərdən əvvəl başlanmış söhbət
     mode = ['stream' if STREAM else 'json']
-    tail = ['--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
+    perm = perm_args(cmd, run_dir)
+    tail = perm + list(extra_args)
+    progs = []
+    check = selfcheck_on(cmd)
+    pre = git_state(run_dir) if check else None
 
     def go(with_sid):
         """Qaytarır: (out, err, rc, mətn, sessiya, xəta_bayrağı)."""
@@ -381,6 +852,7 @@ def run_claude(base, token, claude, cmd, path, extra_args=(), cwd=None):
             out, err, rc = exec_claude(base, token, [claude, '-p', '--output-format', 'json'] + tail + res, cmd, run_dir)
             return (out, err, rc) + ((None, None, False) if rc == 'end' else parse_result(out))
         prog = Progress(run_dir, '⎇ worktree · Claude başlayır' if wt else 'Claude başlayır')
+        progs.append(prog)
         out, err, rc = exec_claude(base, token, [claude, '-p', '--output-format', 'stream-json', '--verbose'] + tail + res, cmd, run_dir, prog)
         if rc == 'end':
             return out, err, rc, None, None, False
@@ -393,25 +865,115 @@ def run_claude(base, token, claude, cmd, path, extra_args=(), cwd=None):
         if prog.events:                                    # hadisələr gəldi, amma yekun yoxdur (yarımçıq qırıldı)
             return prog.text, err, rc, None, prog.sid, False
         return (out, err, rc) + parse_result(out)
-    out, err, rc, text, new_sid, is_err = go(sid)
-    if rc == 'end':
-        return err, 'failed'
-    if sid and (rc != 0 or is_err or text is None):            # köhnə söhbət tapılmadı/xəta: sıfırdan bir də cəhd et
-        out, err, rc, text, new_sid, is_err = go(None)
+    w, res = None, None
+    if WARM_ON[0] and STREAM and not wt and not extra_args and cmd_kind(cmd) in ('prompt', 'task'):
+        w, res = warm_run(base, token, claude, cmd, path, perm, sid, progs)
+    elif not wt:
+        warm_drop(path)          # bir dəfəlik iş eyni söhbəti davam etdirə bilər: isti prosesin yaddaşı köhnələr
+    try:
+        if res is not None:
+            out, err, rc, text, new_sid, is_err = res
+            if rc == 'end':
+                return err, 'failed'
+        else:
+            out, err, rc, text, new_sid, is_err = go(sid)
+            if rc == 'end':
+                return err, 'failed'
+            if sid and (rc != 0 or is_err or text is None):            # köhnə söhbət tapılmadı/xəta: sıfırdan bir də cəhd et
+                out, err, rc, text, new_sid, is_err = go(None)
+                if rc == 'end':
+                    return err, 'failed'
+                sid = None
+        if text is None:
+            text = out.strip() or err.strip() or '(boş cavab)'
+        elif not text.strip():
+            text = err.strip() or '(boş cavab)'
+        ok = rc == 0 and not is_err
+        note = ''
+        if check and ok and (any(p.edited for p in progs) or git_state(run_dir) != pre) and has_tests(run_dir):
+            note, sid2 = self_check(base, token, claude, cmd, run_dir, tail, new_sid, w)
+            new_sid = sid2 or new_sid
+        if new_sid and not wt:
+            with SESS_LOCK:
+                store = sess_load()
+                store[key] = {'sid': new_sid, 'ts': time.time()}
+                sess_save(store)
+            if w is not None:
+                w.sid = new_sid
+        head = '' if (not sid or cmd.get('fresh')) else '↻ əvvəlki söhbət davam etdi\n\n'
+        return head + text + (f'\n\n— Yoxlama: {note}' if note else ''), ('done' if ok else 'failed')
+    finally:
+        if w is not None:
+            warm_release(w)
+
+
+def run_think(base, token, claude, cmd, d, extra=()):
+    """think: yalnız oxuyan düşüncə (opus, plan rejimi, redaktə/Bash yox, sessiya saxlanmır). Nəticə = cavab mətni."""
+    web = profile() != 'basic'
+    deny = ','.join(SECRET_DENY)
+    head = [claude, '-p', '--model', model_of(cmd) or 'opus', '--permission-mode', 'plan', '--output-format', 'stream-json', '--verbose']
+    allow = ['--allowedTools', 'WebSearch,WebFetch'] if web else []
+    variants = [
+        head + ['--tools', 'Read,Grep,Glob' + (',WebSearch,WebFetch' if web else ''), '--no-session-persistence', '--disallowedTools', deny] + allow,
+        head + ['--disallowedTools', 'Bash,Edit,Write,MultiEdit,NotebookEdit,' + deny] + allow,    # köhnə CLI: --tools/--no-session-persistence yoxdur
+    ]
+    err = out = ''
+    for args in variants:
+        prog = Progress(d, 'Düşünür')
+        out, err, rc = exec_claude(base, token, args + list(extra), cmd, d, prog)
         if rc == 'end':
             return err, 'failed'
-        sid = None
-    if new_sid and not wt:
-        with SESS_LOCK:
-            store = sess_load()
-            store[key] = {'sid': new_sid, 'ts': time.time()}
-            sess_save(store)
-    if text is None:
-        text = out.strip() or err.strip() or '(boş cavab)'
-    elif not text.strip():
-        text = err.strip() or '(boş cavab)'
-    head = '' if (not sid or cmd.get('fresh')) else '↻ əvvəlki söhbət davam etdi\n\n'
-    return head + text, ('done' if rc == 0 and not is_err else 'failed')
+        r = prog.result
+        if r is not None:
+            return (str(r.get('result') or '').strip() or '(boş cavab)'), ('done' if rc == 0 and not r.get('is_error') else 'failed')
+        if prog.events:
+            return prog.text or (err or '').strip() or '(boş cavab)', 'failed'
+    return ((err or '').strip() or (out or '').strip() or 'claude cavab vermədi')[-2000:], 'failed'
+
+
+def run_ops(base, token, claude, cmd):
+    """ops: prompt = {"op", "args"} JSON, claude_ops.handle(op, args, ctx) işlədir. Qaytarır: (JSON mətn, status)."""
+    def fail(msg, op=''):
+        return json.dumps({'ok': False, 'op': op, 'error': msg}, ensure_ascii=False), 'failed'
+    try:
+        req = json.loads(cmd.get('prompt') or '')
+        op, args = str(req.get('op') or '').strip(), req.get('args') or {}
+        if not op or not isinstance(args, dict):
+            raise ValueError
+    except Exception:  # noqa
+        return fail('ops: prompt {"op": ..., "args": {...}} JSON olmalıdır')
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.append(here)
+    try:
+        import claude_ops
+    except Exception as e:  # noqa
+        return fail(f'claude_ops.py tapılmadı və ya yüklənmədi ({e}). Agent paketini yenilə (agent/claude_ops.py agentin yanında olmalıdır).', op)
+    projects = read_projects()
+    names = [str(args['project'])] if args.get('project') else (cmd.get('names') or [cmd.get('project') or ''])
+    ctx = {'project_path': next((projects[n] for n in names if n in projects), ''), 'projects': projects,   # qlobal op: ''
+           'profile': profile(), 'git_level': git_level(), 'claude_bin': claude}
+    box = {}
+
+    def work():
+        try:
+            box['r'] = claude_ops.handle(op, args, ctx)
+        except Exception as e:  # noqa
+            box['r'] = {'ok': False, 'op': op, 'error': f'{type(e).__name__}: {e}'}
+    th = threading.Thread(target=work, daemon=True)
+    th.start()
+    wd = Watch(base, token, cmd, min(TIMEOUT, 900))
+    while th.is_alive():
+        th.join(1)
+        why = wd.why() if th.is_alive() else None
+        if why:
+            return fail(why, op)
+    r = box.get('r')
+    r = r if isinstance(r, dict) else {'ok': True, 'data': r}
+    s = json.dumps(r, ensure_ascii=False, default=str)
+    if len(s) > 7500:                          # server 8000-də kəsir: yarımçıq JSON olmasın
+        s = json.dumps({'ok': r.get('ok', True), 'op': op, 'truncated': True, 'head': s[:6000]}, ensure_ascii=False)
+    return s, ('failed' if r.get('ok') is False else 'done')
 
 
 def git(d, *a, timeout=60):
@@ -494,18 +1056,44 @@ def acquire(base, token, cmd, path):
         STOP.wait(1)
 
 
+WAIT = 20              # claim long-poll (saniyə); server cavabı tapşırıq gələn kimi qaytarır
+KINDS = ['prompt', 'task', 'review', 'think', 'ops']   # bu agentin bildiyi növlər (server `kinds`-siz agentə ops vermir)
+LONG = [False]         # son claim uzun gözlədisə (server long-poll bilir) → POLL yatmadan dərhal yenidən
+
+
+def claim(base, token, payload):
+    """claim + wait. Köhnə server `wait`-i bilmir və dərhal cavab verir: onda əsas dövrə köhnə 3 san-lıq yuxuya qayıdır."""
+    t0 = time.time()
+    try:
+        return call(base, token, 'claim', {**payload, 'wait': WAIT, 'kinds': KINDS}, timeout=WAIT + 15)
+    finally:
+        LONG[0] = time.time() - t0 >= WAIT / 2
+
+
 def run_one(base, token, claude):
-    cmd = call(base, token, 'claim')
+    cmd = claim(base, token, {})
     if cmd.get('none'):
         return False
-    handle(base, token, claude, cmd)
+    handle_safe(base, token, claude, cmd)
     return True
 
 
 def handle(base, token, claude, cmd):
+    kind = cmd_kind(cmd)
     projects = read_projects()
     path = next((projects[n] for n in (cmd.get('names') or [cmd['project']]) if n in projects), None)
-    print(f"[{time.strftime('%H:%M:%S')}] #{cmd['id']} {cmd['project']}: {cmd['prompt'][:80]!r}", flush=True)
+    print(f"[{time.strftime('%H:%M:%S')}] #{cmd['id']} {cmd['project']}" + ('' if kind == 'prompt' else f' [{kind}]') + f": {cmd['prompt'][:80]!r}", flush=True)
+    if STOP.is_set():                                       # long-poll gözləyərkən dayandırıldı: başlama
+        call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed', 'result': 'Agent dayandırıldı, tapşırıq başlamadı. Yenidən göndər.'})
+        return
+    if kind == 'ops':                                       # Claude promptu deyil: claude_ops.py
+        out, status = run_ops(base, token, claude, cmd)
+        call(base, token, 'finish', {'id': cmd['id'], 'status': status, 'result': out})
+        print(f"   → #{cmd['id']} {status}" if WORKERS_N[0] > 1 else f'   → {status}', flush=True)
+        return
+    tmpdir = None
+    if kind == 'think' and not path and not cmd.get('project'):   # proyektsiz düşüncə: boş müvəqqəti qovluqda
+        path = tmpdir = tempfile.mkdtemp(prefix='claude-team-think-')
     if not path:
         call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
              'result': f"'{cmd['project']}' bu kompüterdə icazəli deyil. ~/.claude-team-projects siyahısına əlavə et."})
@@ -519,6 +1107,16 @@ def handle(base, token, claude, cmd):
             return
         extra = ('--add-dir', imgdir)
         cmd['prompt'] += '\n\n[Göndərənin prompta əlavə etdiyi şəkillər (Read aləti ilə bax): ' + ', '.join(files) + ']'
+    if kind == 'think':                                     # yalnız oxuyur: növbə/worktree/snapşot lazım deyil
+        try:
+            out, status = run_think(base, token, claude, cmd, path, extra)
+        finally:
+            for d in (imgdir, tmpdir):
+                if d:
+                    shutil.rmtree(d, ignore_errors=True)
+        call(base, token, 'finish', {'id': cmd['id'], 'status': status, 'result': out[-7500:]})
+        print(f"   → #{cmd['id']} {status}" if WORKERS_N[0] > 1 else f'   → {status}', flush=True)
+        return
     wt, held = None, False
     try:
         cwd, wt, why = acquire(base, token, cmd, path)
@@ -530,6 +1128,8 @@ def handle(base, token, claude, cmd):
                 print(f"   #{cmd['id']} paralel: worktree {cwd}", flush=True)
                 cmd['prompt'] += (f'\n\n[Qeyd: bu tapşırıq eyni proyektdəki başqa işlə paralel getdiyi üçün ayrıca git worktree-də işləyir: {cwd} '
                                   '(detached HEAD). Yalnız bu qovluqda işlə, budaq dəyişmə. Git-ə düşməyən fayllar (.env, node_modules və s.) burada yoxdur.]')
+            elif cmd.get('mode') != 'plan':
+                snapshot(cmd, path)                         # undo_last üçün: işdən əvvəlki vəziyyət
             out, status = run_claude(base, token, claude, cmd, path, extra, cwd)
             if wt:
                 out += '\n\n⎇ Paralel iş ayrıca git worktree-də getdi: ' + wt_done(path, cwd, wt[1], cmd['id'])
@@ -560,7 +1160,7 @@ def claim_many(base, token, claude, free, threads):
     with LOCK:
         busy = set(PRIMARY)
     skip = sorted(n for n, p in read_projects().items() if p in busy and not can_worktree(p))
-    r = call(base, token, 'claim', {'slots': free, 'skip': skip})
+    r = claim(base, token, {'slots': free, 'skip': skip})
     items = r['items'] if isinstance(r.get('items'), list) else ([] if r.get('none') else [r])   # köhnə server: tək obyekt
     for cmd in items[:free]:
         t = threading.Thread(target=handle_safe, args=(base, token, claude, cmd), daemon=True)
@@ -606,12 +1206,19 @@ def main():
     n = WORKERS_N[0] = 1 if once else workers()
     if not once:
         single_instance()
+    WARM_ON[0] = not once and warm_enabled()
+    atexit.register(warm_kill_all)
+    threading.Thread(target=discover, args=(claude, not once and profile() in ('ops', 'full')), daemon=True).start()
     signal.signal(signal.SIGTERM, on_signal)
     signal.signal(signal.SIGINT, on_signal)
     last_ping, last_auth, logged_in, warned, threads = 0, 0, True, False, []
-    print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}' + (f'  |  {n} paralel işçi' if n > 1 else ''), flush=True)
+    prof = profile()
+    print(f'Agent işləyir. Proyektlər: {", ".join(read_projects()) or "(yoxdur)"}  |  {base}' + (f'  |  {n} paralel işçi' if n > 1 else '')
+          + ('' if prof == 'basic' else f'  |  profil {prof}, git {git_level()}') + ('  |  isti sessiyalar' if WARM_ON[0] else ''), flush=True)
     while not STOP.is_set():
         try:
+            LONG[0] = False
+            warm_reap()
             now = time.time()
             if now - last_ping > 10:                           # ürək döyüntüsü: panel 30 san səssizlikdən sonra oflayn sayır
                 last_ping = now
@@ -619,7 +1226,8 @@ def main():
                 if now - last_auth > (60 if logged_in else 10):
                     last_auth = now
                     logged_in = auth_ok(claude)
-                call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects()), 'workers': n})
+                call(base, token, 'ping', {'claude_ok': logged_in, 'projects': sorted(read_projects()), 'workers': n, 'profile': profile(),
+                                           'caps': {'claude_version': CAPS['claude_version'], 'mcp': CAPS['mcp'], 'warm': warm_names(), 'workers': n}})
                 if not logged_in and not warned:
                     warned = True
                     print('Claude girişi yoxdur: tapşırıq götürülmür. Terminalda `~/.local/bin/claude` yaz və /login et.', flush=True)
@@ -639,7 +1247,7 @@ def main():
                 if len(threads) >= n:
                     STOP.wait(1)
                     continue
-            if got:
+            if got or LONG[0]:                                 # long-poll artıq gözlədi: yatmadan yenidən soruş
                 continue
         except urllib.error.HTTPError as e:
             print('Server xətası:', e.code, flush=True)
@@ -658,6 +1266,7 @@ def shutdown(threads):
     """Paralel işçiləri gözlə: GRACE ərzində bitməyənləri dayandır (exec_claude özü öldürüb "alınmadı" yazır)."""
     alive = [t for t in threads if t.is_alive()]
     if not alive:
+        warm_kill_all()
         return
     print(f'{len(alive)} tapşırıq bitməsi gözlənilir…', flush=True)
     for t in alive:
@@ -665,6 +1274,7 @@ def shutdown(threads):
     HARD.set()
     for t in alive:
         t.join(30)
+    warm_kill_all()
 
 
 if __name__ == '__main__':

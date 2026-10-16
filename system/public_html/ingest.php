@@ -99,9 +99,12 @@ $now = time();
 $pdo->prepare('INSERT INTO events (user, session_id, project, event, tool, summary, created_at) VALUES (?,?,?,?,?,?,?)')
     ->execute([$user, $sid, $project, $event, $tool, $summary, $now]);
 
-$exists = $pdo->prepare('SELECT 1 FROM sessions WHERE user = ? AND session_id = ?');
+$exists = $pdo->prepare('SELECT status, last_prompt, project FROM sessions WHERE user = ? AND session_id = ?');
 $exists->execute([$user, $sid]);
-if ($exists->fetchColumn()) {
+$prev = $exists->fetch();
+// real-time: yalnız status/prompt/proyekt dəyişəndə (hər PostToolUse-da yox) → session.update
+$changed = !$prev || $prev['status'] !== $status || ($setPrompt !== null && $setPrompt !== $prev['last_prompt']) || $prev['project'] !== $project;
+if ($prev) {
     $pdo->prepare('UPDATE sessions SET project = ?, cwd = ?, status = ?, last_summary = ?,
             last_prompt = COALESCE(?, last_prompt), edits = edits + ?, tool_count = tool_count + ?, updated_at = ?
             WHERE user = ? AND session_id = ?')
@@ -110,6 +113,10 @@ if ($exists->fetchColumn()) {
     $pdo->prepare('INSERT INTO sessions (user, session_id, project, cwd, status, last_prompt, last_summary, edits, tool_count, started_at, updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?)')
         ->execute([$user, $sid, $project, $cwd, $status, $setPrompt ?? '', $summary, $edit ? 1 : 0, $tool !== '' ? 1 : 0, $now, $now]);
+}
+if ($changed) {                             // sətir yazıldıqdan sonra: klientin load()-u artıq yeni vəziyyəti görür
+    emit_event($pdo, 'session.update', $user, $project, 0, ['user' => $user, 'session_id' => $sid, 'project' => $project, 'status' => $status,
+        'prompt' => mb_substr($setPrompt ?? ($prev['last_prompt'] ?? ''), 0, 300)]);
 }
 
 // Eyni faylı iki nəfər dəyişir? (30 dəqiqə pəncərəsi). Xəta olsa hadisənin qəbuluna mane olmasın.

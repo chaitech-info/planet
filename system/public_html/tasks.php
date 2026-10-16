@@ -68,6 +68,9 @@ if ($act === 'create') {
     $id = (int)$pdo->lastInsertId();
     // agentlər lövhəni özləri işləsin: icraçının agenti varsa tapşırıq dərhal ona gedir
     $cid = auto_run_task($pdo, ['id' => $id, 'project' => $project, 'title' => $title, 'details' => $details, 'assignee' => $assignee, 'status' => 'todo'], $now);
+    if ($cid) {
+        emit_event($pdo, 'command.queued', $assignee, $project, $cid, ['id' => $cid, 'project' => $project, 'prompt' => mb_substr($title, 0, 300), 'kind' => 'task']);
+    }
     if ($assignee !== $me['name']) {
         notify_later("📌 Yeni tapşırıq → $assignee\n$title\nProyekt: $project · təyin edən: " . $me['name'] . ($cid ? "\n🤖 $assignee-in agentinə avtomatik göndərildi" : ''));
     }
@@ -132,6 +135,9 @@ if ($act === 'update') {
         ->execute([$title, $details, $assignee, $now, $t['id']]);
     // başqasına verildisə və hələ gözləyirsə: yeni icraçının agentinə avtomatik gedir
     $cid = $assignee !== $t['assignee'] ? auto_run_task($pdo, array_merge($t, ['title' => $title, 'details' => $details, 'assignee' => $assignee]), $now) : null;
+    if ($cid) {
+        emit_event($pdo, 'command.queued', $assignee, (string)$t['project'], $cid, ['id' => $cid, 'project' => (string)$t['project'], 'prompt' => mb_substr($title, 0, 300), 'kind' => 'task']);
+    }
     json_out(['ok' => true, 'auto' => $cid !== null]);
 }
 

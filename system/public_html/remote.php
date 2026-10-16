@@ -166,6 +166,9 @@ if ($act === 'send') {
     $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images, chat) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
         ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '', $chat]);
     $id = (int)$pdo->lastInsertId();
+    if ($status === 'queued') {
+        emit_event($pdo, 'command.queued', $target, $project, $id, ['id' => $id, 'project' => $project, 'prompt' => mb_substr($full, 0, 300), 'kind' => 'prompt']);
+    }
     if ($chat === 0) {                                           // yeni söhbət: ilk komandanın id-si söhbətin nömrəsidir
         $chat = $id;
         $pdo->prepare('UPDATE commands SET chat = ? WHERE id = ?')->execute([$chat, $id]);
