@@ -107,7 +107,8 @@ if ($act === 'send') {
     $target = (string)($in['target'] ?? '');
     $project = trim((string)($in['project'] ?? ''));
     $prompt = trim((string)preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', (string)($in['prompt'] ?? '')));
-    if ($target === $name || !user_exists($pdo, $target)) {
+    $self = $target === $name;                               // öz kompüterinə: icazə lazım deyil, dərhal işə düşür
+    if (!$self && !user_exists($pdo, $target)) {
         json_out(['error' => 'hədəf istifadəçi yanlışdır'], 400);
     }
     if ($project === '' || mb_strlen($project) > 128) {
@@ -119,7 +120,7 @@ if ($act === 'send') {
     // icazə: sahib mənə (və ya hamıya) verib? şəxsi icazə hamıya olandan üstündür
     $g = $pdo->prepare("SELECT grantee, mode FROM remote_grants WHERE owner = ? AND grantee IN (?, '*') ORDER BY (grantee = '*') ASC LIMIT 1");
     $g->execute([$target, $name]);
-    $grant = $g->fetch();
+    $grant = $self ? ['grantee' => $name, 'mode' => 'auto'] : $g->fetch();
     if (!$grant) {
         json_out(['error' => $target . ' sənə öz kompüterinə komanda göndərməyə icazə verməyib'], 403);
     }
@@ -162,7 +163,7 @@ if ($act === 'send') {
         }
     }
     $images = remote_save_images($_FILES['images'] ?? null);
-    $full = '[' . $name . ' uzaqdan göndərdi (Desktop Universe)]' . "\n" . $prompt;
+    $full = $self ? $prompt : '[' . $name . ' uzaqdan göndərdi (Desktop Universe)]' . "\n" . $prompt;
     $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images, chat) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
         ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '', $chat]);
     $id = (int)$pdo->lastInsertId();
@@ -188,7 +189,7 @@ function chat_scope(PDO $pdo, string $target, string $name): array
     if ($target !== $name && !user_exists($pdo, $target)) {
         json_out(['error' => 'hədəf istifadəçi yanlışdır'], 400);
     }
-    return $target === $name ? ["user = ? AND creator != '' AND creator != ?", [$target, $target]] : ['user = ? AND creator = ?', [$target, $name]];
+    return $target === $name ? ["user = ? AND creator != ''", [$target]] : ['user = ? AND creator = ?', [$target, $name]];   // sahib: gələnlər + özünün bu səhifədən yazdıqları
 }
 
 if ($act === 'chats') {                                           // söhbət siyahısı: ən son yazılan əvvəl
