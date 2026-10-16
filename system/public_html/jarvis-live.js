@@ -270,7 +270,7 @@
   }
   function capBot(text) {
     if (newTurn) { uTxt = ''; cu.textContent = ''; jTxt = ''; jShown = 0; newTurn = false; }
-    jTxt = (fromLog('j', text) || jTxt + text).replace(/\s+/g, ' ');
+    jTxt = (fromLog('j', text) || jTxt + text).replace(/<tool_call>[\s\S]*?(?:<\/tool_call>|$)/g, ' ').replace(/<\/?(?:tool_call|arg_key|arg_value)>/g, ' ').replace(/\s+/g, ' ');   // mətn kimi yazılmış alət çağırışı altyazıda görünməsin
     if (RM.matches) { jShown = jTxt.length; cj.textContent = tail(jTxt.trim(), 170); }
     capShow(); kick();
   }

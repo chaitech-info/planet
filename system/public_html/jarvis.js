@@ -66,11 +66,27 @@
     scrollLog(); return n;
   }
   /** Canlı transkript: eyni növbədəki parçalar bir sətrə yığılır */
+  /* Model bəzən aləti funksiya kimi yox, MƏTN kimi yazır: <tool_call>ad<arg_key>k</arg_key><arg_value>v</arg_value></tool_call>
+     və ya <tool_call>{"name":…,"arguments":{…}}</tool_call>. Belə mətn ekranda göstərilmir, adapter onu əsl çağırışa çevirir. */
+  const TC_RE = /<tool_call>([\s\S]*?)(?:<\/tool_call>|$)/g;
+  const hideCalls = t => t.replace(TC_RE, ' ').replace(/<\/?(?:tool_call|arg_key|arg_value)>/g, ' ');
+  function parseTextCalls(text) {
+    const out = []; if (!text || text.indexOf('<tool_call>') < 0) return out;
+    const val = v => { v = v.trim(); try { return JSON.parse(v); } catch (e) { return v; } };
+    for (const m of text.matchAll(TC_RE)) {
+      const body = m[1].trim(); if (!body) continue;
+      if (body[0] === '{') { try { const j = JSON.parse(body); if (j.name) out.push({ name: String(j.name), args: typeof j.arguments === 'string' ? JSON.parse(j.arguments || '{}') : (j.arguments || j.args || {}) }); } catch (e) {} continue; }
+      const name = body.split('<')[0].trim(); if (!/^[a-z0-9_]{2,64}$/i.test(name)) continue;
+      const args = {}; for (const kv of body.matchAll(/<arg_key>([\s\S]*?)<\/arg_key>\s*<arg_value>([\s\S]*?)(?:<\/arg_value>|$)/g)) args[kv[1].trim()] = val(kv[2]);
+      out.push({ name, args });
+    }
+    return out;
+  }
   function stream(who, text) {
     if (!text) return;
     let n = J.cur[who];
     if (!n) { n = J.cur[who] = line(who === 'user' ? 'u' : 'j', ''); n._t = ''; }
-    n._t += text; n.textContent = n._t.replace(/\s+/g, ' ').trim();
+    n._t += text; n.textContent = (who === 'user' ? n._t : hideCalls(n._t)).replace(/\s+/g, ' ').trim();
     scrollLog();
   }
   const endTurn = () => { J.cur.user = null; J.cur.jarvis = null; };
@@ -636,7 +652,7 @@
       connect(d, h) {
         const ws = new WebSocket(d.ws + '?fal_jwt_token=' + encodeURIComponent(d.token)); ws.binaryType = 'arraybuffer';
         const send = o => { if (ws.readyState === 1) ws.send(MP.encode(o)); };
-        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null;
+        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null, botTxt = '', txtN = 0;
         // Sürət sahələri (reasoning none, silence_duration_ms, web_search/x_search) rədd edilsə: bir dəfə onlarsız session.update
         let sess = d.session, retried = false;
         const plain = s => ({ ...s, reasoning: undefined, turn_detection: { type: 'server_vad' }, tools: (s.tools || []).filter(t => t.type === 'function') });
@@ -668,10 +684,10 @@
             case 'conversation.item.input_audio_transcription.completed': {
               const t = m.transcript || ''; if (t && t !== userTxt) { h.user(t, true); userTxt = t; } break;
             }
-            case 'response.created': inResp = true; break;
+            case 'response.created': inResp = true; botTxt = ''; break;
             case 'response.output_audio.delta': case 'response.audio.delta': h.audio(m.delta, 24000); break;
             case 'response.output_audio_transcript.delta': case 'response.audio_transcript.delta': case 'response.text.delta': case 'response.output_text.delta':
-              if (m.delta) h.bot(m.delta); break;
+              if (m.delta) { botTxt += m.delta; h.bot(m.delta); } break;
             case 'response.function_call_arguments.done': {
               let args = {}; try { args = m.arguments ? JSON.parse(m.arguments) : {}; } catch (e) {}
               pending.push({ id: m.call_id, name: m.name, args }); break;
@@ -680,6 +696,11 @@
               inResp = false; userTxt = '';
               const st = m.response && m.response.status;
               if (st === 'failed') h.info('Grok cavabı alınmadı: ' + JSON.stringify((m.response.status_details || {}).error || m.response.status_details || '').slice(0, 200));
+              if (!pending.length) {                         // əsl çağırış yoxdur, amma model aləti mətn kimi yazıb → bərpa et
+                const tc = parseTextCalls(botTxt);
+                if (tc.length) { console.warn('Jarvis: mətn kimi yazılmış alət çağırışı bərpa olundu', tc.map(c => c.name)); pending = tc.map(c => ({ id: 'txt-' + (++txtN), name: c.name, args: c.args, textual: true })); }
+              }
+              botTxt = '';
               if (pending.length) { const calls = pending; pending = []; h.tools(calls); }   // alətləri cavab bitəndə icra et (hamısını bir dəfəyə)
               else h.turnDone();
               break;
@@ -690,7 +711,10 @@
         return {
           audio: data => send({ type: 'input_audio_buffer.append', audio: data }),
           toolResults: out => {
-            for (const o of out) send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: o.id, output: JSON.stringify(o.response) } });
+            for (const o of out) {
+              if (String(o.id).startsWith('txt-')) send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '[Tool result: ' + o.name + '] ' + JSON.stringify(o.response).slice(0, 4000) + '\n(Next time call tools with function calling, never write <tool_call> as text.)' }] } });
+              else send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: o.id, output: JSON.stringify(o.response) } });
+            }
             create();
           },
           note: text => {
