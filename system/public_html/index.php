@@ -705,28 +705,54 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body
 .xd-lock { padding: 16px 14px; border-radius: 14px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); margin-top: 14px; text-align: center; }
 .xd-lock-t { font-weight: 600; font-size: 15px; margin-bottom: 4px; } .xd-lock .mnote { margin-bottom: 10px; }
 .xd-empty { color: var(--muted); font-size: 13px; padding: 14px 12px; border: 1px dashed rgba(255,255,255,.14); border-radius: 12px; text-align: center; }
-/* Söhbətlər zolağı: hər çip bir söhbət, üfüqi sürüşür (çox olanda axını aşağı itələməsin) */
+/* Söhbətlər zolağı: hər çip bir söhbət, üfüqi sürüşür (çox olanda axını aşağı itələməsin); panelin yuxarısına yapışır ki, aşağı sürüşəndə də keçid olsun */
 .xd-chatbar:empty { display: none; }
+.xd-chatbar { position: sticky; top: -14px; z-index: 2; margin: 0 -14px; padding: 6px 14px 0; background: rgba(9,10,20,.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,.08); }
+.xd-chatbar .lbl { margin: 6px 0 6px; }
+/* Söhbət siyahısı yazı qutusundan yuxarı açılır (yuxarı sürüşmədən keçid) */
+.xd-pop { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 6px); max-height: min(60vh, 440px); overflow: auto; background: rgba(14,15,28,.97); border: 1px solid rgba(255,255,255,.14); border-radius: 14px; box-shadow: 0 -8px 30px rgba(0,0,0,.45); padding: 6px; z-index: 3; }
+.xd-pop[hidden] { display: none; }
+.xd-pop .xp { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; color: #ececf1; font: inherit; font-size: 13px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+.xd-pop .xp:hover { background: rgba(255,255,255,.07); } .xd-pop .xp.on { background: rgba(240,138,93,.16); }
+.xd-pop .xp .xt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.xd-pop .xp .xn { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.xd-pop .xp .xs { grid-column: 2 / 4; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xd-pop .xd-empty { margin: 4px; }
 .xd-chats { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 0 12px; padding-bottom: 2px; } .xd-chats::-webkit-scrollbar { display: none; }
 .xd-chats button { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 250px; padding: 5px 11px; }
 .xd-chats .xc-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .xd-chats .xc-m { font-size: 11px; color: var(--muted); white-space: nowrap; } .xd-chats button.on .xc-m { color: rgba(255,255,255,.8); }
 .xd-prj button:disabled { opacity: .38; cursor: default; }
-.xthread { display: grid; gap: 12px; }
-.xmsg { display: grid; gap: 6px; }
-.xbub { border-radius: 14px; padding: 9px 12px; font-size: 13.5px; max-width: 92%; min-width: 0; }
-.xmsg.out .q { justify-self: end; background: rgba(240,138,93,.16); border: 1px solid rgba(240,138,93,.35); border-bottom-right-radius: 4px; }
-.xmsg.in .q { justify-self: start; background: rgba(157,140,255,.14); border: 1px solid rgba(157,140,255,.35); border-bottom-left-radius: 4px; }
-.xbub.r { justify-self: start; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-bottom-left-radius: 4px; }
-.xmsg.in .r { justify-self: end; border-bottom-left-radius: 14px; border-bottom-right-radius: 4px; }
-.xbub.r[data-s="done"] { border-color: rgba(74,222,128,.4); } .xbub.r[data-s="failed"] { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.07); } .xbub.r[data-s="canceled"] { opacity: .7; }
-.xq { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.45; } .xq.clamp { display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
-.xbub .xm { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.xthread { display: grid; gap: 14px; }
+.xday { justify-self: center; font-size: 11px; color: var(--muted); background: rgba(255,255,255,.06); border-radius: 999px; padding: 2px 10px; margin: 4px 0 -4px; letter-spacing: .02em; }
+.xmsg { display: grid; gap: 6px; } .xmsg.enter { animation: xin .3s var(--ease-out) backwards; }
+@keyframes xin { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.xbub { border-radius: 16px; padding: 9px 13px; font-size: 14px; max-width: 88%; min-width: 0; line-height: 1.5; }
+.xmsg.out .q { justify-self: end; background: rgba(240,138,93,.16); border: 1px solid rgba(240,138,93,.35); border-bottom-right-radius: 5px; }
+.xmsg.in .q { justify-self: start; background: rgba(157,140,255,.14); border: 1px solid rgba(157,140,255,.35); border-bottom-left-radius: 5px; }
+.xbub.r { justify-self: start; max-width: 100%; width: 100%; box-sizing: border-box; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); border-bottom-left-radius: 5px; }
+.xmsg.in .r { border-bottom-left-radius: 16px; border-bottom-right-radius: 5px; }
+.xbub.r[data-s="done"] { border-color: rgba(74,222,128,.35); } .xbub.r[data-s="failed"] { border-color: rgba(248,113,113,.5); background: rgba(248,113,113,.07); } .xbub.r[data-s="canceled"] { opacity: .7; }
+.xbub.r[data-s="running"] { border-color: rgba(157,140,255,.4); }
+.xbub.r[data-s="sending"] { opacity: .75; }
+.xq { white-space: pre-wrap; overflow-wrap: anywhere; } .xq.clamp { display: -webkit-box; -webkit-line-clamp: 7; -webkit-box-orient: vertical; overflow: hidden; }
+.xbub .xm { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin-top: 5px; } .xmsg.out .xm { justify-content: flex-end; }
 .xbub .cmdimgs { margin-top: 8px; } .xbub .cmdimgs .cimg { width: 56px; height: 56px; }
-.xst { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(233,233,243,.85); }
+.xst { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: rgba(233,233,243,.85); flex-wrap: wrap; } .xst .typing { display: inline-flex; }
+.xact { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; margin-top: 6px; padding: 6px 9px; border-radius: 9px; background: rgba(157,140,255,.08); }
+.xact .xtool { color: #c4b8ff; font-weight: 600; white-space: nowrap; } .xact .sp { flex: 1; }
+/* Claude cavabı: oxunaqlı mətn (yüngül markdown); uzun cavab yığılır, sonu solur, "Tam göstər" açır */
+.xres { position: relative; margin-top: 8px; font-size: 13.5px; color: rgba(236,236,241,.92); }
+.xres:not(.open) { max-height: 15.5em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 72%, transparent); mask-image: linear-gradient(#000 72%, transparent); }
+.md p { margin: 0 0 8px; overflow-wrap: anywhere; white-space: pre-wrap; } .md > :last-child { margin-bottom: 0; }
+.md .mdh { font-weight: 700; margin: 10px 0 6px; } .md .mdh:first-child { margin-top: 0; }
+.md .mdl { display: grid; gap: 3px; margin: 0 0 8px; } .md .mdi { display: flex; gap: 8px; overflow-wrap: anywhere; } .md .mdb { color: var(--muted); flex: none; min-width: 10px; text-align: right; }
+.md code { font: 12.5px ui-monospace, Menlo, monospace; background: rgba(255,255,255,.09); padding: 1px 5px; border-radius: 5px; }
+.md pre { margin: 0 0 8px; padding: 8px 10px; border-radius: 9px; background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.08); font: 12px/1.5 ui-monospace, Menlo, monospace; color: rgba(233,233,243,.85); overflow: auto; white-space: pre; }
 .xbub .pb { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: rgba(233,233,243,.78); max-height: 4.4em; overflow: hidden; margin-top: 8px; }
 .xbub .pb.pbp:not(.open) { display: none; } .xbub .pb.open { max-height: none; overflow: auto; }
 .xbub .pbt, .prow.xd-pend .pbt { margin-top: 4px; font-size: 12px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.xft { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; } .xft .pbt { margin: 0; } .xft .ghost { color: var(--muted); } .xft .ghost:hover { color: #fff; }
 .xbub .pa { display: flex; gap: 6px; margin-top: 8px; } .xbub .pa .gbtn { padding: 3px 10px; font-size: 12px; } .xbub .pa .danger { color: #f87171; border-color: rgba(248,113,113,.35); }
 .xd-comp { position: sticky; bottom: -14px; margin: 14px -14px -14px; padding: 10px 14px 14px; background: rgba(9,10,20,.92); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-top: 1px solid rgba(255,255,255,.1); }
 .xd-comp[hidden] { display: none; }
@@ -734,10 +760,12 @@ body.student a[href^="kit.php"], body.student #t-mcp, body.student #jv-btn, body
 .xd-comp textarea { margin-top: 0; min-height: 44px; max-height: 260px; resize: none; line-height: 1.4; }
 .xd-comp .cmdimgs { margin-top: 8px; }
 .xd-tool { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; } .xd-tool .sp { flex: 1; }
-.xd-hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.xd-hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; } .xd-hint.lim { color: #fbbf24; }
 .xd-send { padding: 6px 16px; } .xd-send:disabled { opacity: .45; }
 .xd-warn { font-size: 12.5px; color: #fcd34d; margin-top: 8px; } .xd-warn[hidden] { display: none; }
-@media (max-width: 520px) { .xd-hint { display: none; } }
+.xd-down { position: absolute; left: 50%; top: -16px; transform: translate(-50%, -100%); border-radius: 999px; padding: 5px 13px; border: 1px solid rgba(255,255,255,.2); background: rgba(20,22,38,.95); color: #fff; font: inherit; font-size: 12.5px; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,.4); white-space: nowrap; }
+.xd-down[hidden] { display: none; } .xd-down.new { border-color: var(--accent); color: #ffd3bf; }
+@media (max-width: 520px) { .xd-hint:not(.lim) { display: none; } }
 .tsbar { display: flex; height: 8px; border-radius: 99px; overflow: hidden; background: rgba(255,255,255,.08); margin: 8px 0 4px; }
 .tsbar i { display: block; } .tsbar .p { background: #4ade80; } .tsbar .f { background: #f87171; }
 .tdue { font-size: 11.5px; border-radius: 999px; padding: 0 8px; border: 1px solid rgba(251,191,36,.45); color: #b45309; }
@@ -801,6 +829,7 @@ html { -webkit-text-size-adjust: 100%; }
   .dock { left: 8px; right: 8px; bottom: 8px; height: 70%; padding: 12px; transition: transform .5s var(--ease-out), opacity .3s ease, height .25s ease; }
   .dtitle { font-size: 22px; } .dtop .dtitle { font-size: 19px; }
   .xd-comp { margin: 12px -12px -12px; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); bottom: -12px; }
+  .xd-chatbar { top: -12px; margin: 0 -12px; padding: 4px 12px 0; }
   /* Lövhə */
   .bbar { gap: 8px; } .bbar select { flex: 1; min-width: 0; } .bbar .sp { display: none; } .bbar #b-newtask { width: 100%; }
   .btoken { flex-direction: column; align-items: stretch; } .btoken input { min-width: 0; }
@@ -2789,30 +2818,116 @@ const myGrantOn = owner => { const gs = (data.grants || []).filter(g => g.owner 
    Sahib üçün: təsdiq gözləyənlər və icazələr axının üstündə. Hər blok yalnız öz imzası dəyişəndə yenilənir (yazılan mətn itməsin). */
 const xdOpt = (v, t) => Object.assign(document.createElement('option'), { value: v, textContent: t });
 const xdPrompt = c => c.prompt.replace(/^\[[^\]]*\]\n/, '');
-/** Söhbətdə bir komanda: göndərilən mətn (sağda) və Claude Code-un cavabı/vəziyyəti (solda) */
-function xdMessage(c, u, mine, a) {
+/** Söhbətdə vaxt: bu gün yalnız saat, başqa gün tarix + saat (tam tarix title-da) */
+const xdDayKey = ts => new Date(ts * 1000).toDateString();
+function xdTime(ts) {
+  const d = new Date(ts * 1000), hm = d.toLocaleTimeString('az', { hour: '2-digit', minute: '2-digit' });
+  return xdDayKey(ts) === xdDayKey(now()) ? hm : d.toLocaleDateString('az', { day: 'numeric', month: 'short' }) + ' ' + hm;
+}
+function xdDayLabel(ts) {
+  const k = xdDayKey(ts);
+  if (k === xdDayKey(now())) return 'Bu gün';
+  if (k === xdDayKey(now() - DAY)) return 'Dünən';
+  const d = new Date(ts * 1000), o = { day: 'numeric', month: 'long' };
+  if (d.getFullYear() !== new Date().getFullYear()) o.year = 'numeric';
+  return d.toLocaleDateString('az', o);
+}
+/** Claude cavabı üçün yüngül markdown → DOM: başlıq, siyahı, kod bloku, cədvəl (mono), **qalın**, `kod`. HTML yazılmır: hər şey mətn düyünüdür */
+function mdLite(src) {
+  const root = el('div', 'md'), lines = String(src).replace(/\r/g, '').split('\n');
+  const LI = /^(\s*)([-*•]|\d{1,3}[.)])\s+(.*)$/;
+  const inline = (n, s) => {
+    const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)/g; let last = 0, m;
+    while ((m = re.exec(s))) {
+      if (m.index > last) n.append(s.slice(last, m.index));
+      n.append(m[1] ? el('code', null, m[1].slice(1, -1)) : el('b', null, m[2].slice(2, -2)));
+      last = m.index + m[0].length;
+    }
+    if (last < s.length) n.append(s.slice(last));
+  };
+  let i = 0, para = [];
+  const flush = () => { if (para.length) { const p = el('p'); inline(p, para.join('\n')); root.append(p); para = []; } };
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\s*```/.test(l)) { flush(); const buf = []; i++; while (i < lines.length && !/^\s*```/.test(lines[i])) buf.push(lines[i++]); i++; root.append(el('pre', null, buf.join('\n'))); continue; }
+    if (/^\s*\|/.test(l)) { flush(); const buf = []; while (i < lines.length && /^\s*\|/.test(lines[i])) buf.push(lines[i++]); root.append(el('pre', null, buf.join('\n'))); continue; }
+    if (/^#{1,6}\s/.test(l)) { flush(); const h = el('div', 'mdh'); inline(h, l.replace(/^#+\s*/, '')); root.append(h); i++; continue; }
+    if (LI.test(l)) {
+      flush(); const ul = el('div', 'mdl');
+      while (i < lines.length) {
+        const m = LI.exec(lines[i]); if (!m) break;
+        const it = el('div', 'mdi'); it.style.marginLeft = Math.min(3, Math.floor(m[1].length / 2)) * 14 + 'px';
+        it.append(el('span', 'mdb', /\d/.test(m[2]) ? m[2].replace(')', '.') : '•')); const t = el('span'); inline(t, m[3]); it.append(t); ul.append(it); i++;
+      }
+      root.append(ul); continue;
+    }
+    if (!l.trim()) { flush(); i++; continue; }
+    para.push(l); i++;
+  }
+  flush();
+  return root;
+}
+async function copyText(t) { try { await navigator.clipboard.writeText(t); miniToast('⧉ Kopyalandı'); } catch (e) { miniToast('Kopyalanmadı'); } }
+const closedRes = new Set();                      // istifadəçinin əl ilə yığdığı son cavablar (son cavab standart olaraq açıqdır)
+/** Söhbətdə Claude cavabı: oxunaqlı mətn; uzundursa yığılır (sonuncu cavab açıq gəlir), Tam göstər / Yığ / Kopyala */
+function xdResult(text, key, latest) {
+  const w = el('div'), box = el('div', 'xres'); box.append(mdLite(text)); w.append(box);
+  const long = text.length > 900 || text.split('\n').length > 14;
+  const ft = el('div', 'xft');
+  if (long) {
+    const t = el('button', 'pbt');
+    const sync = o => { box.classList.toggle('open', o); setText(t, o ? '▴ Yığ' : '▾ Tam göstər'); };
+    t.onclick = () => { const o = !box.classList.contains('open'); if (latest) { o ? closedRes.delete(key) : closedRes.add(key); } else { o ? openRes.add(key) : openRes.delete(key); } sync(o); };
+    sync(latest ? !closedRes.has(key) : openRes.has(key));
+    ft.append(t);
+  } else box.classList.add('open');
+  const cp = el('button', 'pbt ghost', '⧉ Kopyala'); cp.type = 'button'; cp.onclick = () => copyText(text); ft.append(cp);
+  w.append(ft);
+  return w;
+}
+/** Claude işləyərkən son hook hadisəsi: hansı aləti, nəyi edir (sahibin kompüterindəki Claude Code-un hook-ları feed-ə düşür) */
+function xdActivity(c, u) {
+  const e = (data.events || []).find(e => e.user === u && e.project === c.project && e.created_at >= (c.started_at || 0) && e.tool);
+  if (!e) return null;
+  const a = el('div', 'xact'), tool = e.tool.startsWith('mcp__') ? '🛰 ' + e.tool.split('__').slice(1).join(' · ') : e.tool;
+  a.append(el('span', 'xtool', tool), el('span', null, (e.summary || '').slice(0, 160)), el('span', 'sp'), el('span', null, ago(e.created_at)));
+  return a;
+}
+/** Söhbətdə bir komanda: göndərilən mətn (sağda) və Claude Code-un cavabı/vəziyyəti (solda). latest = söhbətin son mesajı (cavabı açıq gəlir) */
+function xdMessage(c, u, mine, a, latest, hidePrj) {
   const w = el('div', 'xmsg' + (mine ? ' in' : ' out'));
   const q = el('div', 'xbub q'), text = xdPrompt(c), long = text.length > 420 || text.split('\n').length > 7;
   const body = el('div', 'xq', text); q.append(body);
+  const qf = el('div', 'xft');
   if (long) {
     const t = el('button', 'pbt'), key = 'p' + c.id, draw = o => { body.classList.toggle('clamp', !o); setText(t, o ? '▴ Yığ' : '▾ Tam göstər'); };
     t.onclick = () => { const o = body.classList.contains('clamp'); o ? openRes.add(key) : openRes.delete(key); draw(o); };
-    draw(openRes.has(key)); q.append(t);
+    draw(openRes.has(key)); qf.append(t);
   }
   { const ib = imgStrip(c); if (ib) q.append(ib); }
-  q.append(el('div', 'xm', (mine ? c.creator + ' · ' : '') + '🪐 ' + c.project + ' · ' + ago(c.created_at)));
+  const fill = $('xd-info')._fill;                                               // yazı qutusuna qoy (yenidən göndərmək / düzəltmək üçün)
+  if (fill && !mine && c.status !== 'sending') { const rp = el('button', 'pbt ghost', '↻ Yenidən yaz'); rp.type = 'button'; rp.title = 'Bu mətni yazı qutusuna qoy: düzəldib yenidən göndər'; rp.onclick = () => fill(text); qf.append(rp); }
+  if (qf.children.length) q.append(qf);
+  const m = el('div', 'xm'), tm = el('span', null, xdTime(c.created_at)); tm.title = new Date(c.created_at * 1000).toLocaleString('az');
+  if (mine) m.append(el('b', null, c.creator), el('span', null, '·'));
+  if (!hidePrj) m.append(el('span', null, '🪐 ' + c.project), el('span', null, '·'));
+  m.append(tm); q.append(m);
   w.append(q);
-  const [, dc] = CMD_ST[c.status] || [c.status, 'offline'];
+  const [, dc] = CMD_ST[c.status] || [c.status, c.status === 'sending' ? 'waiting' : 'offline'];
   const r = el('div', 'xbub r'); r.dataset.s = c.status;
   const st = el('div', 'xst'), txt =
+    c.status === 'sending' ? 'Göndərilir…' :
     c.status === 'pending' ? (mine ? 'Sənin təsdiqini gözləyir' : u + '-in təsdiqini gözləyir') :
     c.status === 'queued' ? (a.online ? 'Növbədə, indi başlayır…' : 'Növbədə · kompüter oflayndır, onlayn olanda başlayacaq') :
-    c.status === 'running' ? 'Claude işləyir · ' + ago(c.started_at) :
-    c.status === 'done' ? 'Bitdi · ' + ago(c.finished_at) :
+    c.status === 'running' ? 'Claude işləyir · ' + fmtDur(Math.max(0, now() - c.started_at)) :
+    c.status === 'done' ? 'Bitdi' + (c.started_at && c.finished_at ? ' · ' + fmtDur(Math.max(0, c.finished_at - c.started_at)) : '') + ' · ' + ago(c.finished_at) :
     c.status === 'failed' ? 'Xəta · ' + ago(c.finished_at) :
     'Ləğv edildi' + (c.result ? ' · ' + c.result : '');
-  st.append(el('span', 'dot ' + dc), el('span', null, txt)); r.append(st);
-  if (c.result && c.status !== 'canceled') r.append(resultBox(c.result, c.id));
+  st.append(el('span', 'dot ' + dc), el('span', null, txt));
+  if (c.status === 'running') { const ty = el('span', 'typing'); ty.append(el('i'), el('i'), el('i')); st.append(ty); }
+  r.append(st);
+  if (c.status === 'running') { const act = xdActivity(c, u); if (act) r.append(act); }
+  if (c.result && c.status !== 'canceled') r.append(xdResult(c.result, c.id, latest));
   if (['pending', 'queued', 'running'].includes(c.status)) {
     const pa = el('div', 'pa'), b = el('button', 'gbtn danger', c.status === 'running' ? '■ Dayandır' : '✕ Ləğv et');
     b.onclick = async () => { b.disabled = true; await CTL('stop_command', { id: c.id }); load(); }; pa.append(b); r.append(pa);
@@ -2858,8 +2973,14 @@ function renderDesktopPlanet(u) {
   const box = $('xd-info'); if (!ME) return;
   const mine = ME.name === u, a = agentInfo(u);
   const fresh = box._u !== u;
-  if (fresh) { box._u = u; box.replaceChildren(el('div', 'xd-status'), el('div', 'xd-manage'), el('div', 'xd-chatbar'), el('div', 'xthread'), el('div', 'xd-comp')); box._s = {}; box._imgs = []; box._prj = ''; box._addOpen = false; box._chat = null; box._chats = null; box._msgs = []; box._busy = false; box._again = false; }
+  if (fresh) { box._u = u; box.replaceChildren(el('div', 'xd-status'), el('div', 'xd-manage'), el('div', 'xd-chatbar'), el('div', 'xthread'), el('div', 'xd-comp')); box._s = {}; box._imgs = []; box._prj = ''; box._addOpen = false; box._chat = null; box._chats = null; box._msgs = []; box._busy = false; box._again = false; box._tmp = null; box._fill = null; box._unseen = false; box._lastId = 0; }
   const [status, manage, chatbar, thread, comp] = box.children;
+  const dock = $('xdock'), nearBottom = () => dock.scrollHeight - dock.scrollTop - dock.clientHeight < 120;
+  if (!dock._xdBound) {                                                             // aşağı sürüşəndə "yeni mesaj" düyməsi sönür
+    dock._xdBound = true;
+    dock.addEventListener('scroll', () => { const b = box.querySelector('.xd-down'); if (!b) return; const nb = nearBottom(); if (nb) box._unseen = false; b.hidden = nb || !!box._chatsOpen; b.classList.toggle('new', !!box._unseen); }, { passive: true });
+    document.addEventListener('click', e => { if (box._chatsOpen && box._closePop && !box.querySelector('.xd-comp').contains(e.target)) box._closePop(); });   // kənara klik: söhbət siyahısı bağlanır
+  }
   const g = mine ? null : myGrantOn(u);
   const grants = (data.grants || []).filter(x => x.owner === u);
   const rc = a.cm.filter(c => c.creator && c.creator !== u && (mine || c.creator === ME.name));
@@ -2968,9 +3089,11 @@ function renderDesktopPlanet(u) {
         b.title = c.title + '\n' + c.n + ' mesaj · ' + ago(c.last_at) + (mine ? '' : '\nBu söhbətə qayıt: Claude onu yadında saxlayıb');
         b.onclick = () => xdPick(box, u, c.chat);
         strip.append(b);
+        if (box._chat === c.chat) requestAnimationFrame(() => { strip.scrollLeft = Math.max(0, b.offsetLeft - 24); });   // seçili çip görünsün
       }
       chatbar.append(strip);
     }
+    if (box._drawPop) box._drawPop();                                             // aşağıdakı söhbət siyahısı açıqdırsa onu da təzələ
   }
 
   /* 3b. Söhbət axını: seçilmiş söhbətin mesajları köhnədən yeniyə (serverdən gələn + feed-dəki təzə vəziyyət), ən sonuncusu yazı qutusunun üstündə */
@@ -2982,16 +3105,34 @@ function renderDesktopPlanet(u) {
     list.sort((x, y) => x.id - y.id);
     if (mine) list = list.filter(c => c.status !== 'pending');                        // sahib üçün gözləyənlər yuxarıda, təsdiq düymələri ilə
   }
-  const tSig = [u, mine, a.online, box._chat, box._chats === null, list.map(c => c.id + c.status + (c.result || '').length).join(), Math.floor(now() / 30)].join('|');
+  if (box._tmp && !list.some(c => c.creator === ME.name && c.created_at >= box._tmp.created_at - 2 && xdPrompt(c) === box._tmp.prompt)) list.push(box._tmp);   // indicə göndərilən: server cavab verənə qədər dərhal görünsün
+  const running = list.some(c => c.status === 'running');
+  if (!box._last) { const lm = list.filter(c => c.creator === ME.name && c.status !== 'sending').pop(); if (lm) box._last = xdPrompt(lm); }   // ↑ ilə geri gətirmək üçün son göndərdiyin
+  const tSig = [u, mine, a.online, box._chat, box._chats === null, list.map(c => c.id + c.status + (c.result || '').length).join(), running ? (data.events || [])[0] && data.events[0].id : '', Math.floor(now() / (running ? 5 : 30))].join('|');
   if (box._s.t !== tSig) {
+    const wasNear = nearBottom(), lastId = list.length ? +list[list.length - 1].id : 0;
+    const changed = !!box._s.t && box._s.t.split('|')[5] !== tSig.split('|')[5];     // mesajlar dəyişdi (yeni mesaj, vəziyyət və ya cavab), sadəcə saat deyil
     box._s.t = tSig; thread.replaceChildren();
     thread.append(el('div', 'lbl', mine ? '🖥 Kompüterinə göndərilənlər' + (cur ? ' · ' + cur.creator + ' · 🪐 ' + cur.project : '') : '🖥 Söhbət · ' + u + '-in Claude Code-u' + (cur ? ' · 🪐 ' + cur.project : '')));
     if (!list.length) thread.append(el('div', 'xd-empty',
       box._chats === null ? 'Yüklənir…' :
       box._chat === 'new' ? '🆕 Yeni söhbət: Claude əvvəlkiləri yadda saxlamadan sıfırdan başlayacaq. Proyekt seç, aşağıda yaz, Enter ilə göndər.' :
       mine ? 'Hələ heç kim komanda göndərməyib.' : (g ? 'Hələ komanda göndərməmisən. Aşağıda yaz, Enter ilə göndər.' : 'İcazə alandan sonra burada söhbət görünəcək.')));
-    for (const c of list) thread.append(xdMessage(c, u, mine, a));
-    if (box._scroll && list.length) { box._scroll = false; requestAnimationFrame(() => $('xdock').scrollTo({ top: 1e9 })); }   // söhbətə keçəndə sonuncu mesaj görünsün
+    const hidePrj = !!cur && list.every(c => c.project === cur.project);          // söhbət bir proyektdədir: hər balonda təkrarlama (başlıqda var)
+    let day = '';
+    list.forEach((c, i) => {
+      const k = xdDayKey(c.created_at); if (k !== day) { day = k; thread.append(el('div', 'xday', xdDayLabel(c.created_at))); }
+      const m = xdMessage(c, u, mine, a, i === list.length - 1, hidePrj);
+      if (changed && +c.id > box._lastId) m.classList.add('enter');
+      thread.append(m);
+    });
+    box._lastId = lastId;
+    if (box._scroll && list.length) { box._scroll = false; requestAnimationFrame(() => dock.scrollTo({ top: 1e9 })); }   // söhbətə keçəndə sonuncu mesaj görünsün
+    else if (changed && list.length) {                                            // söhbət dəyişdi: aşağıdaydınsa izlə, yuxarıdaydınsa "↓ Yeni cavab" düyməsi
+      if (wasNear) requestAnimationFrame(() => dock.scrollTo({ top: 1e9, behavior: 'smooth' }));
+      else box._unseen = true;
+    }
+    const dn = comp.querySelector('.xd-down'); if (dn) { dn.hidden = (nearBottom() && !box._unseen) || !!box._chatsOpen; dn.classList.toggle('new', !!box._unseen); setText(dn, box._unseen ? '↓ Yeni cavab' : '↓ Sona'); }
   }
 
   /* 4. Yazı qutusu (yalnız icazəsi olan qonaq üçün): proyekt çipləri, böyüyən sahə, şəkil, yeni söhbət, Enter göndərir */
@@ -3001,8 +3142,10 @@ function renderDesktopPlanet(u) {
   const cSig = [u, mine, g && g.mode, prjs.join(), a.online, lockPrj, isNew, chats.length].join('|');
   if (box._s.c !== cSig) {
     box._s.c = cSig;
-    const prevTa = comp.querySelector('textarea'), prevTxt = prevTa ? prevTa.value : '';
-    comp.replaceChildren(); comp.hidden = mine || !g;
+    const prevTa = comp.querySelector('textarea'), dkey = 'xddraft:' + u;
+    let prevTxt = prevTa ? prevTa.value : '';
+    if (!prevTa) { try { prevTxt = localStorage.getItem(dkey) || ''; } catch (e) {} }   // yarımçıq yazı səhifə yenilənəndə də qalır
+    comp.replaceChildren(); comp.hidden = mine || !g; box._fill = null; box._drawPop = null; box._closePop = null; box._chatsOpen = false;
     if (!mine && g) {
       const key = 'xdprj:' + u; let prj = box._prj || ''; try { prj = prj || localStorage.getItem(key) || ''; } catch (e) {}
       if (!prjs.includes(prj)) prj = prjs[0] || '';
@@ -3018,7 +3161,11 @@ function renderDesktopPlanet(u) {
       if (!prjs.length) chips.append(el('span', 'xd-warn', u + ' hələ heç bir proyekt qurmayıb: onun kompüterində hook ilə Claude Code işlənməlidir.'));
       const ta = el('textarea'); ta.rows = 2; ta.maxLength = 3500; ta.placeholder = u + '-in kompüterində Claude Code nə etsin?'; ta.value = prevTxt;
       const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(COARSE ? 140 : 260, ta.scrollHeight) + 'px'; };
-      ta.addEventListener('focus', () => { if (COARSE) setTimeout(() => $('xdock').scrollTo({ top: 1e9 }), 350); });   // klaviatura açılanda son mesaj və qutu görünsün
+      ta.addEventListener('focus', () => { if (COARSE) setTimeout(() => dock.scrollTo({ top: 1e9 }), 350); });   // klaviatura açılanda son mesaj və qutu görünsün
+      const saveDraft = () => { try { ta.value ? localStorage.setItem(dkey, ta.value) : localStorage.removeItem(dkey); } catch (e) {} };
+      box._fill = t => { ta.value = t; grow(); upd(); saveDraft(); ta.focus(); ta.setSelectionRange(t.length, t.length); dock.scrollTo({ top: 1e9, behavior: 'smooth' }); };
+      const down = el('button', 'xd-down', '↓ Sona'); down.type = 'button'; down.hidden = true; down.title = 'Söhbətin sonuna sürüş';
+      down.onclick = () => { box._unseen = false; down.hidden = true; dock.scrollTo({ top: 1e9, behavior: 'smooth' }); };
       const err = el('div', 'cmderr'); err.hidden = true;
       const imgs = box._imgs, strip = el('div', 'cmdimgs'), file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/gif,image/webp'; file.multiple = true; file.hidden = true;
       const drawImgs = () => { strip.hidden = !imgs.length; strip.replaceChildren(...imgs.map(im => { const d = el('div', 'cimg'), i = el('img'); i.src = im.url; i.alt = im.file.name; const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil'; x.onclick = () => { URL.revokeObjectURL(im.url); imgs.splice(imgs.indexOf(im), 1); drawImgs(); }; d.append(i, x); return d; })); };
@@ -3030,35 +3177,69 @@ function renderDesktopPlanet(u) {
       fb.title = isNew ? 'Yeni söhbət açıqdır: ilk mesajda Claude sıfırdan başlayacaq. Yenidən basanda son söhbətə qayıdır' : 'Təzə söhbət aç: Claude əvvəlkini yadda saxlamadan sıfırdan başlayır. Köhnə söhbətlər yuxarıdakı siyahıda qalır';
       fb.onclick = () => { const txt = ta.value; xdPick(box, u, isNew ? (chats[0] ? chats[0].chat : 'new') : 'new'); const nt = comp.querySelector('textarea'); if (nt) { nt.value = txt; nt.focus(); } };
       fb.setAttribute('aria-pressed', isNew);
+      /* 💬 Söhbətlər: siyahı yazı qutusunun üstündən açılır, yuxarı sürüşmədən söhbət dəyişmək üçün */
+      const cb = el('button', 'xd-tb xd-cb', '💬 Söhbətlər' + (chats.length ? ' · ' + chats.length : '')); cb.type = 'button'; cb.title = 'Söhbətlər arasında keç';
+      const pop = el('div', 'xd-pop'); pop.hidden = true;
+      const closePop = () => { box._chatsOpen = false; pop.hidden = true; cb.classList.remove('on'); };
+      const drawPop = () => {
+        pop.replaceChildren();
+        const ls = box._chats || [];
+        const nb = el('button', 'xp' + (isNew ? ' on' : '')); nb.type = 'button';
+        nb.append(el('span', 'dot idle'), el('span', 'xt', '🆕 Yeni söhbət'), el('span', 'xn', ''), el('span', 'xs', 'Claude sıfırdan başlayır, köhnə söhbətlər qalır'));
+        nb.onclick = () => { closePop(); if (!isNew) fb.onclick(); }; pop.append(nb);
+        for (const c of ls) {
+          const [lbl, dc] = CMD_ST[c.status] || [c.status, 'offline'];
+          const b = el('button', 'xp' + (box._chat === c.chat ? ' on' : '')); b.type = 'button';
+          b.append(el('span', 'dot ' + dc), el('span', 'xt', '🪐 ' + c.project + ' · ' + (c.title || '…')), el('span', 'xn', ago(c.last_at)), el('span', 'xs', c.n + ' mesaj · ' + lbl));
+          b.onclick = () => { closePop(); const txt = ta.value; xdPick(box, u, c.chat); const nt = comp.querySelector('textarea') || ta; if (nt !== ta) nt.value = txt; nt.focus(); };
+          pop.append(b);
+        }
+        if (!ls.length) pop.append(el('div', 'xd-empty', 'Hələ söhbət yoxdur: ilk mesajı göndər'));
+      };
+      cb.onclick = () => { box._chatsOpen = !box._chatsOpen; if (box._chatsOpen) drawPop(); pop.hidden = !box._chatsOpen; cb.classList.toggle('on', box._chatsOpen); if (box._chatsOpen) down.hidden = true; };
+      box._drawPop = () => { if (box._chatsOpen) drawPop(); }; box._closePop = closePop;
       const bt = el('button', 'gbtn go xd-send', 'Göndər ➤'); bt.type = 'button';
-      tool.append(att, fb, el('span', 'sp'), el('span', 'xd-hint', COARSE ? '' : 'Enter göndərir · Shift+Enter yeni sətir'), bt);
+      const hint = el('span', 'xd-hint', COARSE ? '' : 'Enter göndərir · Shift+Enter yeni sətir');
+      const cnt = () => { const left = ta.maxLength - ta.value.length; const lim = left < 300; hint.classList.toggle('lim', lim); setText(hint, lim ? left + ' simvol qalıb' : COARSE ? '' : 'Enter göndərir · Shift+Enter yeni sətir'); };
+      tool.append(cb, fb, att, el('span', 'sp'), hint, bt);
       const send = async () => {
         err.hidden = true; if (!prj) { err.hidden = false; err.textContent = 'Əvvəl proyekt seç'; return; } if (!ta.value.trim()) { ta.focus(); return; }
         bt.disabled = true; setText(bt, 'Göndərilir…');
+        const text = ta.value, sentImgs = imgs.slice();
+        box._tmp = { id: 9e15, prompt: text, project: prj, status: 'sending', created_at: now(), creator: ME.name, images: [] };   // dərhal balon kimi görünsün
+        ta.value = ''; grow(); cnt(); imgs.length = 0; drawImgs(); upd(); saveDraft();
+        renderDesktopPlanet(u); dock.scrollTo({ top: 1e9, behavior: 'smooth' });
         let res;
         try {
-          if (imgs.length) {                                       // şəkilli: FormData (JSON yox)
+          if (sentImgs.length) {                                   // şəkilli: FormData (JSON yox)
             const chat = typeof box._chat === 'number' ? box._chat : 0;              // açıq söhbət davam edir; 'new' = sıfırdan
-            const fd = new FormData(); fd.append('action', 'send'); fd.append('target', u); fd.append('project', prj); fd.append('prompt', ta.value); fd.append('fresh', isNew ? '1' : ''); fd.append('chat', chat);
-            for (const im of imgs) fd.append('images[]', im.file, im.file.name);
+            const fd = new FormData(); fd.append('action', 'send'); fd.append('target', u); fd.append('project', prj); fd.append('prompt', text); fd.append('fresh', isNew ? '1' : ''); fd.append('chat', chat);
+            for (const im of sentImgs) fd.append('images[]', im.file, im.file.name);
             const r = await fetch('remote.php', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: fd });
             res = { status: r.status, d: await r.json().catch(() => ({})) };
             if (r.status === 401) location.reload();
-          } else res = await RMT('send', { target: u, project: prj, prompt: ta.value, fresh: isNew, chat: typeof box._chat === 'number' ? box._chat : 0 });
+          } else res = await RMT('send', { target: u, project: prj, prompt: text, fresh: isNew, chat: typeof box._chat === 'number' ? box._chat : 0 });
         } catch (e) { res = { status: 0, d: {} }; }
         const { status, d } = res;
         setText(bt, 'Göndər ➤');
         if (status === 200) {
-          ta.value = ''; grow(); for (const im of imgs) URL.revokeObjectURL(im.url); imgs.length = 0; drawImgs();
+          for (const im of sentImgs) URL.revokeObjectURL(im.url);
+          box._last = text;
           if (d.chat) { box._chat = +d.chat; box._scroll = true; try { localStorage.setItem('xdchat:' + u, d.chat); } catch (e) {} }   // yeni söhbət yarandısa ona keç
-          miniToast(d.status === 'pending' ? '🖥 Göndərildi, ' + u + '-in təsdiqini gözləyir' : '🖥 Komanda ' + u + '-in kompüterinə yola düşdü');
-          await load(); $('xdock').scrollTo({ top: 1e9, behavior: 'smooth' }); const nt = comp.querySelector('textarea'); (nt || ta).focus();
-        } else { err.hidden = false; err.textContent = status === 0 ? 'Bağlantı xətası' : (d.error || 'Göndərilmədi'); }
+          if (d.status === 'pending') miniToast('🖥 Göndərildi, ' + u + '-in təsdiqini gözləyir');
+          await load(); box._tmp = null; renderDesktopPlanet(u); dock.scrollTo({ top: 1e9, behavior: 'smooth' }); const nt = comp.querySelector('textarea'); (nt || ta).focus();
+        } else {                                                                     // alınmadı: yazı qutusuna qaytar, şəkillər də qalsın
+          box._tmp = null; const nt = comp.querySelector('textarea') || ta; nt.value = text; imgs.push(...sentImgs); drawImgs(); grow(); cnt(); saveDraft(); renderDesktopPlanet(u);
+          err.hidden = false; err.textContent = status === 0 ? 'Bağlantı xətası' : (d.error || 'Göndərilmədi');
+        }
         upd();
       };
       bt.onclick = send;
-      ta.addEventListener('input', () => { grow(); upd(); });
-      ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !COARSE) { e.preventDefault(); send(); } });   // Enter göndərir, Shift+Enter yeni sətir; telefonda Enter yeni sətirdir
+      ta.addEventListener('input', () => { grow(); upd(); cnt(); saveDraft(); });
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.isComposing && ((e.metaKey || e.ctrlKey) || (!e.shiftKey && !COARSE))) { e.preventDefault(); send(); return; }   // Enter göndərir (telefonda yox), Cmd/Ctrl+Enter həmişə; Shift+Enter yeni sətir
+        if (e.key === 'ArrowUp' && !ta.value && box._last) { e.preventDefault(); box._fill(box._last); }   // ↑ boş qutuda: son göndərdiyini geri gətirir (terminal kimi)
+      });
       ta.addEventListener('paste', e => { const fs = [...((e.clipboardData && e.clipboardData.items) || [])].filter(i => i.kind === 'file').map(i => i.getAsFile()).filter(Boolean); if (fs.length) { e.preventDefault(); addImgs(fs); } });
       ta.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); ta.classList.add('drop'); } });
       ta.addEventListener('dragleave', () => ta.classList.remove('drop'));
@@ -3066,7 +3247,7 @@ function renderDesktopPlanet(u) {
       const warn = el('div', 'xd-warn');
       warn.textContent = !a.online ? '⚠ Kompüter oflayndır: komanda növbəyə düşür, onlayn olanda işləyəcək.' : g.mode !== 'auto' ? '✋ ' + u + ' komandanı təsdiqləyəndən sonra işə düşəcək.' : '';
       warn.hidden = !warn.textContent;
-      comp.append(chips, ta, strip, file, err, tool, warn); drawChips(); drawImgs(); upd(); requestAnimationFrame(grow);
+      comp.append(down, pop, chips, ta, strip, file, err, tool, warn); drawChips(); drawImgs(); upd(); cnt(); requestAnimationFrame(grow);
     }
   }
   if (fresh) requestAnimationFrame(() => { $('xdock').scrollTop = $('xdock').scrollHeight; });   // söhbət kimi: ən yeni mesaj və yazı qutusu görünsün
