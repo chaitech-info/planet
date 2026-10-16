@@ -26,7 +26,7 @@ function agent_row(PDO $pdo, string $user): ?array
     return $a ?: null;
 }
 
-function agent_projects(?array $a): array
+function mission_agent_projects(?array $a): array
 {
     return $a ? array_values(array_filter(explode("\n", (string)$a['projects']), 'strlen')) : [];
 }
@@ -50,7 +50,7 @@ function agent_check(PDO $pdo, string $user, string $project): array
     if (!$a) {
         return ['error' => 'Bu istifadəçinin Claude Code agenti hələ heç qoşulmayıb. Kompüterdə agenti işə sal (📦 Paket → BASLA.md).', 'code' => 409];
     }
-    $allowed = agent_projects($a);
+    $allowed = mission_agent_projects($a);
     if ($allowed) {
         $al = $pdo->prepare('SELECT src FROM aliases WHERE dst = ?');
         $al->execute([$project]);
@@ -512,7 +512,7 @@ function protocol_expand(PDO $pdo, string $user, array $tpl, string $project): a
             if (!$a) {
                 return [null, 'Claude Code agenti hələ qoşulmayıb: "*" (bütün proyektlər) siyahısı yoxdur'];
             }
-            $all = array_values(array_unique(array_map(fn($f) => panel_project_name($pdo, $f), agent_projects($a))));
+            $all = array_values(array_unique(array_map(fn($f) => panel_project_name($pdo, $f), mission_agent_projects($a))));
             if (!$all) {
                 return [null, 'agent proyekt siyahısı bildirməyib'];
             }
