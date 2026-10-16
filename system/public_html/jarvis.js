@@ -652,7 +652,7 @@
       connect(d, h) {
         const ws = new WebSocket(d.ws + '?fal_jwt_token=' + encodeURIComponent(d.token)); ws.binaryType = 'arraybuffer';
         const send = o => { if (ws.readyState === 1) ws.send(MP.encode(o)); };
-        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null, botTxt = '', txtN = 0;
+        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null, botTxt = '', txtN = 0, hush = false;
         // Sürət sahələri (reasoning none, silence_duration_ms, web_search/x_search) rədd edilsə: bir dəfə onlarsız session.update
         let sess = d.session, retried = false;
         const plain = s => ({ ...s, reasoning: undefined, turn_detection: { type: 'server_vad' }, tools: (s.tools || []).filter(t => t.type === 'function') });
@@ -684,10 +684,15 @@
             case 'conversation.item.input_audio_transcription.completed': {
               const t = m.transcript || ''; if (t && t !== userTxt) { h.user(t, true); userTxt = t; } break;
             }
-            case 'response.created': inResp = true; botTxt = ''; break;
-            case 'response.output_audio.delta': case 'response.audio.delta': h.audio(m.delta, 24000); break;
+            case 'response.created': inResp = true; botTxt = ''; hush = false; break;
+            case 'response.output_audio.delta': case 'response.audio.delta': if (!hush) h.audio(m.delta, 24000); break;
             case 'response.output_audio_transcript.delta': case 'response.audio_transcript.delta': case 'response.text.delta': case 'response.output_text.delta':
-              if (m.delta) { botTxt += m.delta; h.bot(m.delta); } break;
+              if (m.delta) {
+                botTxt += m.delta; h.bot(m.delta);
+                // model aləti mətn kimi yazmağa başladı: qalan səsi səsləndirmə (prompt oxunmasın), artıq növbədə olan səsi kəs
+                if (!hush && /<tool_call|<arg_key|<arg_value/.test(botTxt)) { hush = true; if (h.cut) h.cut(); }
+              }
+              break;
             case 'response.function_call_arguments.done': {
               let args = {}; try { args = m.arguments ? JSON.parse(m.arguments) : {}; } catch (e) {}
               pending.push({ id: m.call_id, name: m.name, args }); break;
@@ -779,6 +784,7 @@
         stream('user', text); emit('user', text, !!replace);   // replace: Grok tam transkripti göndərir (parça deyil)
       },
       bot: text => { stream('jarvis', text); emit('bot', text); },
+      cut() { stopPlayback(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); },
       interrupted() { if (!LT.on) ltUser(); stopPlayback(); endTurn(); if (J.state === 'speaking') setState(J.muted ? 'muted' : 'listening'); emit('interrupted'); },
       turnDone() { endTurn(); ltDone(); emit('turn'); },
       tools: calls => { endTurn(); runTools(calls); },
