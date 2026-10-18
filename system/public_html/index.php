@@ -3168,7 +3168,7 @@ function renderDesktopPlanet(u) {
   }
 
   /* 4. Yazı qutusu (yalnız icazəsi olan qonaq üçün): proyekt çipləri, böyüyən sahə, şəkil, yeni söhbət, Enter göndərir */
-  const prjs = [...new Set((data.projects || []).filter(p => p.user === u).map(p => p.project))].sort();
+  const prjs = [...new Set([...(data.projects || []).filter(p => p.user === u).map(p => p.project), ...a.projects])].sort();   // sessiyası olanlar + agentin qeydiyyatdan keçirdikləri
   const lockPrj = cur ? cur.project : '';                                             // açıq söhbət bir proyektə bağlıdır (Claude sessiyası o qovluqdadır)
   const isNew = box._chat === 'new';
   const cSig = [u, mine, g && g.mode, prjs.join(), a.online, lockPrj, isNew, chats.length].join('|');

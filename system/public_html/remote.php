@@ -124,10 +124,10 @@ if ($act === 'send') {
     if (!$grant) {
         json_out(['error' => $target . ' sənə öz kompüterinə komanda göndərməyə icazə verməyib'], 403);
     }
-    // proyekt hədəfin özünün proyektlərindən olmalıdır
+    // proyekt hədəfin özünün proyektlərindən olmalıdır: sessiyası olan və ya agentin ~/.claude-team-projects-də qeydiyyatdan keçirdiyi
     $pj = $pdo->prepare('SELECT 1 FROM sessions WHERE user = ? AND project = ? LIMIT 1');
     $pj->execute([$target, $project]);
-    if (!$pj->fetchColumn()) {
+    if (!$pj->fetchColumn() && !in_array($project, agent_projects($pdo, $target) ?? [], true)) {
         json_out(['error' => 'Bu proyekt ' . $target . ' tərəfində qurulmayıb'], 400);
     }
     $c = $pdo->prepare("SELECT COUNT(*) FROM commands WHERE user = ? AND status IN ('pending','queued','running')");
@@ -257,8 +257,11 @@ function can_see_sessions(PDO $pdo, string $target, string $name): bool
 if ($act === 'overview') {                                        // bütün kompüterlər: onlayn, Claude girişi, növbə, icazə, proyektlər
     $users = $pdo->query("SELECT name FROM users WHERE role != 'student' ORDER BY name")->fetchAll(PDO::FETCH_COLUMN);
     $agents = [];
-    foreach ($pdo->query('SELECT user, last_seen, claude_ok FROM agents')->fetchAll() as $r) {
+    $projects = [];
+    foreach ($pdo->query('SELECT user, last_seen, claude_ok, projects FROM agents')->fetchAll() as $r) {
         $agents[$r['user']] = $r;
+        // agentin qeydiyyatdan keçirdiyi qovluqlar (ping ilə gəlir): hələ sessiyası olmasa da seçilə bilsin
+        $projects[$r['user']] = array_values(array_filter(explode("\n", (string)$r['projects']), 'strlen'));
     }
     $load = [];
     foreach ($pdo->query("SELECT user, status, COUNT(*) AS n FROM commands WHERE status IN ('pending','queued','running') GROUP BY user, status")->fetchAll() as $r) {
@@ -269,10 +272,14 @@ if ($act === 'overview') {                                        // bütün kom
     $grants = $g->fetchAll();
     $pq = $pdo->prepare('SELECT DISTINCT user, project FROM sessions WHERE updated_at > ? ORDER BY project');
     $pq->execute([$now - 30 * 86400]);
-    $projects = [];
     foreach ($pq->fetchAll() as $r) {
         $projects[$r['user']][] = $r['project'];
     }
+    foreach ($projects as &$list) {
+        $list = array_values(array_unique($list));
+        sort($list, SORT_NATURAL | SORT_FLAG_CASE);
+    }
+    unset($list);
     $out = [];
     foreach ($users as $u) {
         $a = $agents[$u] ?? null;
