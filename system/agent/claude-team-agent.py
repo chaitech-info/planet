@@ -4,6 +4,7 @@
 Saytdakı növbədən YALNIZ SƏNİN tokenin üçün göndərilən promptları götürür və
 həmin proyektin qovluğunda `claude -p` ilə işlədir. Yalnız ~/.claude-team-projects
 siyahısındakı proyektlərə icazə verilir. Fayl redaktəsi və git əmrləri icazəlidir (səviyyəyə görə, aşağıya bax), qalan terminal əmrləri yox.
+Claude Code rejimini (plan, manual, acceptEdits, auto) göndərən saytda seçir; sahib icazəli rejimləri CLAUDE_TEAM_MODES ilə məhdudlaşdıra bilər.
 Prompta şəkil əlavə olunubsa, agent onları müvəqqəti qovluğa endirir və Claude-a yolunu verir (iş bitəndə silinir).
 
 Git səviyyəsi (kompüterin sahibi seçir; CLAUDE_TEAM_GIT mühit dəyişəni və ya ~/.claude-team-agent.env faylında):
@@ -32,6 +33,15 @@ GIT_SAFE = ['Bash(git fetch:*)', 'Bash(git pull:*)', 'Bash(git add:*)', 'Bash(gi
 GIT_FULL = ['Bash(git push:*)', 'Bash(git merge:*)', 'Bash(git checkout:*)']
 GIT_DENY = ','.join(['Bash(git push --force:*)', 'Bash(git push -f:*)', 'Bash(git push --force-with-lease:*)', 'Bash(git reset --hard:*)', 'Bash(git clean:*)',
                      'Bash(git push --delete:*)', 'Bash(git branch -D:*)', 'Bash(git checkout -- :*)'])
+
+
+PERM_MODES = ('plan', 'manual', 'acceptEdits', 'auto')   # Claude Code rejimləri (saytdan seçilir); bypassPermissions heç vaxt
+
+
+def perm_modes():
+    """Kompüterin sahibi icazəli rejimləri məhdudlaşdıra bilər: CLAUDE_TEAM_MODES=plan,manual,acceptEdits (standart: hamısı)."""
+    v = os.environ.get('CLAUDE_TEAM_MODES') or load_env().get('CLAUDE_TEAM_MODES') or ','.join(PERM_MODES)
+    return [m for m in (x.strip() for x in v.split(',')) if m in PERM_MODES]
 
 
 def git_level():
@@ -71,7 +81,7 @@ def load_env():
                 line = line.strip()
                 if '=' in line and not line.startswith('#'):
                     k, v = line.split('=', 1)
-                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT'):
+                    if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT', 'CLAUDE_TEAM_MODES'):
                         out[k.strip()] = v.strip().strip('"\'')
     except FileNotFoundError:
         pass
@@ -233,7 +243,7 @@ def run_claude(base, token, claude, cmd, path, extra_args=()):
     sid = None
     if not cmd.get('fresh'):
         sid = (store.get(key) or store.get(legacy) or {}).get('sid')   # legacy: söhbətlərdən əvvəl başlanmış söhbət (chat sütunu sonradan gəlib)
-    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
+    base_args = [claude, '-p', '--output-format', 'json', '--permission-mode', cmd.get('perm') or 'acceptEdits', '--allowedTools', allowed_tools(), '--disallowedTools', GIT_DENY] + list(extra_args)
     out, err, rc = exec_claude(base, token, base_args + (['--resume', sid] if sid else []), cmd, path)
     if rc == 'end':
         return err, 'failed'
@@ -265,6 +275,11 @@ def run_one(base, token, claude):
     if not path:
         call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
              'result': f"'{cmd['project']}' bu kompüterdə icazəli deyil. ~/.claude-team-projects siyahısına əlavə et."})
+        return True
+    cmd['perm'] = cmd.get('perm') or 'acceptEdits'
+    if cmd['perm'] not in perm_modes():
+        call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
+             'result': f"'{cmd['perm']}' rejimi bu kompüterdə icazəli deyil (CLAUDE_TEAM_MODES: {', '.join(perm_modes()) or 'heç biri'})."})
         return True
     imgdir, extra = None, ()
     if cmd.get('images'):                                   # şəkilli prompt: faylları endir, Claude-a yolunu ver (--add-dir ilə oxuya bilsin)

@@ -8,7 +8,7 @@ date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 // Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
 // yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 function db(): PDO
 {
@@ -186,6 +186,11 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
     }
     try {
         $pdo->exec('ALTER TABLE commands ADD COLUMN chat INT NOT NULL DEFAULT 0');   // söhbət: söhbətin ilk komandasının id-si (agent Claude sessiyasını söhbət üzrə saxlayır); 0 = söhbətsiz (öz agentinə / lövhə)
+    } catch (Throwable $e) {
+        // sütun artıq var
+    }
+    try {
+        $pdo->exec("ALTER TABLE commands ADD COLUMN perm VARCHAR(12) NOT NULL DEFAULT ''");   // Claude Code rejimi: plan | auto | manual | acceptEdits ('' = acceptEdits)
     } catch (Throwable $e) {
         // sütun artıq var
     }

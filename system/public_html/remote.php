@@ -161,10 +161,11 @@ if ($act === 'send') {
             $chat = (int)$lq->fetchColumn();
         }
     }
+    $perm = in_array($in['perm'] ?? '', ['plan', 'auto', 'manual', 'acceptEdits'], true) ? $in['perm'] : 'acceptEdits';
     $images = remote_save_images($_FILES['images'] ?? null);
-    $full = '[' . $name . ' uzaqdan göndərdi (Desktop Universe)]' . "\n" . $prompt;
-    $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images, chat) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-        ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '', $chat]);
+    $full ='[' . $name . ' uzaqdan göndərdi (Desktop Universe)]' . "\n" . $prompt;
+    $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images, chat, perm) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
+        ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '', $chat, $perm]);
     $id = (int)$pdo->lastInsertId();
     if ($chat === 0) {                                           // yeni söhbət: ilk komandanın id-si söhbətin nömrəsidir
         $chat = $id;
@@ -225,7 +226,7 @@ if ($act === 'chats') {                                           // söhbət si
 if ($act === 'chat') {                                            // bir söhbətin bütün komandaları (köhnədən yeniyə)
     [$where, $args] = chat_scope($pdo, (string)($in['target'] ?? ''), $name);
     $chat = (int)($in['chat'] ?? 0);
-    $q = $pdo->prepare("SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind, chat FROM commands WHERE $where AND chat = ? ORDER BY id ASC LIMIT 200");
+    $q = $pdo->prepare("SELECT id, user, project, prompt, status, result, created_at, started_at, finished_at, creator, images, kind, chat, perm FROM commands WHERE $where AND chat = ? ORDER BY id ASC LIMIT 200");
     $q->execute([...$args, $chat]);
     $msgs = $q->fetchAll();
     foreach ($msgs as &$c) {
@@ -285,7 +286,7 @@ if ($act === 'overview') {                                        // bütün kom
             'granted' => $u === $name ? array_values(array_map(fn($x) => ['grantee' => $x['grantee'], 'mode' => $x['mode']], array_filter($grants, fn($x) => $x['owner'] === $name))) : [],
         ];
     }
-    $pd = $pdo->prepare("SELECT id, project, prompt, creator, images, created_at, chat FROM commands WHERE user = ? AND status = 'pending' ORDER BY id ASC LIMIT 20");
+    $pd = $pdo->prepare("SELECT id, project, prompt, creator, images, created_at, chat, perm FROM commands WHERE user = ? AND status = 'pending' ORDER BY id ASC LIMIT 20");
     $pd->execute([$name]);
     $pend = $pd->fetchAll();
     foreach ($pend as &$c) {

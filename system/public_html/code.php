@@ -170,6 +170,7 @@ button:disabled { cursor: default; opacity: .5; }
 .comp textarea { width: 100%; border: 0; outline: none; resize: none; background: transparent; color: var(--text); font: inherit; font-size: 15px; line-height: 1.5; max-height: 40vh; min-height: 26px; padding: 2px 0; }
 .crow { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .crow select { border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 8px; padding: 4px 8px; font: inherit; font-size: 12.5px; max-width: 46%; }
+.crow #perm { max-width: 34%; }
 .crow .hint { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crow .hint.lim { color: var(--work); }
 .send { width: 34px; height: 34px; border-radius: 10px; border: 0; background: var(--accent); color: #fff; font-size: 17px; display: grid; place-items: center; flex: none; }
@@ -231,6 +232,12 @@ button:disabled { cursor: default; opacity: .5; }
             <div class="imgs" id="imgs" hidden></div>
             <div class="crow">
               <select id="prj" aria-label="Proyekt"></select>
+              <select id="perm" aria-label="Rejim">
+                <option value="acceptEdits">✎ Accept edits</option>
+                <option value="plan">⏸ Plan</option>
+                <option value="auto">🤖 Auto</option>
+                <option value="manual">✋ Manual</option>
+              </select>
               <button class="lb" id="att" type="button" title="Şəkil əlavə et (ən çox 4). Yapışdırmaq və ya sürüşdürmək də olar">🖼</button>
               <input type="file" id="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
               <span class="hint" id="hint"></span>
@@ -347,6 +354,14 @@ function mdLite(src) {
   flush();
   return root;
 }
+// Claude Code rejimləri (claude -p --permission-mode). Fon rejimində sual verən yoxdur: icazə istəyən addım rədd olunur
+const PERMS = { acceptEdits: '✎ Accept edits', plan: '⏸ Plan', auto: '🤖 Auto', manual: '✋ Manual' };
+const PERM_NOTE = {
+  acceptEdits: 'faylları redaktə edir, terminal əmrləri məhduddur',
+  plan: 'heç nəyi dəyişmir, yalnız plan yazır',
+  auto: 'Claude əmrləri özü təhlükəsizliyə görə yoxlayıb icra edir',
+  manual: 'yalnız oxuyur: icazə istəyən addımlar (redaktə də) rədd olunur',
+};
 const CMD_IMG_MAX = 4, CMD_IMG_BYTES = 5 * 1024 * 1024, CMD_IMG_TYPES = /^image\/(png|jpeg|gif|webp)$/;
 function shrinkImage(f) {
   if (f.size <= 1.5 * 1024 * 1024 || f.type === 'image/gif') return Promise.resolve(f);
@@ -597,6 +612,7 @@ function message(m, latest, hidePrj) {
   if (canSend() && m.status !== 'sending') { const b = el('button', 'lb', '↻'); b.type = 'button'; b.title = 'Yazı qutusuna qoy: düzəldib yenidən göndər'; b.onclick = () => fill(text); um.append(b); }
   if (isMine()) um.append(el('b', null, m.creator), el('span', null, '·'));
   if (!hidePrj) um.append(el('span', null, '🪐 ' + m.project), el('span', null, '·'));
+  if (m.perm && m.perm !== 'acceptEdits') um.append(el('span', null, PERMS[m.perm] || m.perm), el('span', null, '·'));
   const tm = el('span', null, hm(m.created_at)); tm.title = new Date(m.created_at * 1000).toLocaleString('az'); um.append(tm);
   u.append(um); w.append(u);
 
@@ -759,11 +775,13 @@ function renderComposer() {
     }
     ta.placeholder = cc ? 'Cavab yaz…' : c.name + '-in kompüterində Claude Code nə etsin?';
     if (ta._t !== S.target) { ta._t = S.target; ta.value = ls.get('cc:draft:' + S.target); grow(); }   // hər kompüterin öz yarımçıq yazısı
+    $('perm').value = PERMS[ls.get('cc:perm:' + S.target)] ? ls.get('cc:perm:' + S.target) : 'acceptEdits';
   }
   if (!prjs.length && !lockPrj) { note.className = 'cnote warn'; note.textContent = c.name + ' hələ heç bir proyekt qurmayıb: onun kompüterində hook ilə Claude Code işlənməlidir.'; }
   else if (!c.online) { note.className = 'cnote warn'; note.textContent = '⚠ Kompüter oflayndır: komanda növbəyə düşür, onlayn olanda işləyəcək.'; }
   else if (!c.login) { note.className = 'cnote warn'; note.textContent = '⚠ ' + c.name + '-in kompüterində Claude girişi yoxdur: komandalar növbədə gözləyəcək.'; }
-  else note.textContent = (c.grant === 'auto' ? '⚡ Dərhal işə düşür' : '✋ ' + c.name + ' təsdiqləyəndən sonra işə düşür') + ' · ' + c.name + '-in Claude hesabı ilə, agentin məhdud icazələri ilə';
+  else note.textContent = (c.grant === 'auto' ? '⚡ Dərhal işə düşür' : '✋ ' + c.name + ' təsdiqləyəndən sonra işə düşür') + ' · ' + c.name + '-in Claude hesabı ilə · ' + PERMS[$('perm').value] + ': ' + PERM_NOTE[$('perm').value];
+  $('perm').title = PERMS[$('perm').value] + ': ' + PERM_NOTE[$('perm').value];
   updSend();
 }
 const lastActive = () => { const l = S.msgs.filter(m => ['pending', 'queued', 'running'].includes(m.status) && m.creator === S.me).pop(); return l || null; };
@@ -802,19 +820,19 @@ async function send() {
   if (!prj) { cerr('Əvvəl proyekt seç'); return; }
   if (!text.trim()) { ta.focus(); return; }
   cerr('');
-  const t = S.target, isNew = !S.sel || S.sel.k === 'new', chat = S.sel && S.sel.k === 'chat' ? S.sel.id : 0, imgs = S.imgs.slice();
-  S.tmp = { id: 9e15, chat: chat || undefined, prompt: text, project: prj, status: 'sending', created_at: now(), creator: S.me, images: [] };   // dərhal balon kimi görünsün
+  const t = S.target, isNew = !S.sel || S.sel.k === 'new', chat = S.sel && S.sel.k === 'chat' ? S.sel.id : 0, imgs = S.imgs.slice(), perm = $('perm').value;
+  S.tmp = { id: 9e15, chat: chat || undefined, prompt: text, project: prj, status: 'sending', created_at: now(), creator: S.me, images: [], perm };   // dərhal balon kimi görünsün
   ta.value = ''; grow(); S.imgs = []; drawImgs(); ls.set('cc:draft:' + t, ''); S.scrollEnd = true;
   redraw(); updSend();
   let res;
   try {
     if (imgs.length) {                                            // şəkilli: FormData
-      const fd = new FormData(); fd.append('action', 'send'); fd.append('target', t); fd.append('project', prj); fd.append('prompt', text); fd.append('fresh', isNew ? '1' : ''); fd.append('chat', chat);
+      const fd = new FormData(); fd.append('action', 'send'); fd.append('target', t); fd.append('project', prj); fd.append('prompt', text); fd.append('fresh', isNew ? '1' : ''); fd.append('chat', chat); fd.append('perm', perm);
       for (const im of imgs) fd.append('images[]', im.file, im.file.name);
       const r = await fetch('remote.php', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: fd });
       if (r.status === 401) location.href = './';
       res = { status: r.status, d: await r.json().catch(() => ({})) };
-    } else res = await RMT('send', { target: t, project: prj, prompt: text, fresh: isNew, chat });
+    } else res = await RMT('send', { target: t, project: prj, prompt: text, fresh: isNew, chat, perm });
   } catch (e) { res = { status: 0, d: {} }; }
   const { status, d } = res;
   if (status === 200) {
@@ -848,6 +866,7 @@ $('down').onclick = () => { S.unseen = false; toEnd(true); };
 $('send').onclick = send;
 $('att').onclick = () => $('file').click();
 $('file').onchange = () => { addImgs([...$('file').files]); $('file').value = ''; };
+$('perm').onchange = () => { ls.set('cc:perm:' + S.target, $('perm').value); renderComposer(); };
 $('prj').onchange = () => { ls.set('cc:prj:' + S.target, $('prj').value); updSend(); if (S.sel && S.sel.k === 'new') redraw(); };
 ta.addEventListener('input', () => { grow(); updSend(); ls.set('cc:draft:' + S.target, ta.value); });
 ta.addEventListener('keydown', e => {
