@@ -369,11 +369,15 @@ function token_user(): ?string
     return $n === false ? null : (string)$n;
 }
 
-/* ---------- Prompt şəkilləri: brauzerdən yüklənir, agent cmdimg.php ilə götürür ---------- */
-const CMD_IMG_MAX = 4;                      // bir prompta ən çox şəkil
-const CMD_IMG_BYTES = 5 * 1024 * 1024;      // hər şəkil üçün maksimum ölçü
-const CMD_IMG_TTL = 7 * 86400;              // bu müddətdən köhnə şəkillər silinir
+/* ---------- Prompt faylları (şəkil və s.): brauzerdən yüklənir, agent cmdimg.php ilə götürür ---------- */
+const CMD_IMG_MAX = 6;                      // bir prompta ən çox fayl
+const CMD_IMG_BYTES = 10 * 1024 * 1024;     // hər fayl üçün maksimum ölçü
+const CMD_IMG_TTL = 7 * 86400;              // bu müddətdən köhnə fayllar silinir
 const CMD_IMG_TYPES = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/gif' => 'gif', 'image/webp' => 'webp'];
+/** Şəkildən başqa icazəli uzantılar (brauzerə həmişə endirmə kimi verilir, açılmır). */
+const CMD_FILE_EXTS = ['pdf', 'txt', 'md', 'csv', 'tsv', 'json', 'xml', 'yaml', 'yml', 'log', 'ini', 'toml', 'sql',
+    'html', 'htm', 'css', 'js', 'ts', 'tsx', 'jsx', 'vue', 'php', 'py', 'rb', 'go', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'rs', 'sh',
+    'svg', 'zip', 'docx', 'xlsx', 'pptx', 'doc', 'xls', 'ppt', 'odt', 'ods', 'rtf'];
 
 /** Şəkillərin qovluğu (data/ içində, birbaşa URL ilə açılmır; yalnız cmdimg.php verir). Yaradıla bilmirsə null. */
 function cmdimg_dir(): ?string
@@ -388,10 +392,71 @@ function cmdimg_dir(): ?string
     return $dir;
 }
 
-/** Fayl adı yalnız bizim yaratdığımız formadadırsa (təsadüfi hex + uzantı) true. */
+/** Fayl adı yalnız bizim yaratdığımız formadadırsa true: şəkil "<hex>.png", digər fayl "<hex>-<orijinal ad>.<uzantı>". */
 function cmdimg_name_ok(string $f): bool
 {
-    return (bool)preg_match('/^[a-f0-9]{24}\.(png|jpg|gif|webp)$/', $f);
+    if (preg_match('/^[a-f0-9]{24}\.(png|jpg|gif|webp)$/', $f)) {
+        return true;
+    }
+    return (bool)preg_match('/^[a-f0-9]{24}-[A-Za-z0-9_.-]{1,60}\.([a-z0-9]{1,5})$/', $f, $m) && in_array($m[1], CMD_FILE_EXTS, true);
+}
+
+/**
+ * Prompta əlavə faylları yoxlayıb data/cmdimg/ qovluğuna saxlayır; saxlanan adları qaytarır. Xəta olsa cavab verib çıxır.
+ * Şəkillər məzmununa görə yoxlanır (uzantıya yox); digər fayllar uzantı siyahısına görə.
+ */
+function cmdfile_save(?array $files): array
+{
+    if (!$files || !isset($files['name']) || !is_array($files['name'])) {
+        return [];
+    }
+    $n = count($files['name']);
+    if ($n > CMD_IMG_MAX) {
+        json_out(['error' => 'Ən çox ' . CMD_IMG_MAX . ' fayl göndərmək olar'], 400);
+    }
+    $dir = cmdimg_dir();
+    if ($dir === null) {
+        json_out(['error' => 'Fayl qovluğu yaradıla bilmədi'], 500);
+    }
+    $mb = intdiv(CMD_IMG_BYTES, 1024 * 1024);
+    $saved = [];
+    $fail = function (string $msg, int $code = 400) use (&$saved, $dir) {
+        foreach ($saved as $f) {
+            @unlink($dir . '/' . $f);
+        }
+        json_out(['error' => $msg], $code);
+    };
+    for ($i = 0; $i < $n; $i++) {
+        $err = (int)($files['error'][$i] ?? UPLOAD_ERR_NO_FILE);
+        if ($err === UPLOAD_ERR_NO_FILE) {
+            continue;
+        }
+        if ($err !== UPLOAD_ERR_OK) {
+            $fail(in_array($err, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? "Fayl çox böyükdür (ən çox $mb MB)" : 'Fayl yüklənmədi');
+        }
+        $tmp = (string)$files['tmp_name'][$i];
+        $size = (int)$files['size'][$i];
+        if ($size < 1 || $size > CMD_IMG_BYTES || !is_uploaded_file($tmp)) {
+            $fail("Fayl boş olmamalı və $mb MB-dan böyük olmamalıdır");
+        }
+        $orig = (string)$files['name'][$i];
+        $ext = strtolower((string)pathinfo($orig, PATHINFO_EXTENSION));
+        $info = @getimagesize($tmp);
+        $img = $info ? (CMD_IMG_TYPES[$info['mime']] ?? null) : null;
+        if ($img !== null && $ext !== 'svg') {
+            $name = bin2hex(random_bytes(12)) . '.' . $img;
+        } elseif (in_array($ext, CMD_FILE_EXTS, true)) {
+            $base = trim((string)preg_replace('/[^A-Za-z0-9_.-]+/', '_', pathinfo($orig, PATHINFO_FILENAME)), '._') ?: 'fayl';
+            $name = bin2hex(random_bytes(12)) . '-' . substr($base, 0, 60) . '.' . $ext;
+        } else {
+            $fail(in_array($ext, ['png', 'jpg', 'jpeg', 'gif', 'webp'], true) ? 'Şəkil faylı zədəlidir' : ($ext === '' ? 'Uzantısız fayl qəbul olunmur' : "'.$ext' faylı qəbul olunmur"));
+        }
+        if (!@move_uploaded_file($tmp, $dir . '/' . $name)) {
+            $fail('Fayl saxlanmadı', 500);
+        }
+        $saved[] = $name;
+    }
+    return $saved;
 }
 
 /** Köhnə promptların şəkillərini silir (arabir çağırılır). */

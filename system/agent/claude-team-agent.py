@@ -120,7 +120,11 @@ def fetch_images(base, token, names):
                                          headers={'X-Team-Token': token})
             with urllib.request.urlopen(req, timeout=60) as r:
                 data = r.read()
-            p = os.path.join(d, f'sekil-{i}{os.path.splitext(str(name))[1] or ".png"}')
+            name = str(name)
+            if '-' in name:                                 # fayl: "<hex>-<orijinal ad>.<uzantı>" → orijinal ad (nömrə ilə, toqquşmasın)
+                p = os.path.join(d, f'{i}-{os.path.basename(name[25:])}')
+            else:
+                p = os.path.join(d, f'sekil-{i}{os.path.splitext(name)[1] or ".png"}')
             with open(p, 'wb') as f:
                 f.write(data)
             paths.append(p)
@@ -282,14 +286,14 @@ def run_one(base, token, claude):
              'result': f"'{cmd['perm']}' rejimi bu kompüterdə icazəli deyil (CLAUDE_TEAM_MODES: {', '.join(perm_modes()) or 'heç biri'})."})
         return True
     imgdir, extra = None, ()
-    if cmd.get('images'):                                   # şəkilli prompt: faylları endir, Claude-a yolunu ver (--add-dir ilə oxuya bilsin)
+    if cmd.get('images'):                                   # fayllı prompt: faylları endir, Claude-a yolunu ver (--add-dir ilə oxuya bilsin)
         try:
             imgdir, files = fetch_images(base, token, cmd['images'])
         except Exception as e:  # noqa
-            call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed', 'result': f'Şəkillər saytdan alınmadı: {e}'})
+            call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed', 'result': f'Fayllar saytdan alınmadı: {e}'})
             return True
         extra = ('--add-dir', imgdir)
-        cmd['prompt'] += '\n\n[Göndərənin prompta əlavə etdiyi şəkillər (Read aləti ilə bax): ' + ', '.join(files) + ']'
+        cmd['prompt'] += '\n\n[Göndərənin prompta əlavə etdiyi fayllar (Read aləti ilə bax): ' + ', '.join(files) + ']'
     try:
         out, status = run_claude(base, token, claude, cmd, path, extra)
     finally:
