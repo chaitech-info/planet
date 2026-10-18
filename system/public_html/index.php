@@ -407,6 +407,7 @@ body.v-space::before { display: none; }
 .cmdc .ci { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 2px; }
 .cmdc .ci a { display: block; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,.14); background: rgba(0,0,0,.3); }
 .cmdc .ci img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cmdc .ci .cfile, .cmdimgs .cimg .cfile { width: 100%; height: 100%; display: grid; place-items: center; font-size: 24px; }
 .agentst { font-size: 11px; text-transform: none; letter-spacing: 0; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
 .agentst i { width: 7px; height: 7px; border-radius: 50%; background: var(--off); } .agentst.on i { background: var(--idle); }
 .cmdc { padding: 12px 14px; }
@@ -1678,7 +1679,7 @@ function renderCmd() {
     const imgs = c.images || [], ik = imgs.join('|');
     if (r.ci._k !== ik) {                                   // prompta əlavə şəkillər (klik: böyük aç)
       r.ci._k = ik;
-      r.ci.replaceChildren(...imgs.map(f => { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; const im = el('img'); im.src = a.href; im.alt = 'şəkil'; im.loading = 'lazy'; a.append(im); return a; }));
+      r.ci.replaceChildren(...imgs.map(f => { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; a.append(cmdThumb(f, a.href)); return a; }));
     }
     r.ci.hidden = !imgs.length;
     const hasRes = c.status === 'done' || c.status === 'failed';
@@ -2825,8 +2826,13 @@ function imgStrip(c) {
   const imgs = c.images || [];
   if (!imgs.length) return null;
   const box = el('div', 'cmdimgs');
-  for (const f of imgs) { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; const d = el('div', 'cimg'), im = el('img'); im.src = a.href; im.alt = 'şəkil'; im.loading = 'lazy'; d.append(im); a.append(d); box.append(a); }
+  for (const f of imgs) { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; const d = el('div', 'cimg'); d.append(cmdThumb(f, a.href)); a.append(d); box.append(a); }
   return box;
+}
+/** Prompt faylının önizləməsi: şəkil "<hex>.png" → <img>, digər fayl "<hex>-<ad>.<uzantı>" → 📄 ad (code.php-dən göndərilə bilər) */
+function cmdThumb(f, src) {
+  if (f.includes('-')) { const s = el('span', 'cfile', '📄'); s.title = f.slice(25); return s; }
+  const im = el('img'); im.src = src; im.alt = 'şəkil'; im.loading = 'lazy'; return im;
 }
 /** Promptun tamamı: başlıqda yalnız ilk sətir görünür, uzundursa "Promptun tamamı" ilə açılır */
 function promptBox(c) {

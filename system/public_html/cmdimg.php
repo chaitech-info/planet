@@ -1,5 +1,5 @@
 <?php
-// Prompta əlavə olunmuş şəkli verir. Giriş etmiş istifadəçi (brauzerdə kart) və ya token ilə agent (kompüterdə Claude-a göstərmək üçün).
+// Prompta əlavə olunmuş şəkli və ya faylı verir. Giriş etmiş istifadəçi (brauzerdə kart) və ya token ilə agent (kompüterdə Claude-a göstərmək üçün).
 require __DIR__ . '/db.php';
 
 $f = (string)($_GET['f'] ?? '');
@@ -24,7 +24,13 @@ if ($path === '' || !is_file($path)) {
     exit('şəkil yoxdur');
 }
 $types = ['png' => 'image/png', 'jpg' => 'image/jpeg', 'gif' => 'image/gif', 'webp' => 'image/webp'];
-header('Content-Type: ' . $types[substr($f, strrpos($f, '.') + 1)]);
+$type = $types[substr($f, strrpos($f, '.') + 1)] ?? null;
+if ($type !== null) {
+    header('Content-Type: ' . $type);
+} else {                                                  // digər fayllar brauzerdə açılmır, yalnız endirilir (html/svg və s. təhlükəsiz qalsın)
+    header('Content-Type: application/octet-stream');
+    header('Content-Disposition: attachment; filename="' . substr($f, 25) . '"');
+}
 header('Content-Length: ' . filesize($path));
 header('Cache-Control: private, max-age=86400');
 header('X-Content-Type-Options: nosniff');

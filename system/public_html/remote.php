@@ -27,54 +27,6 @@ $pdo = db();
 $now = time();
 $name = $me['name'];
 
-/** Əlavə şəkilləri məzmununa görə yoxlayıb data/cmdimg/ qovluğuna saxlayır (command.php ilə eyni qaydalar). Xəta olsa cavab verib çıxır. */
-function remote_save_images(?array $files): array
-{
-    if (!$files || !isset($files['name']) || !is_array($files['name'])) {
-        return [];
-    }
-    $n = count($files['name']);
-    if ($n > CMD_IMG_MAX) {
-        json_out(['error' => 'Ən çox ' . CMD_IMG_MAX . ' şəkil göndərmək olar'], 400);
-    }
-    $dir = cmdimg_dir();
-    if ($dir === null) {
-        json_out(['error' => 'Şəkil qovluğu yaradıla bilmədi'], 500);
-    }
-    $saved = [];
-    $fail = function (string $msg, int $code = 400) use (&$saved, $dir) {
-        foreach ($saved as $f) {
-            @unlink($dir . '/' . $f);
-        }
-        json_out(['error' => $msg], $code);
-    };
-    for ($i = 0; $i < $n; $i++) {
-        $err = (int)($files['error'][$i] ?? UPLOAD_ERR_NO_FILE);
-        if ($err === UPLOAD_ERR_NO_FILE) {
-            continue;
-        }
-        if ($err !== UPLOAD_ERR_OK) {
-            $fail(in_array($err, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? 'Şəkil çox böyükdür (ən çox 5 MB)' : 'Şəkil yüklənmədi');
-        }
-        $tmp = (string)$files['tmp_name'][$i];
-        $size = (int)$files['size'][$i];
-        if ($size < 16 || $size > CMD_IMG_BYTES || !is_uploaded_file($tmp)) {
-            $fail('Şəkil 5 MB-dan böyük olmamalıdır');
-        }
-        $info = @getimagesize($tmp);                       // həqiqətən şəkildir? (uzantıya yox, məzmuna baxırıq)
-        $ext = $info ? (CMD_IMG_TYPES[$info['mime']] ?? null) : null;
-        if ($ext === null) {
-            $fail('Yalnız PNG, JPEG, GIF və ya WebP şəkil qəbul olunur');
-        }
-        $name = bin2hex(random_bytes(12)) . '.' . $ext;
-        if (!@move_uploaded_file($tmp, $dir . '/' . $name)) {
-            $fail('Şəkil saxlanmadı', 500);
-        }
-        $saved[] = $name;
-    }
-    return $saved;
-}
-
 function user_exists(PDO $pdo, string $n): bool
 {
     $st = $pdo->prepare("SELECT 1 FROM users WHERE name = ? AND role != 'student'");   // studentlərin agenti yoxdur
@@ -163,7 +115,7 @@ if ($act === 'send') {
         }
     }
     $perm = in_array($in['perm'] ?? '', ['plan', 'auto', 'manual', 'acceptEdits'], true) ? $in['perm'] : 'acceptEdits';
-    $images = remote_save_images($_FILES['images'] ?? null);
+    $images = cmdfile_save($_FILES['images'] ?? null);
     $full = $self ? $prompt : '[' . $name . ' uzaqdan göndərdi (Desktop Universe)]' . "\n" . $prompt;
     $pdo->prepare('INSERT INTO commands (user, project, prompt, status, result, created_at, started_at, finished_at, creator, fresh, images, chat, perm) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')
         ->execute([$target, $project, $full, $status, '', $now, 0, 0, $name, $fresh, $images ? json_encode($images) : '', $chat, $perm]);

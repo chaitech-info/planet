@@ -142,6 +142,10 @@ button:disabled { cursor: default; opacity: .5; }
 .imgs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .imgs a, .imgs .ci { position: relative; width: 64px; height: 64px; border-radius: 9px; overflow: hidden; border: 1px solid var(--line); display: block; }
 .imgs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.imgs .cf { width: auto; max-width: 220px; display: flex; align-items: center; gap: 6px; padding: 0 28px 0 10px; color: inherit; text-decoration: none; font-size: 12.5px; }
+.imgs a.cf { padding-right: 10px; }
+.imgs .cf .fi { flex: none; font-size: 18px; }
+.imgs .cf .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .imgs .rm { position: absolute; top: 2px; right: 2px; border: 0; width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,.6); color: #fff; font-size: 11px; padding: 0; }
 
 .ev { display: flex; gap: 8px; font-size: 12.5px; color: var(--muted); margin: 10px 0; align-items: center; }
@@ -238,8 +242,8 @@ button:disabled { cursor: default; opacity: .5; }
                 <option value="auto">🤖 Auto</option>
                 <option value="manual">✋ Manual</option>
               </select>
-              <button class="lb" id="att" type="button" title="Şəkil əlavə et (ən çox 4). Yapışdırmaq və ya sürüşdürmək də olar">🖼</button>
-              <input type="file" id="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+              <button class="lb" id="att" type="button" title="Şəkil və ya fayl əlavə et (ən çox <?= CMD_IMG_MAX ?>, hər biri <?= intdiv(CMD_IMG_BYTES, 1048576) ?> MB). Yapışdırmaq və ya sürüşdürmək də olar">📎</button>
+              <input type="file" id="file" multiple hidden>
               <span class="hint" id="hint"></span>
               <span class="sp"></span>
               <button class="send" id="send" type="button" title="Göndər (Enter)" aria-label="Göndər">↑</button>
@@ -362,7 +366,11 @@ const PERM_NOTE = {
   auto: 'Claude əmrləri özü təhlükəsizliyə görə yoxlayıb icra edir',
   manual: 'yalnız oxuyur: icazə istəyən addımlar (redaktə də) rədd olunur',
 };
-const CMD_IMG_MAX = 4, CMD_IMG_BYTES = 5 * 1024 * 1024, CMD_IMG_TYPES = /^image\/(png|jpeg|gif|webp)$/;
+const CMD_IMG_MAX = <?= CMD_IMG_MAX ?>, CMD_IMG_BYTES = <?= CMD_IMG_BYTES ?>, CMD_IMG_TYPES = /^image\/(png|jpeg|gif|webp)$/;
+const CMD_FILE_EXTS = <?= json_encode(CMD_FILE_EXTS) ?>, CMD_MB = CMD_IMG_BYTES / 1048576;
+const fext = n => (/\.([a-z0-9]+)$/i.exec(n) || [, ''])[1].toLowerCase();
+/** Göndərilmiş fayl adı (serverdə): şəkil "<hex>.png", digər "<hex>-<ad>.<uzantı>" → { img, label } */
+const cmdFile = f => f.includes('-') ? { img: false, label: f.slice(25) } : { img: true, label: 'şəkil' };
 function shrinkImage(f) {
   if (f.size <= 1.5 * 1024 * 1024 || f.type === 'image/gif') return Promise.resolve(f);
   return new Promise(res => {
@@ -606,7 +614,7 @@ function message(m, latest, hidePrj) {
   const u = el('div', 'u'), ut = el('div', 'ut', text); u.append(ut);
   const long = text.length > 600 || text.split('\n').length > 9;
   if (long && !S.openRes.has('p' + id)) ut.classList.add('clamp');
-  if (m.images && m.images.length) { const ib = el('div', 'imgs'); for (const f of m.images) { const a = el('a'); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; const im = el('img'); im.src = a.href; im.alt = 'şəkil'; im.loading = 'lazy'; a.append(im); ib.append(a); } u.append(ib); }
+  if (m.images && m.images.length) { const ib = el('div', 'imgs'); for (const f of m.images) { const a = el('a'), cf = cmdFile(f); a.href = 'cmdimg.php?f=' + encodeURIComponent(f); a.target = '_blank'; a.rel = 'noopener'; if (cf.img) { const im = el('img'); im.src = a.href; im.alt = cf.label; im.loading = 'lazy'; a.append(im); } else { a.className = 'cf'; a.title = cf.label; a.append(el('span', 'fi', '📄'), el('span', 'fn', cf.label)); } ib.append(a); } u.append(ib); }
   const um = el('div', 'um');
   if (long) { const b = el('button', 'lb', ut.classList.contains('clamp') ? '▾ Tam göstər' : '▴ Yığ'); b.type = 'button'; b.onclick = () => { S.openRes.has('p' + id) ? S.openRes.delete('p' + id) : S.openRes.add('p' + id); redraw(); }; um.append(b); }
   if (canSend() && m.status !== 'sending') { const b = el('button', 'lb', '↻'); b.type = 'button'; b.title = 'Yazı qutusuna qoy: düzəldib yenidən göndər'; b.onclick = () => fill(text); um.append(b); }
@@ -798,16 +806,23 @@ function fill(t) { ta.value = t; grow(); updSend(); ls.set('cc:draft:' + S.targe
 function cerr(t) { $('cerr').hidden = !t; $('cerr').textContent = t || ''; }
 function drawImgs() {
   const box = $('imgs'); box.hidden = !S.imgs.length;
-  box.replaceChildren(...S.imgs.map(im => { const d = el('div', 'ci'), i = el('img'); i.src = im.url; i.alt = im.file.name; const x = el('button', 'rm', '✕'); x.type = 'button'; x.title = 'Şəkli sil'; x.onclick = () => { URL.revokeObjectURL(im.url); S.imgs.splice(S.imgs.indexOf(im), 1); drawImgs(); }; d.append(i, x); return d; }));
+  box.replaceChildren(...S.imgs.map(im => {
+    const d = el('div', im.url ? 'ci' : 'ci cf'), x = el('button', 'rm', '✕');
+    if (im.url) { const i = el('img'); i.src = im.url; i.alt = im.file.name; d.append(i); }
+    else { d.title = im.file.name; d.append(el('span', 'fi', '📄'), el('span', 'fn', im.file.name)); }
+    x.type = 'button'; x.title = 'Sil'; x.onclick = () => { if (im.url) URL.revokeObjectURL(im.url); S.imgs.splice(S.imgs.indexOf(im), 1); drawImgs(); };
+    d.append(x); return d;
+  }));
 }
 async function addImgs(files) {
   cerr('');
   for (let f of files) {
-    if (!CMD_IMG_TYPES.test(f.type)) { cerr('Yalnız PNG, JPEG, GIF və ya WebP şəkil'); continue; }
-    if (S.imgs.length >= CMD_IMG_MAX) { cerr('Ən çox ' + CMD_IMG_MAX + ' şəkil'); break; }
-    f = await shrinkImage(f);
-    if (f.size > CMD_IMG_BYTES) { cerr('Şəkil çox böyükdür (ən çox 5 MB)'); continue; }
-    S.imgs.push({ file: f, url: URL.createObjectURL(f) });
+    const img = CMD_IMG_TYPES.test(f.type);
+    if (!img && !CMD_FILE_EXTS.includes(fext(f.name))) { cerr(fext(f.name) ? '.' + fext(f.name) + ' faylı qəbul olunmur' : 'Uzantısız fayl qəbul olunmur'); continue; }
+    if (S.imgs.length >= CMD_IMG_MAX) { cerr('Ən çox ' + CMD_IMG_MAX + ' fayl'); break; }
+    if (img) f = await shrinkImage(f);
+    if (!f.size || f.size > CMD_IMG_BYTES) { cerr(f.size ? 'Fayl çox böyükdür (ən çox ' + CMD_MB + ' MB)' : 'Fayl boşdur'); continue; }
+    S.imgs.push({ file: f, url: img ? URL.createObjectURL(f) : null });
   }
   drawImgs();
 }
@@ -825,7 +840,7 @@ async function send() {
   redraw(); updSend();
   let res;
   try {
-    if (imgs.length) {                                            // şəkilli: FormData
+    if (imgs.length) {                                            // fayllı: FormData
       const fd = new FormData(); fd.append('action', 'send'); fd.append('target', t); fd.append('project', prj); fd.append('prompt', text); fd.append('fresh', isNew ? '1' : ''); fd.append('chat', chat); fd.append('perm', perm);
       for (const im of imgs) fd.append('images[]', im.file, im.file.name);
       const r = await fetch('remote.php', { method: 'POST', headers: { 'X-Requested-With': 'fetch' }, body: fd });
