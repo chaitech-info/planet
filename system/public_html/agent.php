@@ -65,7 +65,7 @@ function claim_one(PDO $pdo, string $user, int $now, array $skip): ?array
     }
     // kind/model/mode: yeni agent üçün (think, ops, --model, --permission-mode plan); köhnə agent bu açarları sadəcə nəzərə almır
     return ['id' => $id, 'project' => $row['project'], 'names' => $names, 'prompt' => $row['prompt'], 'creator' => $row['creator'], 'fresh' => (int)$row['fresh'], 'images' => $images, 'chat' => (int)$row['chat'],
-        'kind' => (string)($row['kind'] ?? 'prompt'), 'model' => (string)($row['model'] ?? ''), 'mode' => (string)($row['mode'] ?? '')];   // şəkillər: cmdimg.php?f=<ad>
+        'kind' => (string)($row['kind'] ?? 'prompt'), 'model' => (string)($row['model'] ?? ''), 'mode' => (string)($row['mode'] ?? ''), 'perm' => (string)($row['perm'] ?? '') ?: 'acceptEdits'];   // şəkillər: cmdimg.php?f=<ad>
 }
 
 /** Növbədə götürülə bilən iş varmı? (long-poll üçün ucuz yoxlama: commands (user, status) indeksi) */

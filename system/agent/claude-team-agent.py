@@ -4,6 +4,7 @@
 Saytdakı növbədən YALNIZ SƏNİN tokenin üçün göndərilən promptları götürür və
 həmin proyektin qovluğunda `claude -p` ilə işlədir. Yalnız ~/.claude-team-projects
 siyahısındakı proyektlərə icazə verilir. Fayl redaktəsi və git əmrləri icazəlidir (səviyyəyə görə, aşağıya bax), qalan terminal əmrləri yox.
+Claude Code rejimini (plan, manual, acceptEdits, auto) göndərən saytda seçir; sahib icazəli rejimləri CLAUDE_TEAM_MODES ilə məhdudlaşdıra bilər.
 Prompta şəkil əlavə olunubsa, agent onları müvəqqəti qovluğa endirir və Claude-a yolunu verir (iş bitəndə silinir).
 
 Git səviyyəsi (kompüterin sahibi seçir; CLAUDE_TEAM_GIT mühit dəyişəni və ya ~/.claude-team-agent.env faylında):
@@ -107,6 +108,15 @@ def profile():
     return v if v in PROFILES else 'basic'
 
 
+PERM_MODES = ('plan', 'manual', 'acceptEdits', 'auto')   # Claude Code rejimləri (saytdan seçilir); bypassPermissions heç vaxt
+
+
+def perm_modes():
+    """Kompüterin sahibi icazəli rejimləri məhdudlaşdıra bilər: CLAUDE_TEAM_MODES=plan,manual,acceptEdits (standart: hamısı)."""
+    v = os.environ.get('CLAUDE_TEAM_MODES') or load_env().get('CLAUDE_TEAM_MODES') or ','.join(PERM_MODES)
+    return [m for m in (x.strip() for x in v.split(',')) if m in PERM_MODES]
+
+
 def git_level():
     v = env_opt('CLAUDE_TEAM_GIT').lower()
     if v in ('read', 'safe', 'full'):        # açıq seçim həmişə üstündür
@@ -154,7 +164,8 @@ def model_of(cmd):
 def perm_args(cmd, d):
     """İcazə bayraqları + model/rejim. basic və model/rejimsiz tapşırıqda bugünkü argv-nin eynisi."""
     prof = profile()
-    a = ['--permission-mode', 'plan' if cmd.get('mode') == 'plan' else 'acceptEdits',
+    perm = cmd.get('perm') if cmd.get('perm') in PERM_MODES else 'acceptEdits'   # saytdan seçilən rejim (run_one icazəli olduğunu yoxlayıb)
+    a = ['--permission-mode', 'plan' if cmd.get('mode') == 'plan' else perm,
          '--allowedTools', allowed_tools(prof, d), '--disallowedTools', denied_tools(prof)]
     if model_of(cmd):
         a += ['--model', model_of(cmd)]
@@ -229,7 +240,7 @@ def load_env():
                 if '=' in line and not line.startswith('#'):
                     k, v = line.split('=', 1)
                     if k.strip() in ('CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_TEAM_GIT', 'CLAUDE_TEAM_WORKERS',
-                                     'CLAUDE_TEAM_PROFILE', 'CLAUDE_TEAM_WARM', 'CLAUDE_TEAM_SELFCHECK'):
+                                     'CLAUDE_TEAM_PROFILE', 'CLAUDE_TEAM_WARM', 'CLAUDE_TEAM_SELFCHECK', 'CLAUDE_TEAM_MODES'):
                         out[k.strip()] = v.strip().strip('"\'')
     except FileNotFoundError:
         pass
@@ -1097,6 +1108,11 @@ def handle(base, token, claude, cmd):
     if not path:
         call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
              'result': f"'{cmd['project']}' bu kompüterdə icazəli deyil. ~/.claude-team-projects siyahısına əlavə et."})
+        return
+    cmd['perm'] = cmd.get('perm') or 'acceptEdits'
+    if cmd['perm'] not in perm_modes():
+        call(base, token, 'finish', {'id': cmd['id'], 'status': 'failed',
+             'result': f"'{cmd['perm']}' rejimi bu kompüterdə icazəli deyil (CLAUDE_TEAM_MODES: {', '.join(perm_modes()) or 'heç biri'})."})
         return
     imgdir, extra = None, ()
     if cmd.get('images'):                                   # şəkilli prompt: faylları endir, Claude-a yolunu ver (--add-dir ilə oxuya bilsin)
