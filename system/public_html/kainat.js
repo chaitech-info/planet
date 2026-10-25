@@ -4,7 +4,7 @@ import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
 
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const STC = { working: '#fbbf24', waiting: '#f87171', idle: '#4ade80', offline: '#6f6f7c', ended: '#6f6f7c', meet: '#5eead4' };
-const KIND_TYPE = { prompt: 6, designer: 7, meeting: 8, test: 9, mcp: 10, agent: 11, desktop: 9 };
+const KIND_TYPE = { prompt: 6, designer: 7, meeting: 8, test: 9, mcp: 10, agent: 11, desktop: 9, mprompts: 6, mfal: 10, medit: 7 };
 const uT = { value: 0 };
 const uSun = { value: new THREE.Vector3(0, 0, 0) };
 
@@ -321,11 +321,11 @@ const focusObj = () => focusName === SHIP ? ship : planets.get(focusName);
 function pu(extra, light) { return Object.assign({ uTime: uT, uLight: light || uSun }, extra); }
 
 /* ====== Kosmik xəritə: bütün universlər eyni məkanda, hər birinin öz günəşi və qalaktikası var ====== */
-const UNI_IDS = ['main', 'studio', 'mcp', 'agent', 'desktop', 'student'];
-// Səliqəli düzülüş: Komanda mərkəzdə, qalan beş univers eyni müstəvidə bərabər bucaqlı halqada (yuxarıdan saat əqrəbi ilə: Agent, Studio, Desktop, Student, MCP)
+const UNI_IDS = ['main', 'studio', 'mcp', 'agent', 'desktop', 'student', 'media'];
+// Səliqəli düzülüş: Komanda mərkəzdə, qalan altı univers eyni müstəvidə bərabər bucaqlı halqada (yuxarıdan saat əqrəbi ilə: Agent, Studio, Desktop, Student, MCP, MEDIA)
 const RING_R = 560;
-const ringPos = k => [Math.round(Math.sin(k * 1.2566) * RING_R), 0, -Math.round(Math.cos(k * 1.2566) * RING_R)];   // 1.2566 = 2π/5
-const UNI_POS = { main: [0, 0, 0], agent: ringPos(0), studio: ringPos(1), desktop: ringPos(2), student: ringPos(3), mcp: ringPos(4) };
+const ringPos = k => [Math.round(Math.sin(k * 1.0472) * RING_R), 0, -Math.round(Math.cos(k * 1.0472) * RING_R)];   // 1.0472 = 2π/6
+const UNI_POS = { main: [0, 0, 0], agent: ringPos(0), studio: ringPos(1), desktop: ringPos(2), student: ringPos(3), mcp: ringPos(4), media: ringPos(5) };
 const MAP_TARGET = new THREE.Vector3(0, 0, 0);
 const GAL_R = 60;                                   // xəritədə bütün qalaktikalar eyni ölçüdə görünür (planet sayından asılı deyil)
 const U = {};
@@ -1813,6 +1813,7 @@ const THEMES = {
   desktop: { a: [.04, .3, .2], b: [.1, .28, .1], c: [.04, .2, .34], sa: [.15, .85, .5], sb: [.85, 1, .9], g1: 0x40e090, g2: 0x20b070, lbl: 'Desktop', gal: [110, 255, 170], gal2: [120, 200, 255] },
   agent: { a: [.26, .05, .42], b: [.36, .05, .24], c: [.05, .1, .36], sa: [.5, .18, 1], sb: [.96, .78, 1], g1: 0xb070ff, g2: 0x8040ff, lbl: 'Agentlər', gal: [200, 140, 255], gal2: [255, 120, 200] },
   student: { a: [.04, .3, .14], b: [.22, .3, .04], c: [.04, .16, .34], sa: [.2, 1, .45], sb: [.9, 1, .7], g1: 0x60f090, g2: 0x30d070, lbl: 'Studentlər', gal: [140, 255, 170], gal2: [255, 230, 120] },
+  media: { a: [.36, .12, .04], b: [.34, .04, .1], c: [.1, .06, .3], sa: [1, .2, .12], sb: [1, .8, .45], g1: 0xff6a3d, g2: 0xe23b2e, lbl: 'MEDIA', gal: [255, 150, 90], gal2: [255, 90, 140] },
 };
 let streaks = null, myUser = '', skyMix = null, navUni = null, camSpd = 0, warpK = 0, baseFov = 45;
 const prevCam = new THREE.Vector3();

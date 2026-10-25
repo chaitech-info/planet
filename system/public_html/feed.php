@@ -111,7 +111,7 @@ foreach ($cmds as $i => &$c) {
     }
 }
 unset($c);
-$agents = $pdo->query('SELECT user, last_seen, claude_ok, projects, auto_tasks FROM agents')->fetchAll();
+$agents = $pdo->query('SELECT user, last_seen, claude_ok, projects, auto_tasks, profile FROM agents')->fetchAll();   // profile: MEDIA → Edit Media montaj üçün (dev+ lazımdır)
 
 $tk = $pdo->prepare("SELECT id, project, title, details, assignee, creator, status, command_id, created_at, updated_at, done_at, due_at, rounds, verdict
     FROM tasks WHERE status != 'done' OR updated_at > ? ORDER BY updated_at DESC LIMIT 300");

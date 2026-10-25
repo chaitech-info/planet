@@ -8,7 +8,7 @@ date_default_timezone_set($config['timezone'] ?? 'Asia/Baku');
 
 // Sxem versiyası: cədvəl/sütun/indeks əlavə edəndə artır. Sxem yalnız versiya dəyişəndə qurulur (settings.schema),
 // yoxsa hər sorğuda (feed 3 saniyədən bir, agent poll-u, Jarvis) 40-a yaxın CREATE/ALTER işləyirdi.
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 function db(): PDO
 {
@@ -479,6 +479,29 @@ function db_migrate(PDO $pdo, bool $sqlite, array $config): void
         last_run INT NOT NULL DEFAULT 0,
         created_at INT NOT NULL
     )");
+    // MEDIA universi: hər istifadəçinin öz fal.ai açarı (brauzerə heç vaxt getmir) və generasiyaları (media.php)
+    $pdo->exec("CREATE TABLE IF NOT EXISTS media_keys (
+        user VARCHAR(64) NOT NULL PRIMARY KEY,
+        fal_key TEXT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS media_gens (
+        id $id,
+        user VARCHAR(64) NOT NULL,
+        model VARCHAR(160) NOT NULL,
+        kind VARCHAR(20) NOT NULL,
+        prompt TEXT NOT NULL,
+        params TEXT NOT NULL,
+        request_id VARCHAR(80) NOT NULL DEFAULT '',
+        status_url VARCHAR(400) NOT NULL DEFAULT '',
+        response_url VARCHAR(400) NOT NULL DEFAULT '',
+        status VARCHAR(12) NOT NULL,
+        result TEXT NOT NULL,
+        error TEXT NOT NULL,
+        created_at INT NOT NULL,
+        updated_at INT NOT NULL
+    )");
+    try { $pdo->exec('CREATE INDEX media_gens_user ON media_gens (user, id)'); } catch (Throwable $e) { /* indeks artıq var */ }
     foreach ([
         "ALTER TABLE commands ADD COLUMN model VARCHAR(40) NOT NULL DEFAULT ''",      // '' = agentin default-u; opus | sonnet | haiku
         "ALTER TABLE commands ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT ''",       // '' | plan (yalnız plan, kod dəyişmə)
