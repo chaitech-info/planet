@@ -28,17 +28,22 @@
 .jv-bar button:active { transform: scale(.97); } .jv-bar .go { background: linear-gradient(135deg,#0284c7,#d97706); border-color: transparent; font-weight: 600; }
 .jv-bar .on { background: rgba(248,113,113,.18); border-color: rgba(248,113,113,.5); }
 .jv-hint { padding: 0 14px 10px; font-size: 12px; color: rgba(148,163,184,.9); }
+.jv-row { display: flex; gap: 8px; align-items: center; padding: 0 14px 10px; }
+.jv-row input[type=text] { flex: 1; min-width: 0; background: rgba(255,255,255,.07); color: #e9eef8; border: 1px solid rgba(255,255,255,.16); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13px; }
+.jv-row input[type=text]:disabled { opacity: .5; }
+.jv-pro { display: flex; align-items: center; gap: 5px; font-size: 12px; color: rgba(203,213,225,.85); white-space: nowrap; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .jv-orb { animation: none; } }
 @media (max-width: 700px) { .jv { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); width: auto; max-height: min(70dvh, calc(100dvh - 24px)); border-radius: 18px; } .jv-orb { width: 58px; height: 58px; } }`;
   document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
   const box = document.createElement('div'); box.className = 'jv'; box.hidden = true;
   box.innerHTML = `<div class="jv-top"><canvas class="jv-orb" width="148" height="148"></canvas><div class="jv-ttl"><b>J.A.R.V.I.S.</b><span id="jv-st">hazırdır</span><select id="jv-prov" class="jv-prov" title="Səs modeli" hidden></select></div><button class="jv-x" id="jv-close" aria-label="Bağla">✕</button></div>
 <div class="jv-log" id="jv-log" aria-live="polite"></div>
-<div class="jv-hint" id="jv-hint">Danışmağa başla: sual ver və ya “neo planetinə uç” de. Qulaqcıqla daha yaxşı işləyir. Qısayol: Alt+J</div>
+<div class="jv-hint" id="jv-hint">Danışmağa başla: sual ver və ya “neo planetinə uç”, “nə etməliyəm?” de. Qulaqcıqla daha yaxşı işləyir. Qısayol: Alt+J</div>
+<form class="jv-row" id="jv-in"><input type="text" id="jv-txt" maxlength="1000" autocomplete="off" placeholder="və ya yaz, Enter…" disabled><label class="jv-pro" title="Jarvis yeni mesaj, görüş, toqquşma və sənə verilən tapşırıqlar barədə özü xəbər versin"><input type="checkbox" id="jv-pro" checked> Proaktiv</label></form>
 <div class="jv-bar"><button id="jv-mic">🎙 Mikrofon açıq</button><button class="go" id="jv-go">▶ Başla</button></div>`;
   document.body.append(box);
   const $j = id => document.getElementById(id);
-  const orb = box.querySelector('.jv-orb'), og = orb.getContext('2d');
+  const orb = box.querySelector('.jv-orb'), og = orb.getContext('2d'), proBox = $j('jv-pro'), txtEl = $j('jv-txt');
   const btn = document.createElement('button'); btn.className = 'gbtn'; btn.id = 'jv-btn'; btn.title = 'Jarvis: səsli köməkçi (Alt+J)'; btn.textContent = '🎙 Jarvis';
   const meta = document.querySelector('header .meta'); if (meta) meta.insertBefore(btn, meta.firstChild.nextSibling);
 
@@ -116,23 +121,38 @@
     return prev[b.length];
   }
   /** Ən uyğun element (səslə deyilən ad dəqiq olmaya bilər): tam, başlanğıc, daxilində, söz və yazılış yaxınlığı */
-  function best(items, q, key) {
-    const nq = norm(q); if (!nq) return null;
-    let top = null, ts = 0;
-    for (const it of items) {
-      for (const k of [].concat(key(it))) {
-        const nk = norm(k); if (!nk) continue;
-        let s = nk === nq ? 100 : nk.startsWith(nq) || nq.startsWith(nk) ? 80 : nk.includes(nq) || nq.includes(nk) ? 65 : 0;
-        if (!s) { const w = nq.split(' ').filter(x => x.length > 2 && nk.includes(x)).length; if (w) s = 40 + w * 8; }
-        if (!s && lev(nk, nq) <= Math.max(1, Math.floor(nq.length / 3))) s = 55;      // səs tanımada tez-tez olan 1-2 hərf səhvi
-        if (s > ts) { ts = s; top = it; }
-      }
-    }
-    return ts >= 40 ? top : null;
+  function score(nk, nq) {
+    let s = nk === nq ? 100 : nk.startsWith(nq) || nq.startsWith(nk) ? 80 : nk.includes(nq) || nq.includes(nk) ? 65 : 0;
+    if (!s) { const w = nq.split(' ').filter(x => x.length > 2 && nk.includes(x)).length; if (w) s = 40 + w * 8; }
+    if (!s && lev(nk, nq) <= Math.max(1, Math.floor(nq.length / 3))) s = 55;      // səs tanımada tez-tez olan 1-2 hərf səhvi
+    return s;
   }
+  /** Elementlər bal sırası ilə: [{ it, s }] (yalnız min baldan yuxarı) */
+  function rank(items, q, key, min) {
+    const nq = norm(q); if (!nq) return [];
+    const out = [];
+    for (const it of items) {
+      let ts = 0;
+      for (const k of [].concat(key(it))) { const nk = norm(k); if (nk) ts = Math.max(ts, score(nk, nq)); }
+      if (ts >= min) out.push({ it, s: ts });
+    }
+    return out.sort((a, b) => b.s - a.s);
+  }
+  function best(items, q, key) { const r = rank(items, q, key, 40); return r.length ? r[0].it : null; }
+  /** Tapılmayanda modelə oxşar variantlar: istifadəçidən dəqiqləşdirmə soruşa bilsin */
+  const similar = (items, q, key, label) => rank(items, q, key, 1).slice(0, 4).map(x => label(x.it));
+  /* Söhbət yaddaşı: “bu tapşırıq”, “o planet”, “ona yaz” son danışılan obyektə gedir */
+  const REF = /^(bu|o|hemin|elə|ele|it|this|that|same|the same|son|last)( (tapsiriq|task|planet|proyekt|project|adam|user|onu|ona))?$/;
+  const isRef = q => !q || REF.test(norm(q));
+  const ctx = { task: null, project: null, user: null, cmd: null };
+  const remember = (k, v) => { if (v) ctx[k] = v; return v; };
   const when = ts => new Date(ts * 1000).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' });
   const parseWhen = v => { if (!v || /^(none|yox|sil)$/i.test(String(v).trim())) return 0; const t = new Date(String(v).trim()); return isNaN(t) ? NaN : Math.floor(t / 1000); };
-  const userName = u => { if (!u || /^(me|men|mən|özüm|ozum)$/i.test(u)) return ME.name; const m = best(data.users || [], u, x => x); return m; };
+  const userName = u => {
+    if (!u || /^(me|men|mən|özüm|ozum|myself)$/i.test(u)) return ME.name;
+    if (isRef(u)) return ctx.user;                                     // “ona” amma hələ kimsə danışılmayıb: null (təsadüfi ad seçməyək)
+    return remember('user', best(data.users || [], u, x => x));
+  };
   /** Bütün planetlər (ad, etiket, univers). Eyni feed məlumatı üçün bir dəfə hesablanır: spaceList/buildProjects ağırdır, əvvəl hər univers üçün təkrar çağırılırdı. */
   let pnData = null, pnList = [];
   const planetNames = () => {
@@ -142,10 +162,31 @@
     pnData = data; pnList = [...out.values()];
     return pnList;
   };
-  const findPlanet = q => best(planetNames(), q, p => [p.name, p.label]);
-  const projectOf = q => { const pl = findPlanet(q); return pl ? pl.name : q; };     // səslə deyilən ad → planetin dəqiq adı (tapılmasa olduğu kimi)
-  const pickTask = q => best((data.tasks || []).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done')), q, t => t.title);
-  async function findTask(q) { let t = pickTask(q); if (!t) { await load(); t = pickTask(q); } return t; }   // yeni yaradılıbsa, məlumatı təzələ
+  /** Baxılan planet (xüsusi görünüşlər deyil) */
+  const viewedPlanet = () => (typeof curPlanet === 'string' && curPlanet && !xKind(curPlanet) ? curPlanet : null);
+  const findPlanet = q => {
+    if (isRef(q) || /^(burda|bura|burasi|here|current)$/.test(norm(q))) { const n = viewedPlanet() || ctx.project; return n ? planetNames().find(p => p.name === n) || { name: n, label: n, uni: 'main' } : null; }
+    return best(planetNames(), q, p => [p.name, p.label]);
+  };
+  const projectOf = q => {
+    const pl = findPlanet(q);
+    if (!pl && isRef(q)) throw new Error('Which project? No planet is open and none was mentioned yet.');
+    return remember('project', pl ? pl.name : q);
+  };     // səslə deyilən ad → planetin dəqiq adı (tapılmasa olduğu kimi)
+  const taskPool = () => (data.tasks || []).slice().sort((a, b) => (a.status === 'done') - (b.status === 'done'));
+  function pickTask(q) {
+    const id = String(q || '').match(/^#?\s*(\d+)$/);                       // “#12” və ya “12”
+    if (id) return (data.tasks || []).find(t => +t.id === +id[1]) || null;
+    if (isRef(q)) return ctx.task ? (data.tasks || []).find(t => +t.id === +ctx.task) || null : null;
+    return best(taskPool(), q, t => t.title);
+  }
+  /** Tapşırığı tap (yeni yaradılıbsa məlumatı təzələ); tapılmasa oxşarlarla xəta */
+  async function findTask(q) {
+    let t = pickTask(q); if (!t) { await load(); t = pickTask(q); }
+    if (!t) { const s = similar(taskPool(), q, x => x.title, x => '“' + x.title + '” (' + x.project + ')'); throw new Error('Tapşırıq tapılmadı: ' + q + (s.length ? '. Oxşarlar: ' + s.join(', ') + ' — ask the user which one.' : '')); }
+    remember('task', +t.id); remember('project', t.project);
+    return t;
+  }
   const need = (a, ...ks) => { for (const k of ks) if (a[k] === undefined || a[k] === null || a[k] === '') throw new Error('"' + k + '" lazımdır'); };
   const ok = (msg, extra) => { line('a', '✓ ' + msg); return { ok: true, result: msg, ...extra }; };
   function confirmed(a) { if (a.confirmed !== true) throw new Error('Not confirmed: describe the action to the user, ask for confirmation, then call again with confirmed=true.'); }
@@ -192,15 +233,16 @@
     get_project(a) {
       need(a, 'name');
       const pl = findPlanet(a.name);
-      if (!pl) throw new Error('Belə planet tapılmadı: ' + a.name);
-      const n = pl.name, p = buildProjects().find(x => x.name === n), idle = idleOf(n);
+      if (!pl) { const s = similar(planetNames(), a.name, p => [p.name, p.label], p => p.name); throw new Error('Belə planet tapılmadı: ' + a.name + (s.length ? '. Oxşarlar: ' + s.join(', ') : '')); }
+      const n = remember('project', pl.name), p = buildProjects().find(x => x.name === n), idle = idleOf(n);
       return {
         name: n, universe: pl.uni, status: p ? p.st : null, last_activity: p ? ago(p.last) : null, sessions: p ? p.sessions : 0, edits: p ? p.edits : 0,
         burning: idle >= DAY, hours_without_finished_task: Math.floor(idle / 3600) || 0,
         active_sessions: (data.sessions || []).filter(s => s.project === n).map(s => ({ user: s.user, status: eff(s), prompt: s.last_prompt, last: s.last_summary })).filter(s => RANK[s.status] > 0),
         recent_events: (data.events || []).filter(e => e.project === n).slice(0, 8).map(e => e.user + ': ' + e.summary + ' (' + ago(e.created_at) + ')'),
-        tasks: (data.tasks || []).filter(x => x.project === n).map(x => ({ title: x.title, status: x.status, assignee: x.assignee, due: dueText(x) })),
+        tasks: (data.tasks || []).filter(x => x.project === n).map(x => ({ id: +x.id, title: x.title, status: x.status, assignee: x.assignee, due: dueText(x) })),
         tests: (data.tests || []).filter(x => x.project === n).map(x => ({ title: x.title, result: x.status, note: x.note || undefined })),
+        open_plans: (data.plans || []).filter(x => x.project === n && x.status !== 'done').map(x => ({ kind: x.kind, title: x.title })),
         mcp_servers: satsOf(n).map(s => s.name),
       };
     },
@@ -210,7 +252,8 @@
       if (a.project) { const n = projectOf(a.project); ts = ts.filter(t => t.project === n); }
       const st = a.status || 'open';
       if (st === 'open') ts = ts.filter(t => t.status !== 'done'); else if (st !== 'any') ts = ts.filter(t => t.status === st);
-      return { count: ts.length, tasks: ts.slice(0, 25).map(t => ({ title: t.title, project: t.project, assignee: t.assignee, status: t.status, due: dueText(t) })) };
+      if (ts.length === 1) remember('task', +ts[0].id);
+      return { count: ts.length, tasks: ts.slice(0, 25).map(t => ({ id: +t.id, title: t.title, project: t.project, assignee: t.assignee, status: t.status, due: dueText(t), verdict: t.verdict || undefined })) };
     },
     async get_report(a) {
       const d = await R(REP('get', a.day === 'yesterday' ? 'yesterday' : 'today'));
@@ -226,8 +269,8 @@
       const u = best(UNIVERSES, a.target, x => [x.name, x.id, x.name.replace(' Universe', '')]);
       const pl = findPlanet(a.target);
       if (u && (!pl || /univers|qalaktika|galaxy/.test(q) || norm(u.name) === q || u.id === q)) { location.hash = '#kainat/@' + u.id; return ok(u.name); }
-      if (!pl) throw new Error('Belə yer tapılmadı: ' + a.target);
-      go(pl.name); return ok(pl.label || pl.name);
+      if (!pl) { const s = similar(planetNames(), a.target, p => [p.name, p.label], p => p.name); throw new Error('Belə yer tapılmadı: ' + a.target + (s.length ? '. Oxşarlar: ' + s.join(', ') : '')); }
+      remember('project', pl.name); go(pl.name); return ok(pl.label || pl.name);
     },
     async create_task(a) {
       need(a, 'title', 'project'); confirmed(a);
@@ -236,6 +279,7 @@
       const due = parseWhen(a.due); if (Number.isNaN(due)) throw new Error('Tarix başa düşülmədi: ' + a.due);
       const project = projectOf(a.project);
       const d = await R(TSK('create', { title: a.title, details: a.details || '', project, assignee, due_at: due || 0 }));
+      remember('task', +d.id);
       await load(); return ok(`Tapşırıq yaradıldı: “${a.title}” → ${assignee}, ${project}` + (due ? ', son tarix ' + when(due) : '') + (d.auto ? ' · 🤖 agentinə avtomatik göndərildi' : ''),
         { auto_sent_to_agent: !!d.auto });
     },
@@ -287,12 +331,13 @@
       need(a, 'prompt'); confirmed(a);
       let project = null;
       if (a.project) project = projectOf(a.project);
-      else if (curPlanet && !xKind(curPlanet)) project = curPlanet;                       // baxdığı planet
+      else if (viewedPlanet()) project = viewedPlanet();                                 // baxdığı planet
+      else if (ctx.project) project = ctx.project;                                       // söhbətdə son danışılan proyekt
       else { const ps = buildProjects(); if (ps.length === 1) project = ps[0].name; }
       if (!project) throw new Error('Hansı proyektdə? Proyekt adını soruş.');
       const { status, d } = await api('agent_send', { project, prompt: a.prompt });
       if (status !== 200) throw new Error(d.error || 'Göndərilmədi');
-      watchCmd(+d.id, { project, prompt: a.prompt, st: 'queued' });
+      watchCmd(+d.id, { project, prompt: a.prompt, st: 'queued' }); remember('cmd', +d.id); remember('project', project);
       await load();
       line('a', `🤖 Claude Code-a göndərildi (#${d.id}, ${project})` + (d.agent_online ? '' : ' · agent oflayndır, növbədə gözləyir'));
       return { ok: true, task_id: d.id, project, agent_online: !!d.agent_online, claude_login: d.claude_login,
@@ -303,8 +348,186 @@
       if (a && a.project) { const n = projectOf(a.project); cs = cs.filter(c => c.project === n); }
       return { tasks: cs.slice(0, 8).map(c => ({ id: +c.id, project: c.project, status: c.status, prompt: c.prompt.slice(0, 200), result: (c.result || '').slice(-600), created: ago(c.created_at) })) };
     },
+    get_suggestions() { return { now: when(now()), suggestions: suggestions().slice(0, 8).map(s => ({ priority: s.p, about: s.kind, text: s.text })) }; },
+    get_screen() { return screen(); },
+    get_user(a) {
+      need(a, 'name');
+      const u = userName(a.name); if (!u) throw new Error('Belə istifadəçi yoxdur: ' + a.name + '. Komanda: ' + (data.users || []).join(', '));
+      const ss = (data.sessions || []).map(s => ({ ...s, st: eff(s) })).filter(s => s.user === u && RANK[s.st] > 0).sort((x, y) => RANK[y.st] - RANK[x.st]);
+      const ag = agentInfo(u), sh = shipOf(u);
+      return {
+        name: u, status: ss.length ? ss[0].st : isOnline(u) ? 'on dashboard' : 'offline', current_project: userPlanet(u),
+        sessions: ss.map(s => ({ project: s.project, status: s.st, prompt: s.last_prompt, last: s.last_summary, updated: ago(s.updated_at) })),
+        open_tasks: (data.tasks || []).filter(t => t.assignee === u && t.status !== 'done').map(t => ({ id: +t.id, title: t.title, project: t.project, status: t.status, due: dueText(t) })),
+        recent_events: (data.events || []).filter(e => e.user === u).slice(0, 6).map(e => e.project + ': ' + e.summary + ' (' + ago(e.created_at) + ')'),
+        agent: { online: ag.online, running: ag.run.length, queued: ag.queued.length, projects: ag.projects },
+        ship_deadline: +sh.deadline ? { due: when(sh.deadline), mission: sh.mission, overdue: sh.deadline < now() } : null,
+      };
+    },
+    get_activity(a) {
+      let ev = data.events || [];
+      if (a.user) { const u = userName(a.user); ev = ev.filter(e => e.user === u); }
+      if (a.project) { const n = projectOf(a.project); ev = ev.filter(e => e.project === n); }
+      const n = Math.max(1, Math.min(30, +a.limit || 12));
+      return { count: ev.length, events: ev.slice(0, n).map(e => ({ user: e.user, project: e.project, what: e.summary, when: ago(e.created_at) })),
+        note: (typeof curPlanet === 'string' && curPlanet) ? 'Feed may be narrowed to the planet being viewed.' : undefined };
+    },
+    get_messages(a) {
+      const rd = getRead(), list = (data.messages || []).filter(inMine);
+      const out = list.filter(m => !a.unread_only || (toMe(m) && +m.id > rd)).slice(0, 12)
+        .map(m => ({ from: m.from_user, to: m.to_user === '*' ? 'all' : m.to_user, text: m.body, when: ago(m.created_at), unread: toMe(m) && +m.id > rd }));
+      if (list.length) { setRead(Math.max(rd, ...list.map(m => +m.id))); updateMsgBadge(); }   // istifadəçi səsli eşitdi: oxunmuş say
+      const last = out.find(m => m.from !== ME.name); if (last) remember('user', last.from);
+      return { count: out.length, messages: out, note: 'Last 24 hours only.' };
+    },
+    get_plans(a) {
+      let ps = data.plans || [];
+      if (a.project) { const n = projectOf(a.project); ps = ps.filter(p => p.project === n); }
+      if (a.status !== 'any') ps = ps.filter(p => p.status !== 'done');
+      return { count: ps.length, plans: ps.slice(0, 25).map(p => ({ id: +p.id, project: p.project, kind: p.kind, title: p.title, status: p.status, by: p.creator })) };
+    },
+    async create_plan(a) {
+      need(a, 'project', 'title'); confirmed(a);
+      const kind = a.kind === 'scope' ? 'scope' : 'plan', project = projectOf(a.project);
+      await R(PLN('create', { kind, project, title: String(a.title).slice(0, 200), details: String(a.details || '').slice(0, 3000) })); await load();
+      return ok(`${kind === 'scope' ? 'Scope' : 'Plan'} əlavə olundu: “${a.title}” (${project})`);
+    },
+    async set_plan_status(a) {
+      need(a, 'plan', 'status'); confirmed(a);
+      const p = best(data.plans || [], a.plan, x => x.title);
+      if (!p) { const s = similar(data.plans || [], a.plan, x => x.title, x => '“' + x.title + '”'); throw new Error('Plan tapılmadı: ' + a.plan + (s.length ? '. Oxşarlar: ' + s.join(', ') : '')); }
+      await R(PLN('status', { id: p.id, status: a.status === 'done' ? 'done' : 'open' })); await load();
+      return ok(`“${p.title}” → ${a.status === 'done' ? 'bitdi' : 'açıq'}`);
+    },
+    async update_task(a) {
+      need(a, 'task'); confirmed(a);
+      const t = await findTask(a.task), body = { id: t.id };
+      if (a.title) body.title = String(a.title).slice(0, 200);
+      if (a.details !== undefined && a.details !== null) body.details = String(a.details).slice(0, 3000);
+      if (a.assignee) { const u = userName(a.assignee); if (!u) throw new Error('Belə istifadəçi yoxdur: ' + a.assignee); if (ME.role !== 'admin' && u !== t.assignee) throw new Error('Only an admin can reassign tasks.'); body.assignee = u; }
+      if (Object.keys(body).length === 1) throw new Error('Nothing to change: give title, details or assignee.');
+      const d = await R(TSK('update', body)); await load();
+      return ok(`“${body.title || t.title}” yeniləndi` + (body.assignee && body.assignee !== t.assignee ? ' → ' + body.assignee : '') + (d.auto ? ' · 🤖 agentinə göndərildi' : ''));
+    },
+    async stop_claude_task(a) {
+      confirmed(a);
+      const mine = (data.commands || []).filter(c => (c.user === ME.name || c.creator === ME.name) && ['pending', 'queued', 'running'].includes(c.status));
+      const c = a.id ? (data.commands || []).find(x => +x.id === +String(a.id).replace('#', '')) : mine.find(x => +x.id === +ctx.cmd) || mine.find(x => x.status === 'running') || mine[0];
+      if (!c) throw new Error('No running or queued Claude Code task to stop.');
+      await R(CTL('stop_command', { id: +c.id })); J.watch.delete(+c.id); await load();
+      return ok(`Claude Code #${c.id} (${c.project}) dayandırıldı`);
+    },
+    async set_agent_auto(a) {
+      confirmed(a);
+      const d = await R(CTL('agent_auto', { on: !!a.on })); await load();
+      return ok(d.on ? 'Agent lövhə tapşırıqlarını avtomatik götürəcək' : 'Agentin avtomatik tapşırıq götürməsi söndürüldü');
+    },
+    async post_meeting_note(a) {
+      need(a, 'text'); confirmed(a);
+      const t = now(), ms = (data.meetings || []).filter(m => +m.starts_at + m.minutes * 60 > t - 3600);
+      const m = a.meeting ? best(ms, a.meeting, x => x.title) : ms.find(x => +x.starts_at <= t) || ms[0];
+      if (!m) throw new Error('Görüş tapılmadı' + (a.meeting ? ': ' + a.meeting : ''));
+      await R(WLD('meeting_post', { meeting_id: m.id, body: String(a.text).slice(0, 2000) })); await load();
+      return ok(`Görüşə yazıldı: “${m.title}”`);
+    },
+    ui(a) {
+      need(a, 'action');
+      if (!UI[a.action]) throw new Error('naməlum UI əməliyyatı: ' + a.action + '. Mümkün: ' + Object.keys(UI).join(', '));
+      return UI[a.action](a.target);
+    },
+    set_proactive(a) { PRO.on = !!a.on; store.set('jv-pro', PRO.on ? '1' : '0'); proBox.checked = PRO.on; return ok(PRO.on ? 'Proaktiv bildirişlər açıqdır' : 'Proaktiv bildirişlər söndürüldü'); },
     end_conversation() { J.ending = true; return { ok: true }; },
   };
+
+  /* ---------- UI idarəsi: mövcud düymələri basır, ona görə panelin öz məntiqi (icazələr, modallar) eynidir ---------- */
+  const click = id => { const b = $(id); if (!b || b.hidden || b.disabled) return false; b.click(); return true; };
+  const toSpace = () => { if (view !== 'space') location.hash = '#kainat'; };
+  const UI = {
+    open_messages(to) { const u = to ? (/^(all|hami|hamiya)$/.test(norm(to)) ? '*' : userName(to)) : undefined; openMsg(u); return ok('Mesaj pəncərəsi'); },
+    open_inbox() { openMsg(); showMsgTab('inbox'); return ok('Gələn mesajlar'); },
+    open_report() { click('b-rep'); return ok('Hesabat'); },
+    open_new_task(prj) { if (view !== 'board') location.hash = '#lovhe'; openTaskModal(prj ? projectOf(prj) : undefined); return ok('Yeni tapşırıq pəncərəsi'); },
+    open_ship(u) { openShip(u ? userName(u) : undefined); return ok('Gəmi'); },
+    open_new_planet() { toSpace(); click('t-world'); return ok('Yeni planet pəncərəsi'); },
+    open_mcp() { toSpace(); click('t-mcp'); return ok('MCP peykləri'); },
+    open_plan() { go(SHIPKEY); return ok('Plan stansiyası'); },
+    close_dialogs() { document.querySelectorAll('.modal:not([hidden])').forEach(m => closeM(m.id)); return ok('Pəncərələr bağlandı'); },
+    zoom_in() { toSpace(); click('zin'); return ok('Yaxınlaşdırıldı'); },
+    zoom_out() { toSpace(); click('zout'); return ok('Uzaqlaşdırıldı'); },
+    next_planet() { if (!click('pnext')) throw new Error('Open a project planet first.'); return ok('Növbəti planet'); },
+    prev_planet() { if (!click('pprev')) throw new Error('Open a project planet first.'); return ok('Əvvəlki planet'); },
+    sound_on() { const b = $('sbtn'); if (b && b.textContent.includes('🔇')) b.click(); return ok('Kainat səsi açıq'); },
+    sound_off() { const b = $('sbtn'); if (b && b.textContent.includes('🔊')) b.click(); return ok('Kainat səsi söndürüldü'); },
+    filter_feed(u) {
+      const f = !u || /^(all|hami|hamisi|butun)$/.test(norm(u)) ? 'all' : userName(u);
+      if (!f) throw new Error('Belə istifadəçi yoxdur: ' + u);
+      filter = f; if (view !== 'panel') location.hash = '#'; render(); return ok(f === 'all' ? 'Axın: hamı' : 'Axın: ' + f);
+    },
+    mute_mic() { if (!J.muted) toggleMute(); return ok('Mikrofon bağlandı (açmaq üçün düyməni bas)'); },
+  };
+  function screen() {
+    const open = [...document.querySelectorAll('.modal:not([hidden])')].map(m => m.id);
+    return { view, planet: viewedPlanet() || (typeof curPlanet === 'string' ? curPlanet : null), plan_station: !!curShip, universe: navUni || null,
+      feed_filter: filter, open_dialogs: open, last_mentioned: { task: ctx.task ? ((data.tasks || []).find(t => +t.id === +ctx.task) || {}).title : null, project: ctx.project, user: ctx.user } };
+  }
+
+  /* ---------- Proaktivlik: komanda vəziyyətindən təkliflər (alət, brifinq və canlı bildirişlər üçün eyni mənbə) ---------- */
+  const attOf = m => Array.isArray(m.attendees) ? m.attendees : String(m.attendees || '').split(',').map(s => s.trim()).filter(Boolean);
+  function suggestions() {
+    if (!data || !ME) return [];
+    const t = now(), me = ME.name, out = [], add = (p, kind, text, key) => out.push({ p, kind, text, key: key || kind + ':' + text });
+    const unread = (data.messages || []).filter(m => toMe(m) && +m.id > getRead());
+    if (unread.length) add(1, 'messages', `${unread.length} unread message(s) from ${[...new Set(unread.map(m => m.from_user))].join(', ')}`, 'msg:' + Math.max(...unread.map(m => +m.id)));
+    for (const m of data.meetings || []) {
+      const st = +m.starts_at, end = st + m.minutes * 60, att = attOf(m);
+      if (att.length && !att.includes(me)) continue;
+      if (st <= t && t < end) add(1, 'meeting', `Meeting "${m.title}" is live now (until ${when(end).slice(11)})`, 'mt:' + m.id + ':live');
+      else if (st > t && st - t <= 3600) add(2, 'meeting', `Meeting "${m.title}" starts in ${Math.round((st - t) / 60)} min`, 'mt:' + m.id + ':soon');
+    }
+    for (const a of data.alerts || []) if ((a.user_a === me || a.user_b === me) && t - a.created_at < 7200) add(1, 'conflict', `Collision risk: ${a.user_a} and ${a.user_b} are editing the same file ${a.file} in ${a.project}`, 'al:' + a.id);
+    for (const x of data.tasks || []) {
+      if (x.status === 'done') continue;
+      const d = dueInfo(x);
+      if (x.assignee === me && d && d.left < 0) add(1, 'overdue', `Your task "${x.title}" (${x.project}) is overdue`, 'od:' + x.id);
+      else if (x.assignee === me && d && d.left < DAY) add(2, 'due_soon', `Your task "${x.title}" is due ${d.text}`, 'ds:' + x.id);
+      if (x.status === 'review' && x.creator === me && x.assignee !== me) add(2, 'review', `"${x.title}" by ${x.assignee} is waiting for review` + (x.verdict ? ` (agent verdict: ${x.verdict})` : ''), 'rv:' + x.id + ':' + x.verdict);
+      if (x.assignee === me && x.creator !== me && t - x.created_at < 3 * 3600 && x.status === 'todo') add(2, 'new_task', `${x.creator} assigned you "${x.title}" (${x.project})`, 'nt:' + x.id);
+    }
+    for (const c of data.commands || []) if (c.user === me && (c.status === 'failed' || c.status === 'error') && t - (+c.finished_at || 0) < 7200) add(2, 'claude_failed', `Claude Code task #${c.id} in ${c.project} failed`, 'cf:' + c.id);
+    const ag = agentInfo(me);
+    if (!ag.online && ag.queued.length) add(2, 'agent', `Your Claude Code agent is offline with ${ag.queued.length} task(s) queued`, 'ag:off');
+    const fails = new Map(); for (const x of data.tests || []) if (x.status === 'fail') fails.set(x.project, (fails.get(x.project) || 0) + 1);
+    for (const [p, n] of fails) add(3, 'tests', `${n} failing test(s) in ${p}`, 'tf:' + p + ':' + n);
+    for (const p of buildProjects()) if (idleOf(p.name) >= DAY && (data.tasks || []).some(x => x.project === p.name && x.status !== 'done')) add(3, 'burning', `Planet ${p.name} is burning: open tasks, nothing finished for ${Math.floor(idleOf(p.name) / 3600)}h`, 'bn:' + p.name);
+    const sh = shipOf(me); if (+sh.deadline && sh.deadline > t && sh.deadline - t < DAY) add(2, 'ship', `Your ship deadline "${sh.mission || ''}" is ${when(sh.deadline)}`, 'sh:' + sh.deadline);
+    return out.sort((a, b) => a.p - b.p);
+  }
+  // Canlı izləmə: yalnız sessiya zamanı; yeni vacib hadisə olanda (mesaj, görüş, toqquşma, yeni tapşırıq) Jarvis qısaca xəbər verir
+  const PRO = { on: true, seen: new Set(), timer: null, lastNote: 0 };      // on: localStorage-dan aşağıda (store) oxunur
+  const LIVE = new Set(['messages', 'meeting', 'conflict', 'new_task', 'claude_failed', 'review']);
+  function proStart() {
+    PRO.seen = new Set(suggestions().map(s => s.key));                      // sessiya başlayanda olanlar brifinqə düşür, təkrar bildirilmir
+    clearInterval(PRO.timer); PRO.timer = setInterval(proTick, 5000);
+  }
+  function proTick() {
+    if (!J.ready || !PRO.on) return;
+    if (J.state !== 'listening' && J.state !== 'muted') return;               // danışanda / alət icra edəndə gözlə
+    if (J.cur.user || playing() || Date.now() - PRO.lastNote < 45000) return; // istifadəçi danışırsa və ya çox tez-tezdirsə
+    const fresh = suggestions().filter(s => LIVE.has(s.kind) && !PRO.seen.has(s.key));
+    if (!fresh.length) return;
+    fresh.forEach(s => PRO.seen.add(s.key)); PRO.lastNote = Date.now();
+    J.conn.note('[System note, not spoken by the user: live dashboard update] ' + fresh.slice(0, 3).map(s => '- ' + s.text).join('\n') +
+      '\nMention this to the user in one short natural sentence (no greeting), and offer the obvious next step if there is one. If it is a message, offer to read it.');
+  }
+  function briefing() {
+    if (!PRO.on) return;
+    PRO.lastNote = Date.now();
+    const top = suggestions().filter(s => s.p <= 2).slice(0, 4);
+    const sc = screen();
+    J.conn.note('[System note, not spoken by the user: session started] The user is on the ' + sc.view + ' view' + (sc.planet ? ', looking at planet "' + sc.planet + '"' : '') + '.\n' +
+      (top.length ? 'Things worth knowing:\n' + top.map(s => '- ' + s.text).join('\n') + '\nGreet the user in one short sentence and mention only the one or two most important items, then ask how you can help.'
+        : 'Nothing urgent. Greet the user with one very short sentence and wait.'));
+  }
 
   async function runTools(calls) {
     setState('tool');
@@ -464,7 +687,7 @@
   })();
 
   /* ---------- Adapterlər ----------
-     Hər adapter: inRate/chunkMs (mikrofon), connect(sess, h) → { audio(b64), toolResults(out), note(text), mute(on), close() }.
+     Hər adapter: inRate/chunkMs (mikrofon), connect(sess, h) → { audio(b64), toolResults(out), note(text), text(typed), mute(on), close() }.
      h (nüvədən): ready(), audio(b64, rate), user(text, replace), bot(text), interrupted(), turnDone(), tools([{id,name,args}]), info(msg), closed(code, reason) */
   const ADAPTERS = {
     gemini: {
@@ -492,6 +715,7 @@
           audio: data => send({ realtimeInput: { audio: { data, mimeType: 'audio/pcm;rate=16000' } } }),
           toolResults: out => send({ toolResponse: { functionResponses: out } }),
           note: text => send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }),
+          text: text => { stopPlayback(); send({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } }); },
           mute: on => { if (on) send({ realtimeInput: { audioStreamEnd: true } }); },
           close: () => { if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
         };
@@ -503,11 +727,17 @@
       connect(d, h) {
         const ws = new WebSocket(d.ws + '?fal_jwt_token=' + encodeURIComponent(d.token)); ws.binaryType = 'arraybuffer';
         const send = o => { if (ws.readyState === 1) ws.send(MP.encode(o)); };
-        let pending = [], inResp = false, waitCreate = false, userTxt = '', isReady = false, createT = null;
+        let pending = [], inResp = false, waitCreate = false, createAfter = false, userTxt = '', isReady = false, createT = null;
         // Cavab yaratmağı yalnız səs bitəndə istə (üst-üstə danışmasın). Bir gözləyən taymer olur: alət nəticəsi + qeyd eyni anda gəlsə iki response.create getməsin.
         const create = () => {
+          createAfter = false;
           if (playing()) { waitCreate = true; if (!createT) createT = setTimeout(() => { createT = null; create(); }, 250); return; }
           waitCreate = false; send({ type: 'response.create' });
+        };
+        // Cavab gedərkən gələn qeyd/yazı: əvvəl itirdi (response.create göndərilmirdi); indi cavab bitəndə cavablanır
+        const userItem = text => {
+          send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
+          if (inResp) createAfter = true; else if (!waitCreate) create();
         };
         ws.onopen = () => send({ type: 'session.update', session: d.session });
         ws.onmessage = ev => {
@@ -536,8 +766,8 @@
               inResp = false; userTxt = '';
               const st = m.response && m.response.status;
               if (st === 'failed') h.info('Grok cavabı alınmadı: ' + JSON.stringify((m.response.status_details || {}).error || m.response.status_details || '').slice(0, 200));
-              if (pending.length) { const calls = pending; pending = []; h.tools(calls); }   // alətləri cavab bitəndə icra et (hamısını bir dəfəyə)
-              else h.turnDone();
+              if (pending.length) { const calls = pending; pending = []; h.tools(calls); }   // alətləri cavab bitəndə icra et (hamısını bir dəfəyə; nəticələr özü create edir)
+              else { h.turnDone(); if (createAfter) create(); }
               break;
             }
           }
@@ -549,10 +779,8 @@
             for (const o of out) send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: o.id, output: JSON.stringify(o.response) } });
             create();
           },
-          note: text => {
-            send({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } });
-            if (!inResp && !waitCreate) create();
-          },
+          note: userItem,
+          text: userItem,                     // cavab gedirsə, o bitəndən sonra cavablanır (response.cancel alət çağırışlarını itirə bilər)
           mute: () => {},
           close: () => { clearTimeout(createT); createT = null; if (ws.readyState <= 1) try { ws.close(1000); } catch (e) {} },
         };
@@ -572,6 +800,14 @@
     prov.hidden = list.length < 2;
   }
   prov.onchange = () => store.set('jv-provider', prov.value);
+  PRO.on = proBox.checked = store.get('jv-pro') !== '0';
+  proBox.onchange = () => { PRO.on = proBox.checked; store.set('jv-pro', PRO.on ? '1' : '0'); };
+  $j('jv-in').onsubmit = e => {
+    e.preventDefault();
+    const t = txtEl.value.trim(); if (!t || !J.ready || !J.conn) return;
+    txtEl.value = ''; endTurn(); line('u', t); endTurn();
+    J.conn.text(t);
+  };
   async function start() {
     if (J.state !== 'off' && J.state !== 'error') return;
     if (!window.isSecureContext || !navigator.mediaDevices) { setState('error'); line('e', 'Mikrofon yalnız HTTPS və ya localhost-da işləyir.'); return; }
@@ -594,6 +830,8 @@
         J.ready = true; J.t0 = J.lastUsage = Date.now(); setState(J.muted ? 'muted' : 'listening');
         line('i', 'Qoşuldu · ' + d.model);
         J.usageTimer = setInterval(reportUsage, 30000);
+        txtEl.disabled = false;
+        try { proStart(); briefing(); } catch (e) { /* məlumat hələ yoxdursa brifinqsiz davam */ }
       },
       audio: (data, rate) => play(data, rate),
       user(text, replace) {
@@ -622,6 +860,8 @@
   }
   function cleanup() {
     clearInterval(J.usageTimer); J.usageTimer = null;
+    clearInterval(PRO.timer); PRO.timer = null; txtEl.disabled = true;
+    ctx.task = ctx.project = ctx.user = ctx.cmd = null;              // yeni söhbət: “bu/o” köhnə sessiyaya getməsin
     // son istifadə hissəsi: səhifə bağlananda da çatsın (keepalive)
     if (J.ready && J.lastUsage) { const s = Math.round((Date.now() - J.lastUsage) / 1000); if (s > 0) api('usage', { seconds: s }, { keepalive: true }).catch(() => {}); }
     J.ready = false; J.lastUsage = 0; prov.disabled = false;
@@ -648,5 +888,5 @@
     if (e.altKey && (e.code === 'KeyJ')) { e.preventDefault(); if (box.hidden) { showBox(true); start(); } else if (J.state === 'off' || J.state === 'error') start(); else stop('Sessiya bitdi'); }
   });
   addEventListener('beforeunload', () => cleanup());
-  window.Jarvis = { start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)), tools: TOOLS, state: () => J.state, adapters: ADAPTERS, msgpack: MP };
+  window.Jarvis = { start, stop, say: t => J.ready && J.conn && J.conn.note(String(t)), tools: TOOLS, ui: UI, suggestions, state: () => J.state, adapters: ADAPTERS, msgpack: MP };
 })();
