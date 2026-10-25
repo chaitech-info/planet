@@ -1049,6 +1049,9 @@ html { -webkit-text-size-adjust: 100%; }
         <div id="x-mcpu" hidden><div id="xm-info"></div></div>
         <div id="x-agentu" hidden><div id="xa-info"></div></div>
         <div id="x-deskt" hidden><div id="xd-info"></div></div>
+        <div id="x-mprompts" hidden><div id="mp-info"></div></div>
+        <div id="x-mfal" hidden><div id="mf-info"></div></div>
+        <div id="x-medit" hidden><div id="me-info"></div></div>
         <div id="x-meeting" hidden>
           <div class="cmdbar" style="margin-top:10px"><span class="cmdwho">Neytral ərazi: heç kimin proyekti deyil. Görüş vaxtı iştirakçıların gəmiləri bura uçur.</span><button class="gbtn go" id="mt-add">+ Görüş təyin et</button></div>
           <div class="lbl">🔴 İndi gedir</div><div id="mt-live"></div><div class="empty" id="mt-live-e">Hazırda görüş yoxdur.</div>
@@ -1529,7 +1532,8 @@ function renderSpace() {
     mcp: [lists.mcp.length + ' MCP server', lists.mcp.filter(p => p.st === 'working').length + ' indi işləyir'],
     agent: [lists.agent.length + ' agent', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'],
     desktop: [lists.desktop.length + ' kompüter', (data.users || []).filter(u => agentInfo(u).online).length + ' onlayn'],
-    student: [lists.student.length + ' student planeti', (data.students || []).filter(u => (data.presence || []).some(x => x.user === u && now() - x.last_seen < 60)).length + ' saytda'] };
+    student: [lists.student.length + ' student planeti', (data.students || []).filter(u => (data.presence || []).some(x => x.user === u && now() - x.last_seen < 60)).length + ' saytda'],
+    media: ['3 planet', 'prompt · fal.ai · redaktə'] };
   const hud = navUni ? [UNIVERSES.find(u => u.id === navUni).icon + ' ' + UNIVERSES.find(u => u.id === navUni).name + ' · ' + sums[navUni][0], sums[navUni][1]] : ['🗺 Kosmik xəritə', unis.length + ' univers'];
   setText($('hudA'), hud[0]); setText($('hudB'), hud[1]);
   $('sempty').hidden = everything.length > 0;
@@ -2721,7 +2725,15 @@ const UNIVERSES = [
   { id: 'agent', icon: '🤖', name: 'Agent Universe', hint: 'AI agentləri, tapşırıqları və avtomatlaşdırma' },
   { id: 'desktop', icon: '🖥', name: 'Desktop Universe', hint: 'Komanda yoldaşlarının kompüterlərindəki Claude Code: icazə verənə uzaqdan komanda göndər' },
   { id: 'student', icon: '🎓', name: 'Student Universe', hint: 'Hər studentin öz planeti' },
+  { id: 'media', icon: '🎬', name: 'MEDIA', hint: 'Prompt kitabxanası, fal.ai ilə foto/video generasiyası və Claude ilə media redaktəsi' },
 ];
+/** MEDIA universinin planetləri (panelləri media.js-dədir). Ad "media:" prefiksi ilə: istifadəçi dünyaları ilə toqquşmur */
+const MEDIA_PLANETS = [
+  { name: 'Prompt Library', kind: 'mprompts', icon: '📚', hue: 32, sub: 'Promptlarını gör, redaktə et, əlavə et, sil' },
+  { name: 'Fal Connection', kind: 'mfal', icon: '🔌', hue: 8, sub: 'fal.ai açarı, model seçimi, foto/video generasiyası' },
+  { name: 'Edit Media', kind: 'medit', icon: '✂️', hue: 340, sub: 'Foto/videonu promptla redaktə et: fal AI və ya Claude + HyperFrames' },
+];
+const mediaPlanet = n => n && n.startsWith('media:') ? MEDIA_PLANETS.find(p => p.name === n.slice(6)) || null : null;
 /** Student yalnız öz universini görür (server də yalnız onun məlumatını verir) */
 const isStu = () => document.body.classList.contains('student');
 const visUnis = () => isStu() ? UNIVERSES.filter(u => u.id === 'student') : UNIVERSES;
@@ -2729,13 +2741,14 @@ const stuWorld = n => (data && data.worlds || []).find(w => w.name === n && (dat
 let navUni = null, navTarget;             // navUni: kameranın hazırda olduğu univers (3D-dən gəlir), null = xəritə
 /** Universə (null = bütün xəritəyə) uç; 3D hələ hazır deyilsə, hazır olanda */
 function flyTo(id) { if (isStu()) id = 'student'; if (K && glOn) K.flyUni(id); else navTarget = id; }
-const uniOf = n => !n ? navUni || (isStu() ? 'student' : 'main') : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : n.startsWith('desktop:') ? 'desktop' : specialOf(n) ? 'studio' : stuWorld(n) ? 'student' : 'main';
+const uniOf = n => !n ? navUni || (isStu() ? 'student' : 'main') : n.startsWith('mcp:') ? 'mcp' : n.startsWith('agent:') ? 'agent' : n.startsWith('desktop:') ? 'desktop' : n.startsWith('media:') ? 'media' : specialOf(n) ? 'studio' : stuWorld(n) ? 'student' : 'main';
 /** Xüsusi panel açılan planetlər: Studio stansiyaları, MCP serverləri, agentlər */
 function xKind(n) {
   if (!n) return null;
   if (n.startsWith('mcp:')) return { kind: 'mcpu', icon: '🛰', name: n.slice(4) };
   if (n.startsWith('agent:')) return { kind: 'agentu', icon: '🤖', name: n.slice(6) };
   if (n.startsWith('desktop:')) return { kind: 'deskt', icon: '🖥', name: n.slice(8) };
+  if (n.startsWith('media:')) { const m = mediaPlanet(n); return m ? { kind: m.kind, icon: m.icon, name: m.name } : null; }
   return specialOf(n);
 }
 function uniList(full, u) {
@@ -2743,6 +2756,8 @@ function uniList(full, u) {
   if (u === 'mcp') return mcpList();
   if (u === 'agent') return agentList();
   if (u === 'desktop') return desktopList();
+  if (u === 'media') return MEDIA_PLANETS.map(m => ({ name: 'media:' + m.name, label: m.icon + ' ' + m.name, kind: m.kind, hue: m.hue, R: 3.4,
+    st: typeof mediaState === 'function' ? mediaState(m.kind) : 'idle', sub: m.sub, users: new Map(), edits: 0, tools: 0, burn: 0, sats: [] }));
   if (u === 'student') return full.filter(p => p.kind === 'custom' && stuWorld(p.name));
   return full.filter(p => !specialOf(p.name) && !stuWorld(p.name));
 }
@@ -3529,7 +3544,8 @@ function mcpReset() { mcpEdit = 0; $('mcp-name').value = ''; $('mcp-descr').valu
 function renderX(name) {
   const sp = xKind(name);
   setText($('xtitle'), sp.icon + ' ' + sp.name);
-  for (const k of ['prompt', 'designer', 'meeting', 'test', 'mcpu', 'agentu', 'deskt']) $('x-' + k).hidden = k !== sp.kind;
+  for (const k of ['prompt', 'designer', 'meeting', 'test', 'mcpu', 'agentu', 'deskt', 'mprompts', 'mfal', 'medit']) $('x-' + k).hidden = k !== sp.kind;
+  if (sp.kind === 'mprompts' || sp.kind === 'mfal' || sp.kind === 'medit') { setText($('xmeta'), '🎬 MEDIA · ' + mediaPlanet('media:' + sp.name).sub); return renderMediaPlanet(sp.kind); }
   if (sp.kind === 'deskt') { setText($('xmeta'), ME && ME.name === sp.name ? 'Sənin kompüterin · kimə uzaqdan komanda icazəsi verdiyin' : sp.name + '-in kompüteri · Claude Code-una uzaqdan komanda'); return renderDesktopPlanet(sp.name); }
   if (sp.kind === 'mcpu') { setText($('xmeta'), 'MCP Universe · server, onu işlədən proyektlər və son çağırışlar'); return renderMcpPlanet(sp.name); }
   if (sp.kind === 'agentu') { setText($('xmeta'), 'Agent Universe · ' + sp.name + ' istifadəçisinin AI agenti'); return renderAgentPlanet(sp.name); }
@@ -3893,6 +3909,7 @@ if (window.Kainat) initGL();
 <script src="realtime.js?v=<?= (int)@filemtime(__DIR__ . '/realtime.js') ?>"></script>
 <script src="jarvis.js?v=<?= (int)@filemtime(__DIR__ . '/jarvis.js') ?>"></script>
 <script src="radio.js?v=<?= (int)@filemtime(__DIR__ . '/radio.js') ?>"></script>
+<script src="media.js?v=<?= (int)@filemtime(__DIR__ . '/media.js') ?>"></script>
 <?php foreach (glob(__DIR__ . '/jarvis-*.js') ?: [] as $jf): /* Jarvis modulları: HUD, UI idarəsi, missiyalar, donanma */ ?>
 <script src="<?= basename($jf) ?>?v=<?= (int)filemtime($jf) ?>"></script>
 <?php endforeach; ?>
