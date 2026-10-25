@@ -163,6 +163,7 @@ function mxModelPicker(getCat, onPick) {
   sel.onchange = () => { MX.sel[getCat()] = sel.value; try { localStorage.setItem(MXSEL_LS, JSON.stringify(MX.sel)); } catch (e) {} showInfo(); onPick(list.find(m => m.id === sel.value) || null); };
   q.oninput = () => { clearTimeout(tm); tm = setTimeout(load, 450); };
   wrap._load = load;
+  wrap._search = term => { q.value = term; clearTimeout(tm); load(); };   // hazır axtarış çipləri üçün
   return wrap;
 }
 
@@ -447,152 +448,402 @@ function mxFal() {
   sync(r.gal, gens, g => g.id, mxGenCard, (n, g) => n._upd(g));
 }
 
-/* ---------- ✂️ Edit Media ---------- */
+/* ---------- ✂️ Edit Media: tam ekran redaktor ----------
+   Solda media kitabxanası (generasiyalar + yükləmələr, sürüşdür-burax), ortada böyük səhnə (əvvəl/sonra),
+   sağda idarə: 🤖 AI redaktə (fal: şəkil → şəkil, şəkil → video, video → video) və ya 🎬 Montaj (Claude + HyperFrames),
+   aşağıda redaktə tarixçəsi. Planet açıq olduqca tam ekran görünür; ✕ / Esc kainata qaytarır. */
 const ME_PROJECT = 'media-studio';
-let meBox = null;
+const MXE_OPS = {
+  'image-to-image': { icon: '🖌', name: 'Şəkli redaktə et', src: 'image', hint: 'Mətnlə dəyiş: fon, rəng, obyekt, stil. Upscale və fon silmə də buradadır.',
+    presets: [['Hamısı', ''], ['Redaktə', 'edit'], ['Upscale', 'upscale'], ['Fon sil', 'background'], ['Stil', 'style'], ['Üz/portret', 'face']] },
+  'image-to-video': { icon: '🎞', name: 'Şəkli videoya çevir', src: 'image', hint: 'Şəkli canlandır: kamera hərəkəti, animasiya, səhnə. Promptda hərəkəti təsvir et.',
+    presets: [['Hamısı', ''], ['Kling', 'kling'], ['Veo', 'veo'], ['Seedance', 'seedance'], ['Hailuo', 'minimax'], ['Wan', 'wan'], ['LTX', 'ltx']] },
+  'video-to-video': { icon: '🎬', name: 'Videonu redaktə et', src: 'video', hint: 'Videonun stilini dəyiş, keyfiyyətini artır, dodaq sinxronu, effektlər.',
+    presets: [['Hamısı', ''], ['Upscale', 'upscale'], ['Stil', 'style'], ['Redaktə', 'edit'], ['Lipsync', 'lipsync'], ['Səs', 'audio'], ['Fon sil', 'background']] },
+};
+const MXE_TPL = [
+  ['📱 Reels 9:16 · 15 san', 'Format: şaquli 9:16 (1080×1920), 15 saniyə, Instagram Reels / TikTok üçün.'],
+  ['🔤 Animasiyalı başlıq', 'Əvvəldə 2 saniyəlik animasiyalı başlıq yazısı (GSAP ilə, iri, oxunaqlı).'],
+  ['💬 Altyazı', 'Aşağıda oxunaqlı altyazılar (ağ mətn, yarımşəffaf fon), cümlə-cümlə görünsün.'],
+  ['🖼 Slayd-şou', 'Şəkilləri ardıcıl slayd-şou kimi göstər: yumşaq keçidlər, yavaş Ken Burns hərəkəti.'],
+  ['✂️ Kəs və birləşdir', 'Videoların ən maraqlı hissələrini kəs, ritmik keçidlərlə birləşdir.'],
+  ['🏷 Logo outro', 'Sonda 2 saniyəlik logo/brend ekranı (qaranlıq fon, mərkəzdə ad).'],
+];
+const MXUP_LS = 'mx:uploads';
+try { MX.uploads = JSON.parse(localStorage.getItem(MXUP_LS) || '[]').filter(u => u && u.url && Date.now() - u.at < 13 * 86400e3); } catch (e) { MX.uploads = []; }
+MX.editOp = MX.editOp || 'image-to-image'; MX.libF = 'all'; MX.cutSel = []; MX.view = 0; MX.cmp = true;
+
+/** Generasiyanın giriş mediası (əvvəl): parametrlərdəki ilk *url* sahəsi */
+function mxGenSource(g) {
+  const p = g.params || {};
+  for (const k of Object.keys(p)) {
+    if (!/url/i.test(k) || /end_image|mask|audio/i.test(k)) continue;
+    const v = Array.isArray(p[k]) ? p[k][0] : p[k];
+    if (typeof v === 'string' && /^https?:\/\//.test(v)) return { url: v, type: /video/i.test(k) || /\.(mp4|webm|mov)(\?|$)|f=[a-f0-9]{32}\.(mp4|webm|mov)/i.test(v) ? 'video' : 'image' };
+  }
+  return null;
+}
+const mxEditGens = () => (MX.gens || []).filter(g => MXE_OPS[g.kind] && mxGenSource(g));
+/** Kitabxana: yükləmələr + hazır generasiyalar (təkrarsız) */
+function mxLib() {
+  const out = [], seen = new Set();
+  const add = it => { if (!seen.has(it.url)) { seen.add(it.url); out.push(it); } };
+  for (const u of MX.uploads) add({ url: u.url, type: u.type, label: '📎 ' + (u.name || 'Yükləmə'), at: Math.floor(u.at / 1000) });
+  for (const g of (MX.gens || []).filter(x => x.status === 'done')) g.media.forEach((m, i) => add({ url: m.url, type: m.type, label: (MX_CATS[g.kind] || g.kind) + ' · ' + (g.prompt || g.model).slice(0, 60) + (g.media.length > 1 ? ' (' + (i + 1) + ')' : ''), at: g.created_at, gen: g.id }));
+  return out.filter(x => x.type === 'image' || x.type === 'video').sort((a, b) => b.at - a.at);
+}
+function mxThumb(m) {
+  if (m.type === 'video') { const v = el('video'); v.src = m.url + (m.url.includes('#') ? '' : '#t=0.1'); v.muted = true; v.preload = 'metadata'; v.playsInline = true; return v; }
+  const i = el('img'); i.src = m.url; i.loading = 'lazy'; i.alt = ''; return i;
+}
+async function mxUploadFiles(files) {
+  for (const f of [...files].slice(0, 6)) {
+    miniToast('📎 Yüklənir: ' + f.name);
+    const { status, d } = await MEDUP(f);
+    if (status !== 200) { miniToast(d.error || 'Yüklənmədi: ' + f.name); continue; }
+    MX.uploads.unshift({ url: d.url, type: d.type, name: f.name.slice(0, 60), at: Date.now() });
+    MX.uploads = MX.uploads.slice(0, 60);
+    try { localStorage.setItem(MXUP_LS, JSON.stringify(MX.uploads)); } catch (e) {}
+    mxePick({ url: d.url, type: d.type });
+  }
+}
+/** Mənbə seç (AI rejimində tək; montajda siyahıya əlavə/çıxar) */
+function mxePick(m) {
+  if (MX.editMode === 'cut') {
+    const i = MX.cutSel.findIndex(x => x.url === m.url);
+    if (i >= 0) MX.cutSel.splice(i, 1); else if (MX.cutSel.length < 12) MX.cutSel.push({ url: m.url, type: m.type });
+  }
+  MX.editSrc = { url: m.url, type: m.type }; MX.view = 0;
+  if (MXE_OPS[MX.editOp].src !== m.type) MX.editOp = m.type === 'video' ? 'video-to-video' : 'image-to-image';
+  mxEdit();
+}
+
+/* Tam ekran redaktorun DOM-u bir dəfə qurulur */
+let mxeRoot = null;
+function mxeBuild() {
+  const css = `
+.mxe { position: fixed; inset: 0; z-index: 55; display: grid; grid-template-rows: auto 1fr auto; background: radial-gradient(1200px 600px at 70% -10%, rgba(255,106,61,.10), transparent 60%), #07080f; color: #ececf1; }
+.mxe[hidden] { display: none; }
+html.mxe-on, html.mxe-on body { overflow: hidden; }
+html.mxe-on .rm { display: none; }
+.mxe-top { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid rgba(255,255,255,.08); background: rgba(10,11,20,.85); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); min-width: 0; }
+.mxe-top .ttl { font-weight: 700; font-size: 16px; white-space: nowrap; } .mxe-top .sub { font-size: 12.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mxe-top .sp { flex: 1; min-width: 8px; }
+.mxe-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); }
+.mxe-tabs button { border: 0; background: none; color: #d6d6e2; font: inherit; font-size: 13.5px; padding: 6px 12px; border-radius: 9px; cursor: pointer; white-space: nowrap; }
+.mxe-tabs button.on { background: linear-gradient(135deg, rgba(255,122,61,.9), rgba(226,59,46,.9)); color: #fff; font-weight: 600; }
+.mxe-key { font-size: 12.5px; border-radius: 999px; padding: 4px 10px; border: 1px solid rgba(255,255,255,.16); white-space: nowrap; color: #d6d6e2; text-decoration: none; }
+.mxe-key[data-ok="1"] { border-color: rgba(74,222,128,.45); color: #bbf7d0; } .mxe-key[data-ok="0"] { border-color: rgba(251,191,36,.55); color: #fde68a; }
+.mxe-x { width: 36px; height: 36px; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #e9e9f3; font-size: 16px; cursor: pointer; flex: none; }
+.mxe-body { display: grid; grid-template-columns: 280px minmax(0, 1fr) 400px; min-height: 0; }
+.mxe-lib, .mxe-ctl { overflow: auto; padding: 14px; min-height: 0; }
+.mxe-lib { border-right: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); }
+.mxe-ctl { border-left: 1px solid rgba(255,255,255,.08); background: rgba(255,255,255,.02); }
+.mxe-ctl input, .mxe-ctl textarea, .mxe-ctl select, .mxe-lib input { width: 100%; box-sizing: border-box; background: rgba(255,255,255,.06); color: #ececf1; border: 1px solid rgba(255,255,255,.14); border-radius: 12px; padding: 9px 11px; font: inherit; font-size: 13.5px; margin-top: 6px; }
+.mxe-ctl select option { color: #111; } .mxe-ctl textarea { resize: vertical; }
+.mxe-ctl label.fl { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 -2px; }
+.mxe-ctl input:focus, .mxe-ctl textarea:focus, .mxe-ctl select:focus, .mxe-lib input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.mxe h4 { margin: 14px 0 6px; font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: rgba(233,233,243,.6); font-weight: 700; } .mxe h4:first-child { margin-top: 0; }
+.mxe-drop { display: grid; place-items: center; text-align: center; gap: 4px; padding: 14px 10px; border-radius: 14px; border: 1.5px dashed rgba(255,255,255,.22); color: rgba(233,233,243,.8); font-size: 13px; cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
+.mxe-drop:hover, .mxe-drop.over { background: rgba(255,122,61,.08); border-color: rgba(255,122,61,.6); }
+.mxe-drop small { color: var(--muted); font-size: 11.5px; }
+.mxe-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.mxe-it { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; border: 2px solid transparent; background: #000; cursor: pointer; padding: 0; }
+.mxe-it img, .mxe-it video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
+.mxe-it.on { border-color: #ff7a3d; box-shadow: 0 0 0 3px rgba(255,122,61,.25); }
+.mxe-it .tg { position: absolute; left: 6px; bottom: 6px; font-size: 11px; background: rgba(0,0,0,.65); color: #fff; border-radius: 6px; padding: 1px 6px; }
+.mxe-it .no { position: absolute; right: 6px; top: 6px; min-width: 20px; height: 20px; border-radius: 10px; background: #ff7a3d; color: #fff; font: 700 11px/20px system-ui; text-align: center; }
+.mxe-stage { position: relative; display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; padding: 14px; gap: 10px; }
+.mxe-view { position: relative; display: grid; gap: 12px; min-height: 0; border-radius: 18px; background: repeating-conic-gradient(rgba(255,255,255,.035) 0 25%, transparent 0 50%) 0 0 / 24px 24px, rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.08); padding: 12px; overflow: hidden; }
+.mxe-view.two { grid-template-columns: 1fr 1fr; }
+.mxe-pane { position: relative; display: grid; place-items: center; min-height: 0; min-width: 0; }
+.mxe-pane img, .mxe-pane video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+.mxe-pane .cap { position: absolute; left: 8px; top: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .06em; background: rgba(0,0,0,.6); border-radius: 8px; padding: 2px 8px; }
+.mxe-pane .wait { display: grid; place-items: center; gap: 10px; color: rgba(233,233,243,.85); font-size: 14px; text-align: center; padding: 20px; }
+.mxe-pane .wait .mx-spin { width: 26px; height: 26px; border-width: 3px; }
+.mxe-pane .err { color: #fecaca; font-size: 13.5px; white-space: pre-wrap; text-align: center; padding: 20px; overflow-wrap: anywhere; }
+.mxe-empty { display: grid; place-items: center; align-content: center; text-align: center; color: rgba(233,233,243,.7); font-size: 14.5px; gap: 6px; padding: 30px; }
+.mxe-empty b { font-size: 18px; color: #fff; }
+.mxe-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); min-width: 0; }
+.mxe-bar .sp { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mxe-bar .gbtn, .mxe-bar a.gbtn { padding: 4px 11px; font-size: 12.5px; text-decoration: none; }
+.mxe-ops { display: grid; gap: 6px; }
+.mxe-op { display: flex; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #ececf1; font: inherit; cursor: pointer; }
+.mxe-op .i { font-size: 20px; } .mxe-op b { display: block; font-size: 14px; } .mxe-op small { color: var(--muted); font-size: 12px; }
+.mxe-op.on { border-color: rgba(255,122,61,.7); background: rgba(255,122,61,.12); }
+.mxe-op:disabled { opacity: .4; cursor: not-allowed; }
+.mxe-go { width: 100%; margin-top: 14px; padding: 12px !important; font-size: 15px !important; border-radius: 14px !important; }
+.mxe-hist { border-top: 1px solid rgba(255,255,255,.08); background: rgba(10,11,20,.85); padding: 8px 14px 10px; min-width: 0; }
+.mxe-hist .row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.mxe-h { flex: none; width: 168px; display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: center; text-align: left; padding: 6px; border-radius: 12px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.04); color: #ececf1; font: inherit; cursor: pointer; scroll-snap-align: start; }
+.mxe-h.on { border-color: rgba(255,122,61,.7); background: rgba(255,122,61,.12); }
+.mxe-h .th { width: 56px; height: 56px; border-radius: 8px; overflow: hidden; background: #000; display: grid; place-items: center; }
+.mxe-h .th img, .mxe-h .th video { width: 100%; height: 100%; object-fit: cover; }
+.mxe-h .th .mx-spin { width: 22px; height: 22px; border-width: 3px; }
+.mxe-h .t { font-size: 12px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; } .mxe-h .t small { color: var(--muted); }
+.mxe-sel { display: grid; gap: 6px; }
+.mxe-sel .r { display: grid; grid-template-columns: 22px 44px 1fr auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.mxe-sel .r .n { font-weight: 700; color: #ff9a6b; text-align: center; } .mxe-sel .r img, .mxe-sel .r video { width: 44px; height: 44px; object-fit: cover; border-radius: 8px; background: #000; }
+.mxe-sel .r span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.mxe-sel .r button { border: 0; background: none; color: #f87171; cursor: pointer; font-size: 15px; }
+@media (max-width: 1100px) { .mxe-body { grid-template-columns: 230px minmax(0, 1fr) 340px; } }
+@media (max-width: 900px) {
+  .mxe { grid-template-rows: auto 1fr; }
+  .mxe-body { display: block; overflow: auto; }
+  .mxe-lib, .mxe-ctl { overflow: visible; border: 0; }
+  .mxe-lib .mxe-grid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 92px; overflow-x: auto; }
+  .mxe-stage { min-height: 52vh; padding: 0 14px; }
+  .mxe-view { min-height: 46vh; } .mxe-view.two { grid-template-columns: 1fr; }
+  .mxe-hist { position: static; }
+  .mxe-top .sub, .mxe-key { display: none; }
+  .mxe-top { flex-wrap: wrap; row-gap: 8px; }
+  .mxe-tabs { order: 5; flex-basis: 100%; } .mxe-tabs button { flex: 1; padding: 7px 9px; font-size: 13px; }
+}`;
+  document.head.append(Object.assign(document.createElement('style'), { textContent: css }));
+  const R = el('div', 'mxe'); R.hidden = true; R.setAttribute('role', 'dialog'); R.setAttribute('aria-label', 'Edit Media redaktoru');
+  /* Başlıq */
+  const top = el('div', 'mxe-top'), back = el('button', 'mxe-x', '←'), tt = el('div'), tabs = el('div', 'mxe-tabs');
+  back.title = back.ariaLabel = 'Kainata qayıt'; back.onclick = () => go();
+  tt.append(el('div', 'ttl', '✂️ Edit Media'), el('div', 'sub', 'Foto və videonu promptla redaktə et'));
+  const tAi = el('button', null, '🤖 AI redaktə'), tCut = el('button', null, '🎬 Montaj'); tAi.type = tCut.type = 'button';
+  tabs.append(tAi, tCut);
+  const key = el('a', 'mxe-key'); key.href = '#kainat/' + encodeURIComponent('media:Fal Connection');
+  const close = el('button', 'mxe-x', '✕'); close.title = close.ariaLabel = 'Bağla (Esc)'; close.onclick = () => go();
+  top.append(back, tt, el('div', 'sp'), tabs, key, close);
+  /* Kitabxana */
+  const lib = el('aside', 'mxe-lib'), drop = el('div', 'mxe-drop'), file = el('input'), url = el('input'), lf = el('div', 'mx-chips'), grid = el('div', 'mxe-grid'), lempty = el('div', 'mx-help');
+  file.type = 'file'; file.accept = 'image/*,video/*'; file.multiple = true; file.hidden = true;
+  drop.tabIndex = 0; drop.setAttribute('role', 'button'); drop.append(el('div', null, '📎 Fayl yüklə və ya bura at'), el('small', null, 'Şəkil ≤ 15 MB · video ≤ 50 MB'));
+  drop.onclick = () => file.click(); drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
+  file.onchange = () => { const f = file.files; mxUploadFiles(f); file.value = ''; };
+  url.type = 'url'; url.placeholder = 'və ya şəkil/video URL-i yapışdır'; url.setAttribute('aria-label', 'Mənbə URL');
+  url.onchange = () => { const u = url.value.trim(); if (/^https:\/\//.test(u)) { mxePick({ url: u, type: /\.(mp4|webm|mov)(\?|$)/i.test(u) ? 'video' : 'image' }); url.value = ''; } };
+  for (const [k, t] of [['all', 'Hamısı'], ['image', '🖼 Şəkil'], ['video', '🎞 Video']]) { const b = el('button', k === MX.libF ? 'on' : null, t); b.type = 'button'; b.onclick = () => { MX.libF = k; for (const x of lf.children) x.classList.toggle('on', x === b); R._libSig = ''; mxEdit(); }; lf.append(b); }
+  lib.append(el('h4', null, '🗂 Media kitabxanası'), drop, file, url, lf, grid, lempty);
+  /* Səhnə */
+  const stage = el('main', 'mxe-stage'), view = el('div', 'mxe-view'), bar = el('div', 'mxe-bar');
+  stage.append(view, bar);
+  for (const z of [lib, stage]) {                                    // sürüşdür-burax yükləmə
+    z.addEventListener('dragover', e => { if ([...e.dataTransfer.types].includes('Files')) { e.preventDefault(); drop.classList.add('over'); } });
+    z.addEventListener('dragleave', () => drop.classList.remove('over'));
+    z.addEventListener('drop', e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); drop.classList.remove('over'); mxUploadFiles(e.dataTransfer.files); });
+  }
+  /* İdarə paneli */
+  const ctl = el('aside', 'mxe-ctl'), ai = el('div'), cut = el('div');
+  // AI: əməliyyat → model (hazır axtarışlar) → prompt → parametrlər
+  const ops = el('div', 'mxe-ops'), presets = el('div', 'mx-chips'), opHint = el('div', 'mx-help');
+  for (const [k, o] of Object.entries(MXE_OPS)) {
+    const b = el('button', 'mxe-op'); b.type = 'button'; b.dataset.op = k;
+    const t = el('div'); t.append(el('b', null, o.name), el('small', null, o.src === 'image' ? 'mənbə: şəkil' : 'mənbə: video'));
+    b.append(el('span', 'i', o.icon), t); b.onclick = () => { MX.editOp = k; R._opSig = ''; mxEdit(); }; ops.append(b);
+  }
+  const aiParams = el('div'), aiErr = mxErr(), aiBtn = mxBtn('🤖 Redaktə et', 'go mxe-go');
+  const aiPrompt = mxPromptBox('Nəyi dəyişək? Məs: "arxa fonu gecə Bakısına çevir, neon işıqlar" və ya "kamera yavaşca yaxınlaşsın, saçlar küləkdə"');
+  let aiModel = null, aiFields = null, aiForm = null;
+  const picker = mxModelPicker(() => MX.editOp, async m => {
+    aiModel = m; aiFields = null; aiForm = null; aiParams.replaceChildren(); if (!m) return;
+    aiParams.append(el('div', 'mx-help', 'Parametrlər yüklənir…'));
+    try { const f = await mxSchema(m.id); if (aiModel !== m) return; aiFields = f; R._fill(); }
+    catch (e) { aiParams.replaceChildren(el('div', 'cmderr', e.message)); }
+  });
+  R._fill = () => {                                                  // mənbə URL-i modelin uyğun sahəsinə
+    if (!aiFields) return;
+    const fill = {}, s = MX.editSrc;
+    if (s) for (const f of aiFields) {
+      if (!/url/i.test(f.name) || /end_image|mask|audio/i.test(f.name)) continue;
+      if (s.type === 'video' ? /video/i.test(f.name) : /image/i.test(f.name)) fill[f.name] = f.type === 'array' ? [s.url] : s.url;
+    }
+    aiForm = mxFieldsForm(aiFields, { fill }); aiParams.replaceChildren(aiForm);
+    aiPrompt.hidden = !aiFields.some(f => f.name === 'prompt');
+  };
+  ai.append(el('h4', null, '1 · Nə edək?'), ops, opHint, el('h4', null, '2 · Model'), presets, picker,
+    el('h4', null, '3 · Tapşırıq'), aiPrompt, aiParams, aiErr, aiBtn);
+  aiBtn.onclick = async () => {
+    mxShowErr(aiErr, '');
+    if (!MX.key || !MX.key.has) return mxShowErr(aiErr, 'Əvvəlcə 🔌 Fal Connection planetində fal açarını əlavə et (yuxarıdakı düymə).');
+    if (!MX.editSrc) return mxShowErr(aiErr, 'Kitabxanadan mənbə seç və ya fayl yüklə.');
+    if (MXE_OPS[MX.editOp].src !== MX.editSrc.type) return mxShowErr(aiErr, 'Bu əməliyyat üçün ' + (MXE_OPS[MX.editOp].src === 'video' ? 'video' : 'şəkil') + ' seç.');
+    if (!aiModel || !aiForm) return mxShowErr(aiErr, 'Model seç.');
+    let input; try { input = aiForm._get(); } catch (e) { return mxShowErr(aiErr, e.message); }
+    const pf = aiFields.find(f => f.name === 'prompt'), p = aiPrompt._ta.value.trim();
+    if (pf && p) input.prompt = p; else if (pf && pf.required) return mxShowErr(aiErr, 'Nə etmək istədiyini yaz.');
+    aiBtn.disabled = true; setText(aiBtn, 'Göndərilir…');
+    const { status, d } = await MED('submit', { endpoint_id: aiModel.id, kind: MX.editOp, input });
+    aiBtn.disabled = false; setText(aiBtn, '🤖 Redaktə et');
+    if (status !== 200) return mxShowErr(aiErr, d.error || 'Alınmadı');
+    MX.view = d.id; miniToast('🤖 Göndərildi: ' + aiModel.name); await mxRefresh(); mxEdit();
+  };
+  // Montaj: seçilmiş mənbələr (ardıcıllıq), kompüter, şablonlar, tapşırıq
+  const sel = el('div', 'mxe-sel'), comp = el('select'), note = el('div', 'mx-note'), tpl = el('div', 'mx-chips'), cutErr = mxErr(), cutBtn = mxBtn('🎬 Claude-a göndər', 'go mxe-go'), jobs = el('div');
+  const cutPrompt = mxPromptBox('Montaj tapşırığı. Məs: "15 saniyəlik reels: videonu 3 hissəyə böl, başlığa animasiyalı yazı, sonda logo"');
+  comp.setAttribute('aria-label', 'Montajın işləyəcəyi kompüter'); comp.onchange = () => { R._cutSig = ''; mxEdit(); };
+  for (const [t, line] of MXE_TPL) { const b = el('button', null, t); b.type = 'button'; b.onclick = () => { const ta = cutPrompt._ta; ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + line; ta.focus(); }; tpl.append(b); }
+  cut.append(el('div', 'mx-note', 'After Effects tipli kompozisiya: Claude Code seçilən kompüterdə HyperFrames (HTML + GSAP → MP4) ilə montaj edib MP4 render edir. Kitabxanadan bir neçə mənbə seç: ardıcıllıq nömrə ilə görünür.'),
+    el('h4', null, '1 · Mənbələr'), sel, el('h4', null, '2 · Kompüter'), comp, note, el('h4', null, '3 · Tapşırıq'), tpl, cutPrompt, cutErr, cutBtn, el('h4', null, '🕘 Son montajlar'), jobs);
+  cutBtn.onclick = async () => {
+    mxShowErr(cutErr, '');
+    const target = comp.value, text = cutPrompt._ta.value.trim();
+    if (!target) return mxShowErr(cutErr, 'Kompüter seç.');
+    if (!text) return mxShowErr(cutErr, 'Montaj tapşırığını yaz və ya şablon seç.');
+    const src = MX.cutSel.length ? MX.cutSel : MX.editSrc ? [MX.editSrc] : [];
+    const prompt = ['[🎬 MEDIA · Edit Media] HyperFrames ilə montaj.',
+      src.length ? 'Mənbə fayllar, bu ardıcıllıqla (əvvəlcə hər birini `curl -L -o assets/<ad> "<URL>"` ilə assets/ qovluğuna endir):\n' + src.map((s, i) => (i + 1) + '. ' + s.url + ' (' + (s.type === 'video' ? 'video' : 'şəkil') + ')').join('\n') : 'Mənbə fayl yoxdur: yalnız mətn, forma və animasiya ilə qur.',
+      'Tapşırıq: ' + text,
+      'Qaydalar: bu qovluqdakı HyperFrames layihəsindən istifadə et (CLAUDE.md və HyperFrames skill-lərinə bax). Kompozisiyanı HTML/CSS/GSAP ilə yaz, `npx hyperframes render` ilə out/ qovluğuna MP4 render et. Sonda nəticə faylının tam yolunu, müddətini, ölçüsünü və qısa təsvirini yaz.'].join('\n\n');
+    cutBtn.disabled = true; setText(cutBtn, 'Göndərilir…');
+    const { status, d } = await RMT('send', { target, project: ME_PROJECT, prompt, fresh: true });
+    cutBtn.disabled = false; setText(cutBtn, '🎬 Claude-a göndər');
+    if (status !== 200) return mxShowErr(cutErr, d.error || 'Alınmadı');
+    miniToast(d.status === 'pending' ? '🎬 Göndərildi: ' + target + ' təsdiqləməlidir' : '🎬 Montaj növbəyə düşdü'); load();
+  };
+  ctl.append(ai, cut);
+  /* Tarixçə */
+  const hist = el('footer', 'mxe-hist'), hrow = el('div', 'row'), hl = el('h4', null, '🕘 Redaktə tarixçəsi');
+  hist.append(hl, hrow);
+  const body = el('div', 'mxe-body'); body.append(lib, stage, ctl);
+  R.append(top, body, hist);
+  document.body.append(R);
+  const setMode = m => { MX.editMode = m; tAi.classList.toggle('on', m === 'ai'); tCut.classList.toggle('on', m === 'cut'); ai.hidden = m !== 'ai'; cut.hidden = m !== 'cut'; R._libSig = R._cutSig = ''; mxEdit(); };
+  tAi.onclick = () => setMode('ai'); tCut.onclick = () => setMode('cut');
+  R._r = { key, grid, lempty, view, bar, ops, presets, opHint, picker, aiPrompt, cutPrompt, sel, comp, note, jobs, hrow, hl, tAi, tCut, ai, cut };
+  mxeRoot = R;
+  tAi.classList.toggle('on', MX.editMode !== 'cut'); tCut.classList.toggle('on', MX.editMode === 'cut'); ai.hidden = MX.editMode === 'cut'; cut.hidden = MX.editMode !== 'cut';
+}
+
+/** Tam ekranı yalnız Edit Media planeti açıq olanda göstər */
+function mxeShow() {
+  const on = !!mxeRoot && typeof curPlanet === 'string' && curPlanet === 'media:Edit Media';
+  if (mxeRoot && mxeRoot.hidden === on) mxeRoot.hidden = !on;
+  document.documentElement.classList.toggle('mxe-on', on);
+}
+addEventListener('hashchange', () => setTimeout(mxeShow, 0));
+
 function mxEdit() {
+  if (!mxeRoot) mxeBuild();
   const box = $('me-info');
-  if (!meBox) {
-    meBox = box;
-    /* 1. Mənbə */
-    const srcView = el('div', 'mx-src'), srcRow = el('div', 'mx-row'), pick = el('select'), up = el('input'), upBtn = mxBtn('📎 Yüklə'), url = el('input');
-    pick.setAttribute('aria-label', 'Generasiyalardan mənbə seç');
-    up.type = 'file'; up.accept = 'image/*,video/*'; up.hidden = true; upBtn.onclick = () => up.click();
-    url.type = 'url'; url.placeholder = 'və ya şəkil/video URL-i yapışdır'; url.setAttribute('aria-label', 'Mənbə URL');
-    srcRow.append(pick, upBtn, up);
-    const setSrc = s => { MX.editSrc = s; box._srcSig = ''; mxEdit(); };
-    pick.onchange = () => { const m = mxAllMedia().find(x => x.url === pick.value); if (m) setSrc({ url: m.url, type: m.type }); };
-    url.onchange = () => { const u = url.value.trim(); if (/^https:\/\//.test(u)) setSrc({ url: u, type: /\.(mp4|webm|mov)(\?|$)/i.test(u) ? 'video' : 'image' }); };
-    up.onchange = async () => {
-      const f = up.files[0]; up.value = ''; if (!f) return;
-      setText(upBtn, 'Yüklənir…'); upBtn.disabled = true;
-      const { status, d } = await MEDUP(f);
-      upBtn.disabled = false; setText(upBtn, '📎 Yüklə');
-      if (status !== 200) return miniToast(d.error || 'Yüklənmədi');
-      setSrc({ url: d.url, type: d.type });
-    };
-    /* 2. Rejim */
-    const modes = el('div', 'mx-chips'), mAi = el('button', null, '🤖 AI redaktə (fal)'), mCut = el('button', null, '🎬 Montaj (Claude + HyperFrames)');
-    mAi.type = mCut.type = 'button'; modes.append(mAi, mCut);
-    const aiBox = el('div'), cutBox = el('div');
-    /* 2a. AI redaktə: fal image-to-image / video-to-video */
-    const aiCat = () => MX.editSrc && MX.editSrc.type === 'video' ? 'video-to-video' : 'image-to-image';
-    const aiParams = el('div'), aiErr = mxErr(), aiBtn = mxBtn('🤖 Redaktə et', 'go'), aiPrompt = mxPromptBox('Nəyi dəyişək? Məs: "arxa fonu gecə şəhərinə çevir, işıqları neon et"');
-    let aiModel = null, aiForm = null;
-    const aiPicker = mxModelPicker(aiCat, async m => {
-      aiModel = m; aiForm = null; aiParams.replaceChildren(); if (!m) return;
-      aiParams.append(el('div', 'mx-help', 'Parametrlər yüklənir…'));
-      try {
-        const fields = await mxSchema(m.id); if (aiModel !== m) return;
-        aiForm = { fields }; box._fillAi();
-      } catch (e) { aiParams.replaceChildren(el('div', 'cmderr', e.message)); }
-    });
-    box._fillAi = () => {                                        // mənbə dəyişəndə URL sahələri yenidən doldurulur
-      if (!aiForm) return;
-      const fill = {}, s = MX.editSrc;
-      if (s) for (const f of aiForm.fields) {
-        if (!/url/i.test(f.name)) continue;
-        const want = s.type === 'video' ? /video/i.test(f.name) : /image/i.test(f.name) && !/end_image|mask/i.test(f.name);
-        if (want) fill[f.name] = f.type === 'array' ? [s.url] : s.url;
-      }
-      aiForm.node = mxFieldsForm(aiForm.fields, { fill }); aiParams.replaceChildren(aiForm.node);
-    };
-    const aiRow = el('div', 'mx-row'); aiRow.style.marginTop = '12px'; aiRow.append(aiBtn);
-    aiBox.append(el('div', 'lbl', '🎛 Redaktə modeli'), aiPicker, el('div', 'lbl', '✍️ Nə dəyişsin?'), aiPrompt, aiParams, aiErr, aiRow);
-    aiBtn.onclick = async () => {
-      mxShowErr(aiErr, '');
-      if (!MX.key || !MX.key.has) return mxShowErr(aiErr, 'Əvvəlcə 🔌 Fal Connection planetində fal açarını əlavə et.');
-      if (!MX.editSrc) return mxShowErr(aiErr, 'Əvvəlcə yuxarıda mənbə şəkil/video seç.');
-      if (!aiModel || !aiForm || !aiForm.node) return mxShowErr(aiErr, 'Model seç.');
-      let input; try { input = aiForm.node._get(); } catch (e) { return mxShowErr(aiErr, e.message); }
-      const p = aiPrompt._ta.value.trim(); if (!p) return mxShowErr(aiErr, 'Nəyi dəyişmək istədiyini yaz.');
-      input.prompt = p;
-      aiBtn.disabled = true; setText(aiBtn, 'Göndərilir…');
-      const { status, d } = await MED('submit', { endpoint_id: aiModel.id, kind: aiCat(), input });
-      aiBtn.disabled = false; setText(aiBtn, '🤖 Redaktə et');
-      if (status !== 200) return mxShowErr(aiErr, d.error || 'Alınmadı');
-      miniToast('🤖 Redaktə fal-a göndərildi'); mxRefresh();
-    };
-    /* 2b. Montaj: seçilən kompüterdə Claude Code + HyperFrames (media-studio proyekti) */
-    const comp = el('select'), cutPrompt = mxPromptBox('Montaj tapşırığı. Məs: "15 saniyəlik Instagram reels: videonu 3 hissəyə böl, başlığa animasiyalı yazı, sonda logo, fon musiqisi üçün yer saxla"');
-    const cutErr = mxErr(), cutBtn = mxBtn('🎬 Claude-a göndər', 'go'), cutNote = el('div', 'mx-note'), cutList = el('div');
-    comp.setAttribute('aria-label', 'Montajın işləyəcəyi kompüter');
-    const cutRow = el('div', 'mx-row'); cutRow.style.marginTop = '12px'; cutRow.append(cutBtn);
-    cutBox.append(el('div', 'mx-note', 'After Effects kimi kompozisiya: Claude Code seçilən kompüterdə HyperFrames (HTML + GSAP → MP4, açıq mənbə, Apache-2.0) ilə montaj edir və MP4 render edir. Mənbə URL-ləri ona ötürülür.'),
-      el('div', 'lbl', '🖥 Kompüter'), comp, cutNote, el('div', 'lbl', '✍️ Montaj tapşırığı'), cutPrompt, cutErr, cutRow, el('div', 'lbl', '🕘 Son montajlar'), cutList);
-    comp.onchange = () => { box._cutSig = ''; mxEdit(); };
-    cutBtn.onclick = async () => {
-      mxShowErr(cutErr, '');
-      const target = comp.value, text = cutPrompt._ta.value.trim();
-      if (!target) return mxShowErr(cutErr, 'Kompüter seç.');
-      if (!text) return mxShowErr(cutErr, 'Montaj tapşırığını yaz.');
-      const s = MX.editSrc;
-      const prompt = ['[🎬 MEDIA · Edit Media] HyperFrames ilə montaj.',
-        s ? 'Mənbə fayl (əvvəlcə `curl -L -o assets/<ad> "<URL>"` ilə assets/ qovluğuna endir):\n- ' + s.url + ' (' + (s.type === 'video' ? 'video' : 'şəkil') + ')' : 'Mənbə fayl yoxdur: yalnız mətn, forma və animasiya ilə qur.',
-        'Tapşırıq: ' + text,
-        'Qaydalar: bu qovluqdakı HyperFrames layihəsindən istifadə et (CLAUDE.md və HyperFrames skill-lərinə bax). Kompozisiyanı HTML/CSS/GSAP ilə yaz, `npx hyperframes render` ilə out/ qovluğuna MP4 render et. Sonda nəticə faylının tam yolunu, müddətini, ölçüsünü və qısa təsvirini yaz.'].join('\n\n');
-      cutBtn.disabled = true; setText(cutBtn, 'Göndərilir…');
-      const { status, d } = await RMT('send', { target, project: ME_PROJECT, prompt, fresh: true });
-      cutBtn.disabled = false; setText(cutBtn, '🎬 Claude-a göndər');
-      if (status !== 200) return mxShowErr(cutErr, d.error || 'Alınmadı');
-      miniToast(d.status === 'pending' ? '🎬 Göndərildi: ' + target + ' təsdiqləməlidir' : '🎬 Montaj növbəyə düşdü'); load();
-    };
-    const setMode = m => { MX.editMode = m; mAi.classList.toggle('on', m === 'ai'); mCut.classList.toggle('on', m === 'cut'); aiBox.hidden = m !== 'ai'; cutBox.hidden = m !== 'cut'; if (m === 'ai') aiPicker._load(); };
-    mAi.onclick = () => setMode('ai'); mCut.onclick = () => setMode('cut');
-    const resLbl = el('div', 'lbl'), resGal = el('div', 'mx-gal');
-    box.append(el('div', 'lbl', '🎞 Mənbə'), srcView, srcRow, url, el('div', 'lbl', '🛠 Necə redaktə edək?'), modes, aiBox, cutBox, resLbl, resGal);
-    box._r = { srcView, pick, comp, cutNote, cutList, aiPrompt, cutPrompt, resLbl, resGal, aiCat, aiPicker };
-    setMode(MX.editMode);
-  }
-  const r = box._r;
+  if (!box._note) { box._note = 1; box.replaceChildren(el('div', 'mx-note', '✂️ Redaktor tam ekranda açıqdır. Bağlamaq üçün ✕ və ya Esc.')); }
+  mxeShow();
+  const R = mxeRoot, r = R._r, s = MX.editSrc;
+  if (s && MXE_OPS[MX.editOp].src !== s.type) MX.editOp = s.type === 'video' ? 'video-to-video' : 'image-to-image';   // mənbə növünə uyğun əməliyyat
   r.aiPrompt._fill(); r.cutPrompt._fill();
-  /* mənbə görünüşü */
-  const s = MX.editSrc, all = mxAllMedia();
-  const sSig = [s && s.url, all.map(m => m.url).join()].join('|');
-  if (box._srcSig !== sSig) {
-    box._srcSig = sSig;
-    r.srcView.replaceChildren();
-    if (s) { r.srcView.append(mxMediaEl(s)); const t = el('div', 'sp'); t.append(el('div', null, s.type === 'video' ? '🎞 Video' : '🖼 Şəkil'), el('div', null, s.url)); r.srcView.append(t); }
-    else r.srcView.append(el('div', 'sp', 'Mənbə seçilməyib: generasiyalarından seç, fayl yüklə və ya URL yapışdır.'));
-    r.pick.replaceChildren(new Option(all.length ? '🖼 Generasiyalarımdan seç…' : 'Hələ hazır generasiya yoxdur', ''));
-    for (const m of all) r.pick.append(new Option(m.label, m.url));
-    if (s && all.some(m => m.url === s.url)) r.pick.value = s.url;
-    const cat = r.aiCat();
-    if (box._aiCat !== cat) { box._aiCat = cat; if (MX.editMode === 'ai') r.aiPicker._load(); }
-    else box._fillAi();
+  /* fal açarı */
+  const k = MX.key || {}, kSig = [k.has, k.hint].join();
+  if (R._kSig !== kSig) { R._kSig = kSig; r.key.dataset.ok = k.has ? '1' : '0'; setText(r.key, k.loading ? '🔑 …' : k.has ? '🔑 fal ' + k.hint : '🔑 fal açarı əlavə et'); }
+  /* kitabxana */
+  const items = mxLib().filter(m => MX.libF === 'all' || m.type === MX.libF);
+  const lSig = [MX.editMode, s && s.url, MX.cutSel.map(x => x.url).join(), items.map(m => m.url).join()].join('|');
+  if (R._libSig !== lSig) {
+    R._libSig = lSig;
+    sync(r.grid, items, m => m.url, m => {
+      const b = el('button', 'mxe-it'); b.type = 'button'; b.title = m.label; b.setAttribute('aria-label', m.label);
+      b.append(mxThumb(m), el('span', 'tg', m.type === 'video' ? '▶ video' : '🖼'));
+      b.onclick = () => mxePick(b._m); return b;
+    }, (n, m) => {
+      n._m = m;
+      const idx = MX.cutSel.findIndex(x => x.url === m.url);
+      n.classList.toggle('on', MX.editMode === 'cut' ? idx >= 0 : !!s && s.url === m.url);
+      let no = n.querySelector('.no');
+      if (MX.editMode === 'cut' && idx >= 0) { if (!no) { no = el('span', 'no'); n.append(no); } setText(no, String(idx + 1)); } else if (no) no.remove();
+    }, { enter: false });
+    r.lempty.hidden = items.length > 0;
+    setText(r.lempty, MX.gens === null ? 'Yüklənir…' : 'Hələ media yoxdur: fayl yüklə və ya 🔌 Fal Connection-da yarat.');
   }
-  /* montaj: kompüterlər və vəziyyət */
-  const users = (data.users || []).filter(u => ME && (u === ME.name || myGrantOn(u)));
-  const cur = r.comp.value || (ME ? ME.name : '');
-  const target = users.includes(cur) ? cur : users[0] || '';
-  const a = target ? agentInfo(target) : null;
-  const cmds = (data.commands || []).filter(c => c.project === ME_PROJECT && ME && c.creator === ME.name).slice(0, 6);
-  const cSig = [users.join(), target, a && a.online, a && a.projects.join(), a && a.ag && a.ag.profile, cmds.map(c => c.id + c.status).join()].join('|');
-  if (box._cutSig !== cSig) {
-    box._cutSig = cSig;
-    r.comp.replaceChildren(...users.map(u => new Option((ME && u === ME.name ? '🖥 Mənim kompüterim (' + u + ')' : '🖥 ' + u) + (agentInfo(u).online ? '' : ' · oflayn'), u)));
-    r.comp.value = target;
-    r.cutNote.replaceChildren(); r.cutNote.className = 'mx-note';
-    if (!a || !a.ag) { r.cutNote.className = 'mx-note warn'; r.cutNote.append('Bu kompüterdə Planet agenti işləmir. Agenti qur: başlıqdakı 📦 Paket.'); }
-    else {
-      const prof = (a.ag && a.ag.profile) || 'basic', hasPrj = a.projects.includes(ME_PROJECT);
-      if (!hasPrj || prof === 'basic') r.cutNote.className = 'mx-note warn';
-      r.cutNote.append((a.online ? '🟢 onlayn' : '⚪ oflayn') + ' · agent profili: ' + prof + ' · ' + (hasPrj ? '✅ ' + ME_PROJECT + ' proyekti var' : '⚠️ ' + ME_PROJECT + ' proyekti qeydiyyatda deyil'));
-      if (!hasPrj || prof === 'basic') r.cutNote.append(el('div', 'mx-help', 'Bir dəfəlik quraşdırma: kompüterdə `~/Documents/projects/' + ME_PROJECT + '` qovluğunda HyperFrames (`npx hyperframes init`, Node 22+, ffmpeg) qur, qovluğu Planet-ə qeydiyyatdan keçir və agent profilini ən azı dev et (CLAUDE_TEAM_PROFILE=dev): render üçün `npx` lazımdır.'));
-    }
-    r.cutList.replaceChildren();
-    if (!cmds.length) r.cutList.append(el('div', 'empty', 'Hələ montaj göndərilməyib.'));
-    for (const c of cmds) {
-      const n = el('div', 'prow'), st = { pending: '✋ təsdiq gözləyir', queued: '⏳ növbədə', running: '⚙️ işləyir', done: '✅ hazır', failed: '❌ alınmadı' }[c.status] || c.status;
-      const link = el('a', null, 'Claude Code-da aç ↗'); link.href = 'code.php#' + encodeURIComponent(c.user) + '/' + (c.chat || c.id); link.target = '_blank'; link.rel = 'noopener'; link.style.color = 'var(--accent)';
-      const meta = el('div', 'pm'); meta.append(c.user + ' · ' + st + ' · ' + ago(c.created_at) + ' · ', link);
-      n.append(el('div', 'pt', (c.prompt.split('\n\n').find(x => x.startsWith('Tapşırıq: ')) || '').slice(10, 140) || 'Montaj'), meta);
-      if (c.result) { const b = el('div', 'pb', c.result); n.append(b); }
-      r.cutList.append(n);
+  /* səhnə: seçilmiş nəticə (əvvəl / sonra) və ya mənbə */
+  const g = MX.view ? (MX.gens || []).find(x => x.id === MX.view) : null;
+  const vSig = [s && s.url, g && [g.id, g.status, g.media.length, g.error].join(), MX.cmp].join('|');
+  if (R._vSig !== vSig) {
+    R._vSig = vSig;
+    const pane = (m, cap) => { const p = el('div', 'mxe-pane'); if (m) { const e = mxMediaEl(m); if (e.tagName === 'VIDEO') e.loop = true; p.append(e); } if (cap) p.append(el('span', 'cap', cap)); return p; };
+    r.view.replaceChildren(); r.bar.replaceChildren(); r.view.classList.remove('two');
+    const btn = (t, fn) => mxBtn(t, null, fn), link = (t, u) => { const a = el('a', 'gbtn', t); a.href = u; a.target = '_blank'; a.rel = 'noopener'; return a; };
+    if (g) {
+      const before = mxGenSource(g), res = g.media[0];
+      const after = el('div', 'mxe-pane');
+      if (g.status === 'done' && res) { const e = mxMediaEl(res); if (e.tagName === 'VIDEO') e.loop = true; after.append(e); }
+      else if (g.status === 'failed') after.append(el('div', 'err', '❌ ' + (g.error || 'Alınmadı')));
+      else { const w = el('div', 'wait'); w.append(el('span', 'mx-spin'), el('div', null, (g.status === 'queued' ? 'Növbədədir' : 'Hazırlanır') + '…'), el('small', 'mx-help', g.model + ' · video bir neçə dəqiqə çəkə bilər')); after.append(w); }
+      after.append(el('span', 'cap', 'SONRA'));
+      if (before && MX.cmp) { r.view.classList.add('two'); r.view.append(pane(before, 'ƏVVƏL'), after); } else r.view.append(after);
+      r.bar.append(el('span', 'sp', (MXE_OPS[g.kind] ? MXE_OPS[g.kind].icon + ' ' + MXE_OPS[g.kind].name : g.kind) + ' · ' + g.model + ' · ' + ago(g.created_at) + (g.prompt ? ' · “' + g.prompt.slice(0, 90) + '”' : '')));
+      if (before) r.bar.append(btn(MX.cmp ? '◧ Yalnız nəticə' : '◧ Əvvəl / sonra', () => { MX.cmp = !MX.cmp; mxEdit(); }));
+      if (res) {
+        r.bar.append(btn('↪ Nəticəni mənbə et', () => { MX.editSrc = { url: res.url, type: res.type }; MX.view = 0; if (MXE_OPS[MX.editOp].src !== res.type) MX.editOp = res.type === 'video' ? 'video-to-video' : 'image-to-image'; R._libSig = R._opSig = ''; mxEdit(); }),
+          link('⬇ Yüklə', res.url));
+      }
+      r.bar.append(btn('✕ Bağla', () => { MX.view = 0; mxEdit(); }));
+    } else if (s) {
+      r.view.append(pane(s, s.type === 'video' ? 'MƏNBƏ · VIDEO' : 'MƏNBƏ · ŞƏKİL'));
+      r.bar.append(el('span', 'sp', s.url), btn('⧉ URL', async e => { try { await navigator.clipboard.writeText(s.url); setText(e.target, 'Kopyalandı ✓'); } catch (x) { setText(e.target, 'Alınmadı'); } }), link('⬇ Aç', s.url));
+    } else {
+      const e = el('div', 'mxe-empty'); e.append(el('b', null, 'Redaktəyə başla'), el('div', null, 'Kitabxanadan şəkil/video seç, fayl at və ya URL yapışdır.'), el('div', 'mx-help', 'Sonra əməliyyatı seç: şəkli redaktə et, şəkli videoya çevir və ya videonu redaktə et.'));
+      r.view.append(e);
     }
   }
-  /* AI redaktə nəticələri */
-  const res = (MX.gens || []).filter(g => g.kind === 'image-to-image' || g.kind === 'video-to-video');
-  setText(r.resLbl, '🖌 AI redaktələrim · ' + (MX.gens === null ? '…' : res.length));
-  sync(r.resGal, res, g => g.id, mxGenCard, (n, g) => n._upd(g));
+  /* AI: əməliyyatlar, hazır axtarışlar, model */
+  if (MX.editMode !== 'cut') {
+    const oSig = [MX.editOp, s && s.type].join();
+    if (R._opSig !== oSig) {
+      R._opSig = oSig;
+      for (const b of r.ops.children) { const o = MXE_OPS[b.dataset.op]; b.classList.toggle('on', b.dataset.op === MX.editOp); b.disabled = !!s && o.src !== s.type; }
+      const op = MXE_OPS[MX.editOp];
+      setText(r.opHint, op.hint);
+      r.presets.replaceChildren(...op.presets.map(([t, q], i) => { const b = el('button', i === 0 ? 'on' : null, t); b.type = 'button'; b.onclick = () => { for (const x of r.presets.children) x.classList.toggle('on', x === b); r.picker._search(q); }; return b; }));
+      if (R._pickOp !== MX.editOp) { R._pickOp = MX.editOp; r.picker._search(''); }
+      R._fill();
+    } else if (R._srcFill !== (s && s.url)) R._fill();
+    R._srcFill = s && s.url;
+  }
+  /* Montaj: mənbələr, kompüter, işlər */
+  if (MX.editMode === 'cut') {
+    const users = (data.users || []).filter(u => ME && (u === ME.name || myGrantOn(u)));
+    const cur = r.comp.value || (ME ? ME.name : ''), target = users.includes(cur) ? cur : users[0] || '';
+    const a = target ? agentInfo(target) : null;
+    const cmds = (data.commands || []).filter(c => c.project === ME_PROJECT && ME && c.creator === ME.name).slice(0, 8);
+    const cSig = [MX.cutSel.map(x => x.url).join(), users.join(), target, a && a.online, a && a.projects.join(), a && a.ag && a.ag.profile, cmds.map(c => c.id + c.status).join()].join('|');
+    if (R._cutSig !== cSig) {
+      R._cutSig = cSig;
+      r.sel.replaceChildren();
+      if (!MX.cutSel.length) r.sel.append(el('div', 'mx-help', 'Kitabxanada mənbələrə bas: seçdiyin ardıcıllıqla nömrələnəcək. Mənbəsiz də olar (yalnız mətn/animasiya).'));
+      MX.cutSel.forEach((m, i) => {
+        const row = el('div', 'r'), rm = el('button', null, '✕'); rm.type = 'button'; rm.title = rm.ariaLabel = 'Siyahıdan çıxar';
+        rm.onclick = () => { MX.cutSel.splice(i, 1); R._libSig = ''; mxEdit(); };
+        row.append(el('span', 'n', String(i + 1)), mxThumb(m), el('span', null, m.url.split('/').pop().slice(0, 40)), rm); r.sel.append(row);
+      });
+      r.comp.replaceChildren(...users.map(u => new Option((ME && u === ME.name ? '🖥 Mənim kompüterim (' + u + ')' : '🖥 ' + u) + (agentInfo(u).online ? '' : ' · oflayn'), u)));
+      r.comp.value = target;
+      r.note.replaceChildren(); r.note.className = 'mx-note';
+      if (!a || !a.ag) { r.note.className = 'mx-note warn'; r.note.append('Bu kompüterdə Planet agenti işləmir. Agenti qur: başlıqdakı 📦 Paket.'); }
+      else {
+        const prof = a.ag.profile || 'basic', hasPrj = a.projects.includes(ME_PROJECT);
+        if (!hasPrj || prof === 'basic' || !a.online) r.note.className = 'mx-note warn';
+        r.note.append((a.online ? '🟢 onlayn' : '⚪ oflayn') + ' · profil: ' + prof + ' · ' + (hasPrj ? '✅ ' + ME_PROJECT : '⚠️ ' + ME_PROJECT + ' qeydiyyatda deyil'));
+        if (!hasPrj || prof === 'basic') r.note.append(el('div', 'mx-help', 'Bir dəfəlik: kompüterdə `~/Documents/projects/' + ME_PROJECT + '`-də HyperFrames (`npx hyperframes init`, Node 22+, ffmpeg), qovluğu Planet-ə qeydiyyatdan keçir, agent profili ən azı dev (CLAUDE_TEAM_PROFILE=dev).'));
+      }
+      r.jobs.replaceChildren();
+      if (!cmds.length) r.jobs.append(el('div', 'empty', 'Hələ montaj göndərilməyib.'));
+      for (const c of cmds) {
+        const n = el('div', 'prow'), st = { pending: '✋ təsdiq gözləyir', queued: '⏳ növbədə', running: '⚙️ işləyir', done: '✅ hazır', failed: '❌ alınmadı' }[c.status] || c.status;
+        const lk = el('a', null, 'Claude Code-da aç ↗'); lk.href = 'code.php#' + encodeURIComponent(c.user) + '/' + (c.chat || c.id); lk.target = '_blank'; lk.rel = 'noopener'; lk.style.color = 'var(--accent)';
+        const meta = el('div', 'pm'); meta.append(c.user + ' · ' + st + ' · ' + ago(c.created_at) + ' · ', lk);
+        n.append(el('div', 'pt', (c.prompt.split('\n\n').find(x => x.startsWith('Tapşırıq: ')) || '').slice(10, 140) || 'Montaj'), meta);
+        if (c.result) n.append(el('div', 'pb', c.result));
+        r.jobs.append(n);
+      }
+    }
+  }
+  /* Tarixçə (AI redaktələri: mənbəsi olan generasiyalar) */
+  const hist = mxEditGens();
+  setText(r.hl, '🕘 Redaktə tarixçəsi · ' + (MX.gens === null ? '…' : hist.length));
+  sync(r.hrow, hist, x => x.id, () => {
+    const b = el('button', 'mxe-h'), th = el('div', 'th'), t = el('div', 't'); b.type = 'button'; b.append(th, t);
+    b.onclick = () => { MX.view = b._g.id; mxEdit(); }; return b;
+  }, (n, x) => {
+    n._g = x; n.classList.toggle('on', MX.view === x.id);
+    const sig = [x.status, x.media.length].join();
+    if (n._sig !== sig) {
+      n._sig = sig; const th = n.firstChild, t = n.lastChild;
+      th.replaceChildren(x.status === 'done' && x.media[0] ? mxThumb(x.media[0]) : x.status === 'failed' ? el('span', null, '❌') : el('span', 'mx-spin'));
+      t.replaceChildren(el('div', null, (MXE_OPS[x.kind] ? MXE_OPS[x.kind].icon + ' ' : '') + (x.prompt || x.model).slice(0, 60)), el('small', null, ago(x.created_at)));
+    }
+  }, { enter: false });
 }
