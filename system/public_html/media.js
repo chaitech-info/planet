@@ -490,9 +490,11 @@ function mxLib() {
   const add = it => { if (!seen.has(it.url)) { seen.add(it.url); out.push(it); } };
   for (const u of MX.uploads) add({ url: u.url, type: u.type, label: '📎 ' + (u.name || 'Yükləmə'), at: Math.floor(u.at / 1000) });
   for (const g of (MX.gens || []).filter(x => x.status === 'done')) g.media.forEach((m, i) => add({ url: m.url, type: m.type, label: (MX_CATS[g.kind] || g.kind) + ' · ' + (g.prompt || g.model).slice(0, 60) + (g.media.length > 1 ? ' (' + (i + 1) + ')' : ''), at: g.created_at, gen: g.id }));
-  return out.filter(x => x.type === 'image' || x.type === 'video').sort((a, b) => b.at - a.at);
+  for (const a of MX.assets || []) if (a.kind !== 'generation') add({ url: a.url, type: a.type, label: (a.kind === 'export' ? '🎬 ' : '📎 ') + (a.name || 'Fayl'), at: a.created_at });   // serverdəki yükləmələr və renderlər
+  return out.filter(x => x.type === 'image' || x.type === 'video' || (x.type === 'audio' && MX.editMode === 'timeline')).sort((a, b) => b.at - a.at);
 }
 function mxThumb(m) {
+  if (m.type === 'audio') { const s = el('span', 'mxe-aud', '🎵'); return s; }
   if (m.type === 'video') { const v = el('video'); v.src = m.url + (m.url.includes('#') ? '' : '#t=0.1'); v.muted = true; v.preload = 'metadata'; v.playsInline = true; return v; }
   const i = el('img'); i.src = m.url; i.loading = 'lazy'; i.alt = ''; return i;
 }
@@ -509,6 +511,7 @@ async function mxUploadFiles(files) {
 }
 /** Mənbə seç (AI rejimində tək; montajda siyahıya əlavə/çıxar) */
 function mxePick(m) {
+  if (MX.editMode === 'timeline' && typeof tlAddMedia === 'function') return tlAddMedia(m);   // Timeline: oynatma xəttinə əlavə et
   if (MX.editMode === 'cut') {
     const i = MX.cutSel.findIndex(x => x.url === m.url);
     if (i >= 0) MX.cutSel.splice(i, 1); else if (MX.cutSel.length < 12) MX.cutSel.push({ url: m.url, type: m.type });
@@ -551,6 +554,7 @@ html.mxe-on .rm { display: none; }
 .mxe-it { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; border: 2px solid transparent; background: #000; cursor: pointer; padding: 0; }
 .mxe-it img, .mxe-it video { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .mxe-it.on { border-color: #ff7a3d; box-shadow: 0 0 0 3px rgba(255,122,61,.25); }
+.mxe-aud { display: grid; place-items: center; width: 100%; height: 100%; font-size: 34px; background: linear-gradient(135deg, #3b1d5e, #1e293b); }
 .mxe-it .tg { position: absolute; left: 6px; bottom: 6px; font-size: 11px; background: rgba(0,0,0,.65); color: #fff; border-radius: 6px; padding: 1px 6px; }
 .mxe-it .no { position: absolute; right: 6px; top: 6px; min-width: 20px; height: 20px; border-radius: 10px; background: #ff7a3d; color: #fff; font: 700 11px/20px system-ui; text-align: center; }
 .mxe-stage { position: relative; display: grid; grid-template-rows: 1fr auto; min-height: 0; min-width: 0; padding: 14px; gap: 10px; }
@@ -605,20 +609,20 @@ html.mxe-on .rm { display: none; }
   const top = el('div', 'mxe-top'), back = el('button', 'mxe-x', '←'), tt = el('div'), tabs = el('div', 'mxe-tabs');
   back.title = back.ariaLabel = 'Kainata qayıt'; back.onclick = () => go();
   tt.append(el('div', 'ttl', '✂️ Edit Media'), el('div', 'sub', 'Foto və videonu promptla redaktə et'));
-  const tAi = el('button', null, '🤖 AI redaktə'), tCut = el('button', null, '🎬 Montaj'); tAi.type = tCut.type = 'button';
-  tabs.append(tAi, tCut);
+  const tAi = el('button', null, '🤖 AI redaktə'), tCut = el('button', null, '🎬 Montaj'), tTl = el('button', null, '🎞 Timeline'); tAi.type = tCut.type = tTl.type = 'button';
+  tabs.append(tTl, tAi, tCut);
   const key = el('a', 'mxe-key'); key.href = '#kainat/' + encodeURIComponent('media:Fal Connection');
   const close = el('button', 'mxe-x', '✕'); close.title = close.ariaLabel = 'Bağla (Esc)'; close.onclick = () => go();
   top.append(back, tt, el('div', 'sp'), tabs, key, close);
   /* Kitabxana */
   const lib = el('aside', 'mxe-lib'), drop = el('div', 'mxe-drop'), file = el('input'), url = el('input'), lf = el('div', 'mx-chips'), grid = el('div', 'mxe-grid'), lempty = el('div', 'mx-help');
-  file.type = 'file'; file.accept = 'image/*,video/*'; file.multiple = true; file.hidden = true;
-  drop.tabIndex = 0; drop.setAttribute('role', 'button'); drop.append(el('div', null, '📎 Fayl yüklə və ya bura at'), el('small', null, 'Şəkil ≤ 15 MB · video ≤ 50 MB'));
+  file.type = 'file'; file.accept = 'image/*,video/*,audio/*'; file.multiple = true; file.hidden = true;
+  drop.tabIndex = 0; drop.setAttribute('role', 'button'); drop.append(el('div', null, '📎 Fayl yüklə və ya bura at'), el('small', null, 'Şəkil ≤ 15 MB · video/səs ≤ 50 MB'));
   drop.onclick = () => file.click(); drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };
   file.onchange = () => { const f = file.files; mxUploadFiles(f); file.value = ''; };
   url.type = 'url'; url.placeholder = 'və ya şəkil/video URL-i yapışdır'; url.setAttribute('aria-label', 'Mənbə URL');
   url.onchange = () => { const u = url.value.trim(); if (/^https:\/\//.test(u)) { mxePick({ url: u, type: /\.(mp4|webm|mov)(\?|$)/i.test(u) ? 'video' : 'image' }); url.value = ''; } };
-  for (const [k, t] of [['all', 'Hamısı'], ['image', '🖼 Şəkil'], ['video', '🎞 Video']]) { const b = el('button', k === MX.libF ? 'on' : null, t); b.type = 'button'; b.onclick = () => { MX.libF = k; for (const x of lf.children) x.classList.toggle('on', x === b); R._libSig = ''; mxEdit(); }; lf.append(b); }
+  for (const [k, t] of [['all', 'Hamısı'], ['image', '🖼 Şəkil'], ['video', '🎞 Video'], ['audio', '🎵 Səs']]) { const b = el('button', k === MX.libF ? 'on' : null, t); b.type = 'button'; b.onclick = () => { MX.libF = k; for (const x of lf.children) x.classList.toggle('on', x === b); R._libSig = ''; mxEdit(); }; lf.append(b); }
   lib.append(el('h4', null, '🗂 Media kitabxanası'), drop, file, url, lf, grid, lempty);
   /* Səhnə */
   const stage = el('main', 'mxe-stage'), view = el('div', 'mxe-view'), bar = el('div', 'mxe-bar');
@@ -696,18 +700,30 @@ html.mxe-on .rm { display: none; }
     if (status !== 200) return mxShowErr(cutErr, d.error || 'Alınmadı');
     miniToast(d.status === 'pending' ? '🎬 Göndərildi: ' + target + ' təsdiqləməlidir' : '🎬 Montaj növbəyə düşdü'); load();
   };
-  ctl.append(ai, cut);
+  const tlPane = el('div'), tlStage = el('div', 'tl-stage'), tlFoot = el('div', 'tl-foot');   // Timeline (media-timeline.js doldurur)
+  ctl.append(ai, cut, tlPane); stage.append(tlStage);
   /* Tarixçə */
   const hist = el('footer', 'mxe-hist'), hrow = el('div', 'row'), hl = el('h4', null, '🕘 Redaktə tarixçəsi');
-  hist.append(hl, hrow);
+  hist.append(hl, hrow, tlFoot);
   const body = el('div', 'mxe-body'); body.append(lib, stage, ctl);
   R.append(top, body, hist);
   document.body.append(R);
-  const setMode = m => { MX.editMode = m; tAi.classList.toggle('on', m === 'ai'); tCut.classList.toggle('on', m === 'cut'); ai.hidden = m !== 'ai'; cut.hidden = m !== 'cut'; R._libSig = R._cutSig = ''; mxEdit(); };
-  tAi.onclick = () => setMode('ai'); tCut.onclick = () => setMode('cut');
-  R._r = { key, grid, lempty, view, bar, ops, presets, opHint, picker, aiPrompt, cutPrompt, sel, comp, note, jobs, hrow, hl, tAi, tCut, ai, cut };
+  const setMode = m => {
+    MX.editMode = m; try { localStorage.setItem('mx:mode', m); } catch (e) {}
+    tAi.classList.toggle('on', m === 'ai'); tCut.classList.toggle('on', m === 'cut'); tTl.classList.toggle('on', m === 'timeline');
+    ai.hidden = m !== 'ai'; cut.hidden = m !== 'cut'; tlPane.hidden = tlStage.hidden = tlFoot.hidden = m !== 'timeline';
+    view.hidden = bar.hidden = hl.hidden = hrow.hidden = m === 'timeline'; R.classList.toggle('tl-on', m === 'timeline');
+    R._libSig = R._cutSig = R._vSig = R._opSig = ''; mxEdit();
+  };
+  tAi.onclick = () => setMode('ai'); tCut.onclick = () => setMode('cut'); tTl.onclick = () => setMode('timeline');
+  R._r = { key, grid, lempty, view, bar, ops, presets, opHint, picker, aiPrompt, cutPrompt, sel, comp, note, jobs, hrow, hl, tAi, tCut, tTl, ai, cut, tlPane, tlStage, tlFoot };
+  R._setMode = setMode;
   mxeRoot = R;
-  tAi.classList.toggle('on', MX.editMode !== 'cut'); tCut.classList.toggle('on', MX.editMode === 'cut'); ai.hidden = MX.editMode === 'cut'; cut.hidden = MX.editMode !== 'cut';
+  try { const sm = localStorage.getItem('mx:mode'); if (sm) MX.editMode = sm; } catch (e) {}
+  if (!['ai', 'cut', 'timeline'].includes(MX.editMode)) MX.editMode = 'timeline';
+  tAi.classList.toggle('on', MX.editMode === 'ai'); tCut.classList.toggle('on', MX.editMode === 'cut'); tTl.classList.toggle('on', MX.editMode === 'timeline');
+  ai.hidden = MX.editMode !== 'ai'; cut.hidden = MX.editMode !== 'cut'; tlPane.hidden = tlStage.hidden = tlFoot.hidden = MX.editMode !== 'timeline';
+  view.hidden = bar.hidden = hl.hidden = hrow.hidden = MX.editMode === 'timeline'; R.classList.toggle('tl-on', MX.editMode === 'timeline');
 }
 
 /** Tam ekranı yalnız Edit Media planeti açıq olanda göstər */
@@ -736,7 +752,9 @@ function mxEdit() {
     R._libSig = lSig;
     sync(r.grid, items, m => m.url, m => {
       const b = el('button', 'mxe-it'); b.type = 'button'; b.title = m.label; b.setAttribute('aria-label', m.label);
-      b.append(mxThumb(m), el('span', 'tg', m.type === 'video' ? '▶ video' : '🖼'));
+      b.append(mxThumb(m), el('span', 'tg', m.type === 'video' ? '▶ video' : m.type === 'audio' ? '🎵 səs' : '🖼'));
+      b.draggable = true;                                             // Timeline-a sürüşdür
+      b.ondragstart = e => { e.dataTransfer.setData('application/x-mx-media', JSON.stringify(b._m)); e.dataTransfer.effectAllowed = 'copy'; };
       b.onclick = () => mxePick(b._m); return b;
     }, (n, m) => {
       n._m = m;
@@ -748,6 +766,7 @@ function mxEdit() {
     r.lempty.hidden = items.length > 0;
     setText(r.lempty, MX.gens === null ? 'Yüklənir…' : 'Hələ media yoxdur: fayl yüklə və ya 🔌 Fal Connection-da yarat.');
   }
+  if (MX.editMode === 'timeline') { if (typeof tlRender === 'function') tlRender(R); return; }   // Timeline öz səhnəsini idarə edir
   /* səhnə: seçilmiş nəticə (əvvəl / sonra) və ya mənbə */
   const g = MX.view ? (MX.gens || []).find(x => x.id === MX.view) : null;
   const vSig = [s && s.url, g && [g.id, g.status, g.media.length, g.error].join(), MX.cmp].join('|');

@@ -75,7 +75,7 @@ PROFILES = ('basic', 'dev', 'ops', 'full')
 DEV_BASH = ['npm', 'pnpm', 'yarn', 'bun', 'node', 'npx', 'python', 'python3', 'pytest', 'pip', 'pip3', 'uv', 'ruff', 'mypy', 'tsc', 'eslint',
             'prettier', 'vitest', 'jest', 'phpunit', 'cargo', 'go', 'make', 'php', 'composer', 'ls', 'cat', 'grep', 'rg', 'find', 'head', 'tail',
             'wc', 'jq', 'curl', 'pwd', 'which', 'sort', 'uniq', 'diff']
-DEV_TOOLS = [f'Bash({c}:*)' for c in DEV_BASH] + ['WebFetch', 'WebSearch']
+DEV_TOOLS = [f'Bash({c}:*)' for c in DEV_BASH] + ['WebFetch', 'WebSearch', 'mcp__planet-media']   # planet-media: MEDIA Timeline layihələri (öz tokeni ilə)
 OPS_TOOLS = ['Bash(gh:*)', 'Bash(vercel:*)', 'Bash(./*deploy*)', 'Bash(bash *deploy*)', 'Bash(sh *deploy*)']   # + MCP serverləri (mcp_rules)
 # Gizli fayllar heç vaxt oxunmasın (dev/ops/full və think)
 SECRET_DENY = ['Read(**/.env*)', 'Read(**/*.pem)', 'Read(~/.ssh/**)', 'Read(**/id_rsa*)', 'Read(**/id_ed25519*)', 'Read(**/id_ecdsa*)',

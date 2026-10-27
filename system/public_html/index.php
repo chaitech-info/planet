@@ -3910,6 +3910,7 @@ if (window.Kainat) initGL();
 <script src="jarvis.js?v=<?= (int)@filemtime(__DIR__ . '/jarvis.js') ?>"></script>
 <script src="radio.js?v=<?= (int)@filemtime(__DIR__ . '/radio.js') ?>"></script>
 <script src="media.js?v=<?= (int)@filemtime(__DIR__ . '/media.js') ?>"></script>
+<script src="media-timeline.js?v=<?= (int)@filemtime(__DIR__ . '/media-timeline.js') ?>"></script>
 <?php foreach (glob(__DIR__ . '/jarvis-*.js') ?: [] as $jf): /* Jarvis modulları: HUD, UI idarəsi, missiyalar, donanma */ ?>
 <script src="<?= basename($jf) ?>?v=<?= (int)filemtime($jf) ?>"></script>
 <?php endforeach; ?>

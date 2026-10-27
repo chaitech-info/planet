@@ -5,26 +5,43 @@
 //  schema   : modelin giriş sahələri (OpenAPI-dən), forma qurmaq üçün, 24 saat keşlənir
 //  submit   : fal növbəsinə (queue.fal.run) sorğu; list : generasiyalar (gözləyənləri fal-dan yeniləyir); delete
 //  upload   : redaktə üçün şəkil/video yükləmə. fal faylı götürə bilsin deyə təxmin edilməz adla açıq URL-də verilir (mediafile.php)
+//  project_* / asset_list / upload_render : Timeline layihələri (media_timeline.php). Bunlar həm brauzer sessiyası, həm də
+//             istifadəçinin Planet tokeni (X-Team-Token, Claude-un planet-media MCP serveri) ilə işləyir.
 require __DIR__ . '/db.php';
-auth_boot();
-$me = session_user();
-if ($me === null) {
-    json_out(['error' => 'giriş lazımdır'], 401);
-}
-deny_student($me);
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'fetch') {
-    json_out(['error' => 'yanlış sorğu'], 400);
+const MEDIA_TOKEN_ACTS = ['project_list', 'project_get', 'project_create', 'project_save', 'project_apply', 'project_rename',
+    'project_versions', 'project_restore', 'asset_list', 'upload_render', 'upload', 'models', 'schema', 'submit', 'list'];
+$tok = token_user();
+if ($tok !== null) {                                              // Claude (MCP) və ya skript: tokenin sahibi kimi
+    $r = db()->prepare('SELECT role FROM users WHERE name = ?');
+    $r->execute([$tok]);
+    $me = ['name' => $tok, 'role' => (string)($r->fetchColumn() ?: 'member')];
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        json_out(['error' => 'yanlış sorğu'], 400);
+    }
+} else {
+    auth_boot();
+    $me = session_user();
+    if ($me === null) {
+        json_out(['error' => 'giriş lazımdır'], 401);
+    }
+    deny_student($me);
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST' || ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '') !== 'fetch') {
+        json_out(['error' => 'yanlış sorğu'], 400);
+    }
+    session_write_close();
 }
 if (str_starts_with((string)($_SERVER['CONTENT_TYPE'] ?? ''), 'multipart/form-data')) {
     $in = $_POST;
 } else {
-    $in = json_decode(file_get_contents('php://input', false, null, 0, 40000) ?: '', true);
+    $in = json_decode(file_get_contents('php://input', false, null, 0, 1500000) ?: '', true);   // timeline JSON böyük ola bilər
 }
 if (!is_array($in)) {
     $in = [];
 }
-session_write_close();
 $act = (string)($in['action'] ?? '');
+if ($tok !== null && !in_array($act, MEDIA_TOKEN_ACTS, true)) {
+    json_out(['error' => 'bu əməliyyat token ilə icazəli deyil'], 403);
+}
 $pdo = db();
 $now = time();
 $name = $me['name'];
@@ -413,29 +430,52 @@ if ($act === 'delete') {
 }
 
 /* ---------- Redaktə üçün fayl yükləmə ---------- */
-if ($act === 'upload') {
-    $f = $_FILES['file'] ?? null;
+/** Yüklənən faylın növü məzmununa görə: [uzantı, növ] və ya xəta mətni */
+function media_detect(string $tmp, int $size)
+{
+    $head = (string)file_get_contents($tmp, false, null, 0, 16);
+    $img = @getimagesize($tmp);
+    if ($img && isset([IMAGETYPE_PNG => 1, IMAGETYPE_JPEG => 1, IMAGETYPE_WEBP => 1, IMAGETYPE_GIF => 1][$img[2]])) {
+        if ($size > 15 * 1024 * 1024) {
+            return 'Şəkil 15 MB-dan böyük ola bilməz';
+        }
+        return [[IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp', IMAGETYPE_GIF => 'gif'][$img[2]], 'image'];
+    }
+    if (substr($head, 4, 4) === 'ftyp') {                                  // mp4 / mov / m4a
+        $brand = substr($head, 8, 4);
+        return str_starts_with($brand, 'M4A') ? ['m4a', 'audio'] : [str_contains($brand, 'qt') ? 'mov' : 'mp4', 'video'];
+    }
+    if (substr($head, 0, 4) === "\x1A\x45\xDF\xA3") {
+        return ['webm', 'video'];
+    }
+    if (substr($head, 0, 3) === 'ID3' || (ord($head[0] ?? "\0") === 0xFF && (ord($head[1] ?? "\0") & 0xE0) === 0xE0)) {
+        return ['mp3', 'audio'];
+    }
+    if (substr($head, 0, 4) === 'RIFF' && substr($head, 8, 4) === 'WAVE') {
+        return ['wav', 'audio'];
+    }
+    if (substr($head, 0, 4) === 'OggS') {
+        return ['ogg', 'audio'];
+    }
+    return 'Yalnız şəkil (PNG, JPG, WEBP, GIF), video (MP4, MOV, WEBM) və səs (MP3, WAV, M4A, OGG)';
+}
+
+/** $_FILES elementini data/media-ya saxlayır və media_assets-ə yazır. Xətada json_out ilə çıxır. */
+function media_store_upload(PDO $pdo, $f, string $user, int $projectId, string $kind, int $now): array
+{
     if (!is_array($f) || ($f['error'] ?? 1) !== UPLOAD_ERR_OK || !is_uploaded_file((string)$f['tmp_name'])) {
         $big = is_array($f) && in_array($f['error'] ?? 0, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true);
         json_out(['error' => $big ? 'Fayl serverin yükləmə limitindən böyükdür' : 'Fayl yüklənmədi'], 400);
     }
     $tmp = (string)$f['tmp_name'];
     $size = (int)filesize($tmp);
-    $head = (string)file_get_contents($tmp, false, null, 0, 16);
-    $img = @getimagesize($tmp);
-    $ext = null;
-    if ($img && isset([IMAGETYPE_PNG => 1, IMAGETYPE_JPEG => 1, IMAGETYPE_WEBP => 1, IMAGETYPE_GIF => 1][$img[2]])) {
-        $ext = [IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp', IMAGETYPE_GIF => 'gif'][$img[2]];
-        if ($size > 15 * 1024 * 1024) {
-            json_out(['error' => 'Şəkil 15 MB-dan böyük ola bilməz'], 400);
-        }
-    } elseif (substr($head, 4, 4) === 'ftyp') {                // mp4 / mov
-        $ext = str_contains(substr($head, 8, 4), 'qt') ? 'mov' : 'mp4';
-    } elseif (substr($head, 0, 4) === "\x1A\x45\xDF\xA3") {      // webm
-        $ext = 'webm';
+    $det = media_detect($tmp, $size);
+    if (is_string($det)) {
+        json_out(['error' => $det], 400);
     }
-    if ($ext === null) {
-        json_out(['error' => 'Yalnız şəkil (PNG, JPG, WEBP, GIF) və video (MP4, MOV, WEBM)'], 400);
+    [$ext, $type] = $det;
+    if ($kind === 'export' && $type !== 'video') {
+        json_out(['error' => 'Render yalnız video ola bilər (MP4/WEBM/MOV)'], 400);
     }
     if ($size > MEDIA_FILE_BYTES) {
         json_out(['error' => 'Fayl 50 MB-dan böyük ola bilməz'], 400);
@@ -444,16 +484,32 @@ if ($act === 'upload') {
     if ($dir === null) {
         json_out(['error' => 'Serverdə media qovluğu yaradılmadı'], 500);
     }
-    foreach (glob($dir . '/*.*') ?: [] as $old) {               // köhnə yükləmələri təmizlə
-        if (filemtime($old) < $now - MEDIA_FILE_TTL) {
-            @unlink($old);
+    if (random_int(1, 20) === 1) {                                         // qeydiyyatsız köhnə faylları təmizlə (layihə aktivləri qalır)
+        $keep = array_flip(array_map(fn($u) => substr((string)strrchr((string)$u, '='), 1), $pdo->query('SELECT url FROM media_assets')->fetchAll(PDO::FETCH_COLUMN)));
+        foreach (glob($dir . '/*.*') ?: [] as $old) {
+            $b = basename($old);
+            if (!isset($keep[$b]) && filemtime($old) < $now - MEDIA_FILE_TTL) {
+                @unlink($old);
+            }
         }
     }
     $fn = bin2hex(random_bytes(16)) . '.' . $ext;
     if (!move_uploaded_file($tmp, $dir . '/' . $fn)) {
         json_out(['error' => 'Fayl saxlanmadı'], 500);
     }
-    json_out(['ok' => true, 'url' => site_base() . '/mediafile.php?f=' . $fn, 'type' => in_array($ext, ['mp4', 'mov', 'webm'], true) ? 'video' : 'image']);
+    $url = site_base() . '/mediafile.php?f=' . $fn;
+    $nm = mb_substr(basename((string)($f['name'] ?? $fn)), 0, 160);
+    $pdo->prepare('INSERT INTO media_assets (user, url, type, name, size, project_id, kind, created_at) VALUES (?,?,?,?,?,?,?,?)')
+        ->execute([$user, $url, $type, $nm, $size, $projectId, $kind, $now]);
+    return ['id' => (int)$pdo->lastInsertId(), 'url' => $url, 'type' => $type, 'name' => $nm, 'size' => $size];
 }
+
+if ($act === 'upload') {
+    $a = media_store_upload($pdo, $_FILES['file'] ?? null, $name, (int)($in['project_id'] ?? 0), 'upload', $now);
+    json_out(['ok' => true] + $a);
+}
+
+
+require __DIR__ . '/media_timeline.php';                              // Timeline layihələri, aktivlər, render yükləmə
 
 json_out(['error' => 'naməlum əməliyyat'], 400);
