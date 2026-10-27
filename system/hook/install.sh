@@ -22,6 +22,12 @@ chmod +x "$CLAUDE_DIR/hooks/claude-team-hook.sh"
 printf 'URL=%q\nTOKEN=%q\n' "$URL" "$TOKEN" > "$CONF"
 chmod 600 "$CONF"
 
+# planet-media MCP: Claude Code istənilən sessiyada MEDIA Timeline layihələrini redaktə edə bilsin (tokeni conf-dan oxuyur)
+MCP="$(cd "$HERE/../agent" 2>/dev/null && pwd)/planet_media_mcp.py"
+if [ -f "$MCP" ] && command -v claude >/dev/null 2>&1 && ! claude mcp get planet-media >/dev/null 2>&1; then
+  claude mcp add planet-media -s user -- python3 "$MCP" >/dev/null 2>&1 && echo "planet-media MCP qeydiyyatdan keçdi (Claude Code: media_* alətləri)" || true
+fi
+
 [ -f "$SETTINGS" ] && cp "$SETTINGS" "$SETTINGS.bak-teamdash"
 # PermissionRequest: icazə sorğusu panelə/Jarvis-ə gedir, hook qərarı ≤ 50 san gözləyir (timeout 55).
 # CLAUDE_TEAM_APPROVALS=0 ilə quraşdırsan bu hadisə yazılmır (hook da həmin dəyişənlə dərhal çıxır).

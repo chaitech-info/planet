@@ -96,6 +96,13 @@ Sonra paneldə planeti aç → **Göndər** tabı → agent oflayndırsa **"▶ 
 - **Əməliyyat (`ops`):** Claude promptu deyil. Agentin yanındakı `agent/claude_ops.py` kompüterdə yoxlama aparır (Claude versiyası, MCP, istifadə, proyektin git/CI vəziyyəti, PR-lar…). Riskli əməliyyatlar (PR birləşdirmə, MCP əlavə etmə və s.) yalnız profil icazə verəndə işləyir. `claude_ops.py` yoxdursa paketi yenidən endir.
 - Tapşırıqda model (`opus`/`sonnet`/`haiku`) və ya **plan rejimi** seçilə bilər; agent onu yalnız həmin tapşırıq üçün tətbiq edir.
 
+## Claude ilə video redaktəsi (planet-media)
+
+Addım 2-dəki `install.sh` Claude Code-a **planet-media** MCP serverini də qoşur. İstənilən Claude Code sessiyasında yaz, məsələn:
+"Planet-də 'Yay reklamı' video layihəsində ilk 2 saniyəni kəs və sona logo yazısı əlavə et". Claude dəyişiklikləri
+MEDIA → Edit Media → 🎞 Timeline-da canlı göstərir. Yoxlamaq üçün: `python3 ~/claude-team-kit/agent/planet_media_mcp.py --check`.
+Saytdan (agent ilə) göndərmək üçün agent profili ən azı `dev` olmalıdır.
+
 ## Tapşırıq lövhəsi
 
 Panelin **Lövhə** tabında komandanın tapşırıqları var (Gözləyir → İşləyir → Yoxlamada → Bitdi). Admin sənə tapşırıq təyin edəndə **Lövhə** tabının yanında rəqəm görünür. Sən özün də özünə tapşırıq yarada bilərsən.
