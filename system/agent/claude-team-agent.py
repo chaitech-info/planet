@@ -42,7 +42,7 @@ Növbə: claim `wait` (long-poll) ilə; köhnə server dərhal cavab verirsə k�
 İstifadə:  python3 claude-team-agent.py          (davamlı işləyir, Ctrl+C ilə dayandır)
            python3 claude-team-agent.py --once   (bir tapşırıq götürüb çıxır, həmişə 1 işçi)
 """
-import atexit, collections, hashlib, json, os, queue, re, shlex, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
+import atexit, collections, hashlib, json, os, queue, re, shlex, shutil, signal, subprocess, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request, uuid
 
 CONF = os.environ.get('CLAUDE_TEAM_CONF', os.path.expanduser('~/.claude-team-dash.conf'))
 PROJECTS = os.environ.get('CLAUDE_TEAM_PROJECTS', os.path.expanduser('~/.claude-team-projects'))
@@ -261,12 +261,32 @@ def read_projects():
     return out
 
 
-def call(base, token, action, payload=None, timeout=20):
-    req = urllib.request.Request(
-        f'{base}?a={action}', data=json.dumps(payload or {}).encode(), method='POST',
-        headers={'X-Team-Token': token, 'Content-Type': 'application/json'})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+def call(base, token, action, payload=None, timeout=20, tries=None):
+    """Serverə POST. 307/308 yönləndirməsini izləyir (urllib POST üçün izləmir). `finish` nəticəni daşıyır: şəbəkə xətası,
+    5xx, 307 və 429-da bir neçə dəfə yenidən cəhd edir (server təkrar finish-i nəzərə almır: yalnız 'running' yenilənir)."""
+    tries = tries or (6 if action == 'finish' else 1)
+    url, data = f'{base}?a={action}', json.dumps(payload or {}).encode()
+    for n in range(tries):
+        for _hop in range(3):
+            req = urllib.request.Request(url, data=data, method='POST', headers={'X-Team-Token': token, 'Content-Type': 'application/json'})
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return json.loads(r.read().decode())
+            except urllib.error.HTTPError as e:
+                loc = e.headers.get('Location') if e.code in (307, 308) else None
+                if loc:
+                    url = urllib.parse.urljoin(url, loc)
+                    continue
+                if n == tries - 1 or e.code not in (307, 308, 408, 429, 500, 502, 503, 504):
+                    raise
+                break
+            except (urllib.error.URLError, OSError, ValueError):
+                if n == tries - 1:
+                    raise
+                break
+        if STOP.wait(min(30, 2 * 2 ** n)) and HARD.is_set():   # 2, 4, 8, 16, 30 san; dərhal dayandırılırsa gözləmə
+            break
+    raise urllib.error.URLError(f'{action}: {tries} cəhddən sonra alınmadı')
 
 
 def fetch_images(base, token, names):
@@ -537,6 +557,7 @@ class Warm:
     def __init__(self, claude, path, tail, sid, cid):
         self.path, self.tail, self.sid, self.used, self.busy = path, list(tail), sid, time.time(), True
         self.q, self.err = queue.Queue(), collections.deque(maxlen=200)
+        self.uuid_ok = False                 # Claude `result`-da göndərdiyimiz mesaj uuid-ini qaytarırmı (bir dəfə görüləndən sonra ciddi yoxlanır)
         env = {**os.environ, **load_env(), **git_env(), 'CLAUDE_TEAM_RUN': str(cid)}
         args = [claude, '-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'] + self.tail + (['--resume', sid] if sid else [])
         self.proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8',
@@ -646,6 +667,19 @@ def warm_names():
         return sorted(inv.get(p, os.path.basename(p)) for p in WARM)
 
 
+def result_is_ours(w, ev, mid):
+    """`result` bizim mesajın növbəsinindirmi? Claude uuid-ləri qaytarırsa: yalnız bizimki daxildirsə.
+    Köhnə Claude (uuid yoxdur və ya heç vaxt bizimkini qaytarmayıb): əvvəlki kimi ilk nəticə qəbul olunur."""
+    ids = ev.get('user_message_uuids')
+    ids = [str(x) for x in ids] if isinstance(ids, list) else []
+    if ev.get('user_message_uuid'):
+        ids.append(str(ev['user_message_uuid']))
+    if mid in ids:
+        w.uuid_ok = True
+        return True
+    return not (ids and w.uuid_ok)       # uuid-lər var, bizimki yoxdur və bu Claude uuid dəstəkləyir → başqa növbə
+
+
 def warm_turn(base, token, w, cmd, prompt, prog, timeout=TIMEOUT):
     """İsti prosesə bir istifadəçi mesajı yaz, `result` hadisəsinə qədər oxu.
     Qaytarır: ('ok', None) | ('dead', None) — proses öldü | ('end', səbəb) — dayandırıldı/vaxt bitdi (çağıran prosesi öldürür)."""
@@ -658,8 +692,12 @@ def warm_turn(base, token, w, cmd, prompt, prog, timeout=TIMEOUT):
             return 'dead', None
     if not w.alive():
         return 'dead', None
+    # Mesaja öz uuid-imizi veririk: `result` hadisəsi hansı istifadəçi mesajına cavab olduğunu (user_message_uuids) qaytarır.
+    # İsti prosesə özbaşına növbələr də düşür: başqa Claude sessiyasının mesajı (SendMessage), fon tapşırığının bildirişi
+    # (<task-notification>). Onların `result`-u ("No response requested." və s.) bu tapşırığın cavabı sayılmamalıdır.
+    mid = str(uuid.uuid4())
     try:
-        w.send({'type': 'user', 'message': {'role': 'user', 'content': [{'type': 'text', 'text': prompt}]}, 'parent_tool_use_id': None})
+        w.send({'type': 'user', 'uuid': mid, 'message': {'role': 'user', 'content': [{'type': 'text', 'text': prompt}]}, 'parent_tool_use_id': None})
     except Exception:  # noqa
         return 'dead', None
     wd = Watch(base, token, cmd, timeout)
@@ -685,6 +723,9 @@ def warm_turn(base, token, w, cmd, prompt, prog, timeout=TIMEOUT):
                     w.send({'type': 'control_response', 'response': resp})
                 except Exception:  # noqa
                     return 'dead', None
+            elif isinstance(ev, dict) and ev.get('type') == 'result' and not result_is_ours(w, ev, mid):
+                print(f"   #{cmd['id']} başqa növbənin nəticəsi ötürüldü (sessiya mesajı/fon bildirişi): "
+                      f"{str(ev.get('result') or ev.get('subtype') or '')[:60]!r}", flush=True)
             else:
                 try:
                     prog.feed(line)
